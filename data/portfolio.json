@@ -144,21 +144,62 @@
   },
   "education": [
     {
-      "id": "education-1",
-      "school": "À compléter",
-      "degree": "À compléter",
-      "field": "À compléter",
-      "year": "2024"
+      "id": "cda",
+      "school": "Formation en cours",
+      "degree": "CDA — Concepteur Développeur d'Applications",
+      "field": "Niveau 6 (Bachelor)",
+      "period": "Septembre 2025 à Juillet 2026",
+      "description": "Architecture logicielle, POO, tests, développement front/back complet, patterns et gestion de projet avancée."
+    },
+    {
+      "id": "dwm",
+      "school": "CCI Campus",
+      "degree": "Développeur Web et Web Mobile",
+      "field": "Niveau 5 (Bac +2) - Certifiant RNCP",
+      "period": "Septembre 2024 à Mars 2025",
+      "description": "HTML, CSS, JavaScript, PHP, SQL, React, sites responsives, Git, accessibilité, SEO."
+    },
+    {
+      "id": "gestion-resto",
+      "school": "Groupe AmRest — Pizza Hut France",
+      "degree": "Gestion de restaurant",
+      "field": "Certifiant",
+      "period": "Septembre 2021 à Décembre 2021",
+      "description": "Management d'équipe, gestion des stocks et coûts, satisfaction client et optimisation des opérations."
     }
   ],
   "experience": [
     {
-      "id": "experience-1",
-      "company": "À compléter",
-      "position": "À compléter",
-      "description": "À compléter",
-      "startDate": "2024-01",
-      "endDate": "Présent"
+      "id": "tpmr",
+      "company": "MobiStras",
+      "position": "Transporteur accompagnateur PMR",
+      "description": "Accompagnement de personnes à mobilité réduite et assurance de leur sécurité lors des déplacements.",
+      "startDate": "2025-03",
+      "endDate": "2025-09"
+    },
+    {
+      "id": "rgm-kfc",
+      "company": "KFC — Porte de l'Hôpital, Strasbourg",
+      "position": "RGM (Responsable Général du Magasin)",
+      "description": "Ouverture de restaurant, formation des équipiers et managers, gestion des stocks/coûts, supervision des pôles, et actions marketing.",
+      "startDate": "2023-03",
+      "endDate": "2023-12"
+    },
+    {
+      "id": "rgm-pizzahut",
+      "company": "Pizza Hut — Sengewald, Strasbourg",
+      "position": "RGM (Responsable Général du Magasin)",
+      "description": "Pilotage approvisionnement, opérations marketing, contrôle des coûts, analyse des tableaux de bord, formation des équipes.",
+      "startDate": "2021-09",
+      "endDate": "2023-02"
+    },
+    {
+      "id": "manager-kfc",
+      "company": "KFC — Homme de Fer, Strasbourg",
+      "position": "Manager",
+      "description": "Gestion de service, proximité terrain, respect des standards et des normes d'hygiène, optimisation de la productivité.",
+      "startDate": "2018-09",
+      "endDate": "2021-08"
     }
   ]
 }

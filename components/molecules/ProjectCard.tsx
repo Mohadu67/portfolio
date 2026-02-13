@@ -28,8 +28,8 @@ export function ProjectCard({
         {/* Background Gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent-orange)]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-        {/* Image Container - Réduit de 20% */}
-        <div className="relative h-40 w-full overflow-hidden rounded-lg mb-4 bg-[var(--bg-secondary)]">
+        {/* Image Container - Réduit de 50% */}
+        <div className="relative h-24 w-full overflow-hidden rounded-lg mb-4 bg-[var(--bg-secondary)]">
           <Image
             src={image}
             alt={name}

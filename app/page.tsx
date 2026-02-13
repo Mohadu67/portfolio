@@ -6,6 +6,7 @@ import {
   ExperienceSection,
   ProjectsSection,
   ContactSection,
+  FooterSection,
 } from "@/components/organisms";
 
 export default function Home() {
@@ -18,6 +19,7 @@ export default function Home() {
       <ExperienceSection />
       <ProjectsSection />
       <ContactSection />
+      <FooterSection />
     </main>
   );
 }

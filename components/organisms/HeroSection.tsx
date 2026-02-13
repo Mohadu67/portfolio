@@ -105,7 +105,7 @@ export function HeroSection() {
             onMouseMove={handleMouseMove}
           >
             <motion.div
-              className="relative w-64 h-64 md:w-80 md:h-80 group"
+              className="relative w-52 h-52 md:w-64 md:h-64 group"
               style={{
                 rotateX: mousePosition.y,
                 rotateY: mousePosition.x,
@@ -122,6 +122,7 @@ export function HeroSection() {
                   src={profile.photo}
                   alt={profile.name}
                   fill
+                  sizes="(max-width: 768px) 160px, 240px"
                   className="object-cover group-hover:scale-110 transition-transform duration-500"
                   priority
                 />

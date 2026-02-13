@@ -46,7 +46,7 @@
       "level": "Expert",
       "years": "3+",
       "category": "Frontend",
-      "bugStory": "J'ai passé 2h à déboguer pourquoi mon margin ne s'appliquait pas. Après des heures de investigation, j'ai découvert un typo : j'avais écrit '.containerr' au lieu de '.container' 🤦"
+      "bugStory": "2h à crier sur ma box model, margin qui refuse d'exister... C'était juste '.containerr' au lieu de '.container'. CSS je t'aime, mais parfois tu me fais flipper 😭"
     },
     {
       "id": "javascript",
@@ -54,7 +54,7 @@
       "level": "Expert",
       "years": "3+",
       "category": "Frontend",
-      "bugStory": "parseInt('05') retournait 5, mais parseInt('08') retournait 0 ! C'était une question de base octale. Merci à la stack overflow des années 2000 😅"
+      "bugStory": "parseInt('08') = 0 et personne ne sait pourquoi... merci la base octale! J'ai appris ça en criant sur Stack Overflow à 2h du matin 😂"
     },
     {
       "id": "git",
@@ -62,7 +62,7 @@
       "level": "Avancé",
       "years": "3+",
       "category": "Tools",
-      "bugStory": "J'ai accidentellement mergé main dans ma branche de staging en prod. Heureusement, c'était un vendredi 15h (spoiler: ce n'était pas un accident) 🚀"
+      "bugStory": "Merge main en prod par accident un vendredi 15h... 'accidentellement' 😅 Les pires bugs arrivent quand le chef part en WE"
     },
     {
       "id": "react",
@@ -70,7 +70,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Frontend",
-      "bugStory": "useEffect sans dépendances? Oublie! J'ai créé une boucle infinie qui a tué mon navigateur. 'Pourquoi mon app crash?' → 'Avez-vous vérifié les deps?' 💀"
+      "bugStory": "useEffect sans les deps = mon navi qui crash en 2 secondes. 'Pourquoi ça lag?' → 'Les dépendances mon gars!' J'ai compris la leçon à la dure 😅"
     },
     {
       "id": "nodejs",
@@ -78,7 +78,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Backend",
-      "bugStory": "'EADDRINUSE: address already in use :::3000'. Mon ancien serveur était encore en cours d'exécution. Kill port et restart = nouveau dev 🎊"
+      "bugStory": "'Port 3000 déjà utilisé' → l'ancien serveur zombie qui refait surface 🧟 pkill node et ça repart. Classique du lundi matin"
     },
     {
       "id": "express",
@@ -86,7 +86,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Backend",
-      "bugStory": "J'avais mis les routes avant les middleware. Résultat: toutes mes requêtes 404. L'ordre compte vraiment en Express! 🔄"
+      "bugStory": "Routes avant les middleware = toutes les requêtes meurent 🪦 Pourquoi? Parce que Express c'est un hippopotame qui lit de haut en bas"
     },
     {
       "id": "sql",
@@ -94,7 +94,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Database",
-      "bugStory": "DELETE FROM users; // J'avais oublié le WHERE. 500 utilisateurs disparus en 0.5s. Git restore sauvé du jour! 😱"
+      "bugStory": "DELETE FROM users; sans WHERE = 500 utilisateurs volatilisés en 0.5 secondes 💀 C'est là que j'ai appris la valeur du backup"
     },
     {
       "id": "figma",
@@ -102,7 +102,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Design",
-      "bugStory": "Créé 500 frames par accident en cliquant sur la mauvaise option. Mon Figma était plus lent qu'un escargot. Auto-save = mon meilleur ami 🐌"
+      "bugStory": "500 frames créées par accident → Figma qui devient aussi rapide qu'un escargot en fauteuil roulant. Merci Ctrl+Z de m'avoir sauvé 🙏"
     },
     {
       "id": "php",
@@ -110,7 +110,7 @@
       "level": "Intermédiaire",
       "years": "1+",
       "category": "Backend",
-      "bugStory": "header('Location: /'); après un echo... Les headers ne peuvent pas être modifiés après la sortie! Lesson learned: headers d'abord! 📧"
+      "bugStory": "echo quelque chose puis header('Location: /') = 'Headers already sent'! PHP c'est strict... et ça crie, beaucoup 😤"
     },
     {
       "id": "linux",
@@ -118,7 +118,7 @@
       "level": "Intermédiaire",
       "years": "2+",
       "category": "DevOps",
-      "bugStory": "rm -rf /var au lieu de /var/www. Les 3 secondes les plus longues de ma vie. Humain et ligne de commande = dangereux ⚠️"
+      "bugStory": "rm -rf /var au lieu de /var/www = 3 secondes horrifiantes 😱 Linux fait pas de blague. Une leçon très chère en fatigue nerveuse"
     },
     {
       "id": "mongodb",
@@ -126,7 +126,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Database",
-      "bugStory": "db.collection.deleteMany({}) sans filtre intentionnel. 10k documents disparus. Ctrl+Z ne marche pas en BD. Backup sauvé du jour! 🛟"
+      "bugStory": "deleteMany({}) accidentellement = 10k documents envoyés en l'air ✈️ Ctrl+Z ne marche pas là-bas. C'est comme ça qu'on apprend la valeur du backup"
     }
   ],
   "projects": [

@@ -212,30 +212,79 @@ pm2 save && pm2 startup
 | Variable | Description | Exemple |
 |---|---|---|
 | `API_SECRET` | Clé authentification dashboard | `openssl rand -hex 32` |
-| `ANTHROPIC_API_KEY` | Claude API | `sk-ant-...` |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API | `sk-ant-...` |
 | `MONGO_URI` | Connexion MongoDB | `mongodb://user:pass@host:27017/db` |
-| `GMAIL_USER` | Email Gmail | `mon@gmail.com` |
-| `GMAIL_APP_PASSWORD` | Mot de passe d'application | `xxxx xxxx xxxx xxxx` |
-| `RAPIDAPI_KEY` | RapidAPI (Indeed + LinkedIn) | `6a3ec555ddmsh...` |
-| `PROFIL_*` | Tes informations personnelles | Utilisé dans les lettres |
+| `GMAIL_USER` | Email Gmail pour l'envoi | `mon@gmail.com` |
+| `GMAIL_APP_PASSWORD` | Mot de passe d'application Gmail | `xxxx xxxx xxxx xxxx` |
+| `RAPIDAPI_KEY` | RapidAPI (Indeed, Adzuna, etc.) | `6a3ec555ddmsh...` |
+| `PROFIL_NOM` | Ton nom complet | `Mohammed Hamiani` |
+| `PROFIL_FORMATION` | Ton diplôme | `Concepteur Développeur Fullstack` |
+| `PROFIL_COMPETENCES` | Liste de tes compétences | `JavaScript, React, Node.js, ...` |
+| `PROFIL_EXPERIENCE` | Résumé expérience | `Projets fullstack, UI/UX design...` |
+| `PROFIL_RECHERCHE` | Objectif de recherche | `Stage 2026 + Alternance Sept 2026` |
+| `PROFIL_DISPO` | Disponibilité | `Dès que possible` |
+
+---
+
+## 🎯 Flux de travail complet
+
+### 1️⃣ Recherche d'offres
+```
+Dashboard → Recherche → RapidAPI (Indeed, Adzuna, France Travail) → MongoDB
+```
+
+### 2️⃣ Génération de lettre
+```
+Sélectionner offre → Choisir template → Claude AI → Lettre personnalisée
+```
+
+### 3️⃣ Envoi candidature
+```
+Lettres + Email → Gmail SMTP → Mise à jour statut en BD
+```
+
+### 4️⃣ Suivi
+```
+Dashboard → Tracker statut (entretien, refus, acceptée) → Notes personnelles
+```
+
+---
+
+## 📊 Statuts possibles
+
+- **identifiée** — Offre trouvée
+- **lettre générée** — Lettre IA créée
+- **postulée** — Candidature envoyée
+- **réponse reçue** — Feedback de l'entreprise
+- **entretien** — En cours de sélection
+- **refus** — Candidature rejetée
+- **acceptée** — Stage/Alternance acceptée
+
+---
+
+## 🔐 Sécurité
+
+- ✅ Clé secrète pour accès dashboard
+- ✅ Variables d'environnement non commitées
+- ✅ Validation API sur chaque route
+- ✅ MongoDB uniquement accessible en local
+- ✅ Secrets jamais exposés en frontend
+
+**Important:** Jamais committer `.env` — utilise `.env.example` comme template
 
 ---
 
 ## 📚 Ressources
 
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Claude API](https://anthropic.com/api)
-- [MongoDB Mongoose](https://mongoosejs.com/)
-- [RapidAPI](https://rapidapi.com/)
+- [Next.js 16 Documentation](https://nextjs.org/docs)
+- [Anthropic Claude API](https://anthropic.com/api)
+- [MongoDB + Mongoose](https://mongoosejs.com/)
+- [RapidAPI Jobs](https://rapidapi.com/)
 - [Nodemailer](https://nodemailer.com/)
-- [Tailwind CSS](https://tailwindcss.com/)
+- [Tailwind CSS 4](https://tailwindcss.com/)
 
 ---
 
 ## 📄 Licence
 
-Projet personnel — Mohammed Hamiani
-
----
-
-**Besoin d'aide ?** Consulte le fichier `CLAUDE.md` pour plus de détails techniques.
+Projet personnel — Mohammed Hamiani © 2026

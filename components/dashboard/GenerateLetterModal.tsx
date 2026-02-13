@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Copy, Check, Send } from "lucide-react";
+import { X, Copy, Check, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import type { ICandidature } from "@/models/Candidature";
 
@@ -22,6 +22,12 @@ const LETTER_TEMPLATES = {
     "Passionné par le développement web et l'innovation, je suis ravi de postuler pour le rôle de {poste} chez {entreprise}.",
   technical:
     "Fort d'une expertise en {competences} et d'une expérience concrète en développement fullstack, je suis intéressé par cette opportunité de {poste} chez {entreprise}.",
+};
+
+const templateDescriptions = {
+  formal: "Approche professionnelle et formelle, idéale pour les grandes entreprises",
+  passionate: "Style motivé et enthousiaste pour montrer votre passion",
+  technical: "Accent sur vos compétences techniques et expérience",
 };
 
 export function GenerateLetterModal({
@@ -102,38 +108,50 @@ export function GenerateLetterModal({
 
   return (
     <motion.div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
       onClick={onClose}
     >
       <motion.div
-        className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col mx-3 sm:mx-0"
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-secondary)]/50 border border-[var(--accent-blue)]/20 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col mx-3 sm:mx-0 shadow-2xl"
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Glow Background Effect */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-[var(--accent-blue)]/5 via-transparent to-[var(--accent-orange)]/5 pointer-events-none" />
+
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[var(--border-color)]">
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">
+        <motion.div
+          className="flex items-center justify-between p-4 sm:p-6 border-b border-[var(--border-color)]/50 relative z-10"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+        >
+          <motion.h2 className="text-2xl font-bold bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] bg-clip-text text-transparent">
             {step === "template"
               ? "Choisir un modèle"
               : step === "generate"
-                ? "Générer la lettre"
+                ? "Génération en cours..."
                 : "Réviser et envoyer"}
-          </h2>
-          <button
+          </motion.h2>
+          <motion.button
             onClick={onClose}
-            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="text-[var(--text-secondary)] hover:text-[var(--accent-orange)] transition-colors"
+            whileHover={{ rotate: 90, scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
           >
             <X size={24} />
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 relative z-10">
           <AnimatePresence mode="wait">
             {step === "template" && (
               <motion.div
@@ -141,35 +159,59 @@ export function GenerateLetterModal({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-4"
+                transition={{ duration: 0.3 }}
+                className="space-y-5"
               >
-                <p className="text-[var(--text-secondary)] mb-6">
-                  {candidature.entreprise} - {candidature.poste}
-                </p>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                  <p className="text-[var(--text-secondary)] mb-2 text-sm">Candidature pour</p>
+                  <p className="text-lg font-semibold text-[var(--text-primary)]">
+                    {candidature.entreprise} • {candidature.poste}
+                  </p>
+                </motion.div>
 
-                {Object.entries(LETTER_TEMPLATES).map(([key, preview]) => (
-                  <motion.button
-                    key={key}
-                    className={`w-full p-4 rounded-lg text-left border-2 transition-all ${
-                      template === key
-                        ? "border-[var(--accent-orange)] bg-[var(--accent-orange)]/10"
-                        : "border-[var(--border-color)] hover:border-[var(--accent-orange)]"
-                    }`}
-                    onClick={() => setTemplate(key as keyof typeof LETTER_TEMPLATES)}
-                    whileHover={{ scale: 1.02 }}
-                  >
-                    <h3 className="font-semibold text-[var(--text-primary)] mb-2 capitalize">
-                      {key === "formal"
-                        ? "Formel"
-                        : key === "passionate"
-                          ? "Passionné"
-                          : "Technique"}
-                    </h3>
-                    <p className="text-sm text-[var(--text-secondary)]">
-                      {preview.substring(0, 100)}...
-                    </p>
-                  </motion.button>
-                ))}
+                <div className="space-y-3">
+                  {Object.entries(LETTER_TEMPLATES).map(([key, preview], idx) => (
+                    <motion.button
+                      key={key}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2 + idx * 0.1 }}
+                      className={`w-full p-4 rounded-xl text-left border-2 transition-all group relative overflow-hidden ${
+                        template === key
+                          ? "border-[var(--accent-orange)] bg-gradient-to-r from-[var(--accent-orange)]/15 to-[var(--accent-orange)]/5"
+                          : "border-[var(--border-color)]/50 hover:border-[var(--accent-orange)]/60 bg-[var(--bg-secondary)]/30"
+                      }`}
+                      onClick={() => setTemplate(key as keyof typeof LETTER_TEMPLATES)}
+                      whileHover={{ scale: 1.02, boxShadow: "0 10px 30px rgba(255, 158, 100, 0.15)" }}
+                    >
+                      {template === key && (
+                        <motion.div
+                          className="absolute -top-1 -right-1 text-[var(--accent-orange)]"
+                          initial={{ rotate: -180, scale: 0 }}
+                          animate={{ rotate: 0, scale: 1 }}
+                          transition={{ type: "spring", stiffness: 200 }}
+                        >
+                          <Sparkles size={20} />
+                        </motion.div>
+                      )}
+                      <div className="flex items-start gap-3">
+                        <div className="w-3 h-3 rounded-full mt-1 flex-shrink-0 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)]" />
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-[var(--text-primary)] capitalize">
+                            {key === "formal"
+                              ? "Formel"
+                              : key === "passionate"
+                                ? "Passionné"
+                                : "Technique"}
+                          </h3>
+                          <p className="text-xs text-[var(--text-secondary)] mt-1">
+                            {templateDescriptions[key as keyof typeof templateDescriptions]}
+                          </p>
+                        </div>
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
               </motion.div>
             )}
 
@@ -179,20 +221,54 @@ export function GenerateLetterModal({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="text-center space-y-6"
+                transition={{ duration: 0.3 }}
+                className="text-center space-y-8 py-12"
               >
                 <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  className="flex justify-center relative"
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                 >
-                  <Send size={48} className="mx-auto text-[var(--accent-orange)]" />
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] rounded-full blur-2xl opacity-30"
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear" }}>
+                    <Send size={56} className="text-[var(--accent-orange)] relative z-10 drop-shadow-lg" />
+                  </motion.div>
                 </motion.div>
-                <p className="text-[var(--text-primary)] font-medium">
-                  Génération de votre lettre de motivation...
-                </p>
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Basée sur le modèle {template} et vos informations
-                </p>
+
+                <div>
+                  <motion.p
+                    className="text-xl font-semibold text-[var(--text-primary)]"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    Génération de votre lettre...
+                  </motion.p>
+                  <motion.p
+                    className="text-sm text-[var(--text-secondary)] mt-2"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    Basée sur le modèle <span className="text-[var(--accent-orange)] font-medium">{template}</span>
+                  </motion.p>
+                </div>
+
+                {/* Loading dots animation */}
+                <motion.div className="flex justify-center gap-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      className="w-2 h-2 rounded-full bg-[var(--accent-orange)]"
+                      animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
+                      transition={{ duration: 1.5, delay: i * 0.2, repeat: Infinity }}
+                    />
+                  ))}
+                </motion.div>
               </motion.div>
             )}
 
@@ -202,50 +278,60 @@ export function GenerateLetterModal({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-4"
+                transition={{ duration: 0.3 }}
+                className="space-y-5"
               >
                 {/* Email input */}
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
+                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
                     Email de l'entreprise
                   </label>
-                  <input
+                  <motion.input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded px-4 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)]"
+                    className="w-full bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)]/80 focus:shadow-lg focus:shadow-[var(--accent-orange)]/20 transition-all"
                     placeholder="contact@entreprise.com"
+                    whileFocus={{ scale: 1.01 }}
                   />
-                </div>
+                </motion.div>
 
                 {/* Letter preview */}
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
                     Lettre de motivation
                   </label>
-                  <textarea
+                  <motion.textarea
                     value={editingLetter}
                     onChange={(e) => setEditingLetter(e.target.value)}
-                    className="w-full h-64 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)] font-mono text-sm"
+                    className="w-full h-64 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-blue)]/80 focus:shadow-lg focus:shadow-[var(--accent-blue)]/20 font-mono text-sm transition-all resize-none"
+                    whileFocus={{ scale: 1.01 }}
                   />
-                </div>
+                </motion.div>
 
                 {/* Copy button */}
                 <motion.button
                   type="button"
                   onClick={handleCopyLetter}
-                  className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-[var(--bg-secondary)] hover:bg-[var(--accent-orange)]/20 rounded text-[var(--text-primary)] transition-colors"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
+                    copied
+                      ? "bg-[var(--accent-blue)]/20 text-[var(--accent-blue)] border border-[var(--accent-blue)]/30"
+                      : "bg-gradient-to-r from-[var(--accent-orange)]/10 to-[var(--accent-orange)]/5 text-[var(--text-primary)] border border-[var(--accent-orange)]/30 hover:border-[var(--accent-orange)]/60"
+                  }`}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   {copied ? (
                     <>
-                      <Check size={16} />
+                      <Check size={18} />
                       Copié!
                     </>
                   ) : (
                     <>
-                      <Copy size={16} />
+                      <Copy size={18} />
                       Copier la lettre
                     </>
                   )}
@@ -256,11 +342,16 @@ export function GenerateLetterModal({
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 p-4 sm:p-6 border-t border-[var(--border-color)]">
+        <motion.div
+          className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 p-4 sm:p-6 border-t border-[var(--border-color)]/50 relative z-10"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
           {step !== "template" && (
             <motion.button
               onClick={() => setStep(step === "generate" ? "template" : "generate")}
-              className="px-6 py-2 rounded-lg border border-[var(--border-color)] text-[var(--text-primary)] hover:border-[var(--accent-orange)] transition-colors"
+              className="px-6 py-3 rounded-lg border border-[var(--border-color)]/50 text-[var(--text-primary)] hover:border-[var(--accent-orange)]/60 hover:bg-[var(--accent-orange)]/5 transition-all font-medium"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
@@ -275,11 +366,11 @@ export function GenerateLetterModal({
                 setTimeout(handleGenerateLetter, 500);
               }}
               disabled={loading}
-              className="ml-auto px-6 py-2 rounded-lg bg-[var(--accent-orange)] text-[var(--bg-primary)] font-semibold hover:opacity-90 disabled:opacity-50"
-              whileHover={{ scale: 1.05 }}
+              className="ml-auto px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] font-semibold hover:shadow-lg hover:shadow-[var(--accent-orange)]/30 disabled:opacity-50 transition-all"
+              whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(255, 158, 100, 0.3)" }}
               whileTap={{ scale: 0.95 }}
             >
-              Générer
+              Générer la lettre
             </motion.button>
           )}
 
@@ -287,14 +378,14 @@ export function GenerateLetterModal({
             <motion.button
               onClick={handleSend}
               disabled={loading || !email}
-              className="ml-auto px-6 py-2 rounded-lg bg-[var(--accent-blue)] text-white font-semibold hover:opacity-90 disabled:opacity-50"
-              whileHover={{ scale: 1.05 }}
+              className="ml-auto px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-blue)]/80 text-white font-semibold hover:shadow-lg hover:shadow-[var(--accent-blue)]/30 disabled:opacity-50 transition-all"
+              whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(46, 159, 216, 0.3)" }}
               whileTap={{ scale: 0.95 }}
             >
-              {loading ? "Envoi..." : "Envoyer la candidature"}
+              {loading ? "Envoi en cours..." : "Envoyer la candidature"}
             </motion.button>
           )}
-        </div>
+        </motion.div>
       </motion.div>
     </motion.div>
   );

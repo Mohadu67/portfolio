@@ -28,7 +28,7 @@ export async function searchJSearch(
     const response = await fetch(
       `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(
         keywords
-      )}&location=${encodeURIComponent(location)}&num_pages=1&date_posted=month`,
+      )}&location=${encodeURIComponent(location)}&country=fr&num_pages=1&date_posted=month`,
       options
     );
 

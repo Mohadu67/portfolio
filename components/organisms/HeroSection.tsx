@@ -4,14 +4,13 @@ import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Code2, Zap } from "lucide-react";
 import { Container, Button, Text } from "@/components/atoms";
-import { SocialLink } from "@/components/molecules";
-import { slideUpContainer, slideUpItem } from "@/lib/animations";
+import { slideUpItem } from "@/lib/animations";
 import portfolioData from "@/data/portfolio.json";
 
 export function HeroSection() {
-  const { profile, socials } = portfolioData;
+  const { profile } = portfolioData;
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -21,155 +20,244 @@ export function HeroSection() {
     setMousePosition({ x: x * 10, y: y * 10 });
   };
 
+  // Floating particles
+  const particles = Array.from({ length: 20 }).map((_, i) => ({
+    id: i,
+    delay: Math.random() * 0.5,
+    duration: 3 + Math.random() * 2,
+  }));
+
   return (
-    <section id="hero" className="relative min-h-screen bg-gradient-to-b from-[var(--bg-primary)] via-[var(--bg-card)]/30 to-[var(--bg-primary)] overflow-hidden py-20 px-4 sm:px-6 lg:px-8">
-      {/* Animated background */}
+    <section id="hero" className="relative h-screen flex items-center justify-center overflow-hidden px-4 sm:px-6 lg:px-8">
+      {/* Dynamic background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[var(--bg-primary)] via-[var(--bg-card)]/50 to-[var(--bg-primary)]" />
+
+      {/* Animated blob backgrounds */}
+      <motion.div
+        className="absolute top-0 -left-40 w-80 h-80 bg-[var(--accent-orange)]/20 rounded-full mix-blend-multiply filter blur-3xl"
+        animate={{
+          x: [0, 40, 0],
+          y: [0, 40, 0],
+        }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="absolute -bottom-40 right-10 w-80 h-80 bg-[var(--accent-blue)]/20 rounded-full mix-blend-multiply filter blur-3xl"
+        animate={{
+          x: [0, -40, 0],
+          y: [0, -40, 0],
+        }}
+        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+      />
+      <motion.div
+        className="absolute top-1/2 left-1/3 w-72 h-72 bg-[var(--accent-orange)]/10 rounded-full mix-blend-multiply filter blur-3xl"
+        animate={{
+          scale: [1, 1.2, 1],
+        }}
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* Floating particles */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-[var(--accent-orange)]/5 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-[var(--accent-blue)]/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "0.5s" }} />
+        {particles.map((particle) => (
+          <motion.div
+            key={particle.id}
+            className="absolute w-1 h-1 bg-[var(--accent-orange)]/30 rounded-full"
+            initial={{
+              x: Math.random() * window.innerWidth,
+              y: Math.random() * window.innerHeight,
+            }}
+            animate={{
+              y: [0, -200, 0],
+              opacity: [0, 1, 0],
+            }}
+            transition={{
+              duration: particle.duration,
+              delay: particle.delay,
+              repeat: Infinity,
+            }}
+          />
+        ))}
       </div>
 
-      <Container className="relative z-10">
+      <Container className="relative z-10 h-full flex items-center">
         <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center"
-          variants={slideUpContainer}
-          initial="initial"
-          animate="animate"
+          className="w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6 }}
         >
-          {/* Left: Content */}
-          <motion.div className="flex flex-col justify-center order-2 md:order-1" variants={slideUpContainer}>
-            {/* Name */}
-            <motion.div className="mb-6" variants={slideUpItem}>
-              <Text as="h1" variant="h1" className="mb-2 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] bg-clip-text text-transparent animate-gradient-shift">
-                {profile.name}
-              </Text>
-              <motion.div className="h-1 w-24 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] rounded-full" />
+          {/* Left: Epic Content */}
+          <motion.div className="flex flex-col justify-center order-2 md:order-1 space-y-8">
+            {/* Top accent */}
+            <motion.div
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="flex items-center gap-2"
+            >
+              <motion.div
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <Zap size={24} className="text-[var(--accent-orange)]" />
+              </motion.div>
+              <span className="text-[var(--accent-orange)] font-semibold text-lg">Fullstack Developer</span>
             </motion.div>
 
-            {/* Title & Tagline */}
-            <motion.div variants={slideUpItem}>
-              <Text
-                as="p"
-                variant="h3"
-                color="accent-orange"
-                className="mb-4"
+            {/* Main heading */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+              className="space-y-4"
+            >
+              <div className="relative">
+                <h1 className="text-6xl md:text-7xl font-black text-[var(--text-primary)] leading-tight">
+                  Mohammed
+                  <span className="block mt-2 bg-gradient-to-r from-[var(--accent-orange)] via-[var(--accent-blue)] to-[var(--accent-orange)] bg-clip-text text-transparent animate-gradient-shift">
+                    Hamiani
+                  </span>
+                </h1>
+              </div>
+              <motion.div
+                className="flex gap-2"
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ duration: 0.8, delay: 0.5 }}
               >
-                {profile.title}
-              </Text>
-            </motion.div>
-            <motion.div variants={slideUpItem}>
-              <Text
-                variant="body"
-                color="secondary"
-                className="text-xl mb-8"
-              >
-                {profile.tagline}
-              </Text>
+                <div className="h-2 w-16 bg-[var(--accent-orange)] rounded-full" />
+                <div className="h-2 w-8 bg-[var(--accent-blue)] rounded-full" />
+              </motion.div>
             </motion.div>
 
-            {/* Meta Info */}
-            <motion.div className="flex flex-wrap gap-4 mb-8 text-sm text-[var(--text-secondary)]" variants={slideUpItem}>
-              <span>{profile.location}</span>
-              <span>•</span>
-              <span>{profile.availability}</span>
-              <span>•</span>
-              <span>{profile.phone}</span>
+            {/* Tagline */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.4 }}
+              className="space-y-3"
+            >
+              <p className="text-2xl md:text-3xl font-bold text-[var(--accent-orange)]">
+                Concepteur Développeur Fullstack
+              </p>
+              <p className="text-lg text-[var(--text-secondary)] max-w-md">
+                Dev by Day • Creator by Night — Transforming ideas into stunning digital experiences with modern tech stack
+              </p>
+            </motion.div>
+
+            {/* Info grid */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, delay: 0.5 }}
+              className="flex flex-wrap gap-6 text-sm"
+            >
+              <div>
+                <p className="text-[var(--text-secondary)]">Localisation</p>
+                <p className="font-semibold text-[var(--text-primary)]">{profile.location}</p>
+              </div>
+              <div>
+                <p className="text-[var(--text-secondary)]">Disponibilité</p>
+                <p className="font-semibold text-[var(--text-primary)]">Stage Mars 2026</p>
+              </div>
             </motion.div>
 
             {/* CTA Buttons */}
-            <motion.div className="flex gap-4" variants={slideUpItem}>
-              <Link href="/dashboard">
-                <Button size="lg" className="group inline-flex items-center gap-2">
-                  Dashboard
-                  <motion.div
-                    className="ml-1"
-                    animate={{ x: [0, 4, 0] }}
-                    transition={{ duration: 0.6, repeat: Infinity }}
-                  >
-                    <ArrowRight size={18} />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.6 }}
+              className="flex flex-col sm:flex-row gap-4 pt-4"
+            >
+              <Link href="/dashboard" className="w-full sm:w-auto">
+                <motion.button
+                  className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-lg"
+                  whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(255, 158, 100, 0.5)" }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Voir mon Dashboard
+                  <motion.div animate={{ x: [0, 5, 0] }} transition={{ duration: 0.8, repeat: Infinity }}>
+                    <ArrowRight size={20} />
                   </motion.div>
-                </Button>
+                </motion.button>
               </Link>
-              <a href={`mailto:${profile.email}`}>
-                <Button size="lg" variant="ghost">
+              <a href={`mailto:${profile.email}`} className="w-full sm:w-auto">
+                <motion.button
+                  className="w-full sm:w-auto px-8 py-4 border-2 border-[var(--accent-orange)] text-[var(--text-primary)] rounded-xl font-bold text-lg hover:bg-[var(--accent-orange)]/10 transition-colors"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
                   Me contacter
-                </Button>
+                </motion.button>
               </a>
             </motion.div>
           </motion.div>
 
-          {/* Right: Avatar */}
+          {/* Right: Epic Avatar */}
           <motion.div
-            className="flex justify-center md:justify-end order-1 md:order-2 mb-8 md:mb-0"
-            variants={slideUpItem}
+            className="flex justify-center md:justify-end order-1 md:order-2"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8, delay: 0.3 }}
             onMouseMove={handleMouseMove}
           >
             <motion.div
-              className="relative w-52 h-52 md:w-64 md:h-64 group"
+              className="relative w-64 h-64 md:w-80 md:h-80 group cursor-pointer"
               style={{
                 rotateX: mousePosition.y,
                 rotateY: mousePosition.x,
-                perspective: "1000px",
+                perspective: "1200px",
               }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              transition={{ type: "spring", stiffness: 100, damping: 20 }}
             >
-              {/* Animated border */}
-              <motion.div className="absolute inset-0 rounded-2xl border-2 border-[var(--accent-orange)]/30 group-hover:border-[var(--accent-orange)] transition-all duration-500" animate={{ rotate: 360 }} transition={{ duration: 20, repeat: Infinity, ease: "linear" }} />
+              {/* Outer glow */}
+              <motion.div
+                className="absolute -inset-6 bg-gradient-to-r from-[var(--accent-orange)] via-[var(--accent-blue)] to-[var(--accent-orange)] rounded-3xl blur-2xl opacity-30 group-hover:opacity-60 transition-opacity"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              />
 
-              {/* Image */}
-              <div className="absolute inset-4 rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-card)]">
+              {/* Rotating border */}
+              <motion.div
+                className="absolute inset-0 rounded-3xl border-2 border-transparent bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] bg-clip-border opacity-30 group-hover:opacity-100 transition-opacity"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+              />
+
+              {/* Image container */}
+              <div className="absolute inset-3 rounded-2xl overflow-hidden bg-[var(--bg-card)] border border-[var(--border-color)]">
                 <Image
                   src={profile.photo}
                   alt={profile.name}
                   fill
-                  sizes="(max-width: 768px) 160px, 240px"
+                  sizes="(max-width: 768px) 224px, 300px"
                   className="object-cover group-hover:scale-110 transition-transform duration-500"
                   priority
                 />
               </div>
 
-              {/* Glow effect */}
-              <motion.div className="absolute -inset-2 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] rounded-2xl blur-2xl opacity-20 group-hover:opacity-40 transition-opacity -z-10" />
+              {/* Inner glow */}
+              <motion.div className="absolute -inset-2 bg-gradient-to-r from-[var(--accent-orange)]/30 to-[var(--accent-blue)]/30 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity -z-10" />
             </motion.div>
-          </motion.div>
-        </motion.div>
-
-        {/* Socials Grid */}
-        <motion.div className="mt-20 pt-20 border-t border-[var(--border-color)]" variants={slideUpContainer}>
-          <motion.div variants={slideUpItem}>
-            <Text
-              as="h3"
-              variant="h3"
-              color="primary"
-              className="text-center mb-8"
-            >
-              Connectez-vous
-            </Text>
-          </motion.div>
-          <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-4" variants={slideUpContainer}>
-            {socials.map((social) => (
-              <motion.div
-                key={social.id}
-                variants={slideUpItem}
-              >
-                <SocialLink
-                  name={social.name}
-                  handle={social.handle}
-                  url={social.url}
-                  iconName={social.icon}
-                />
-              </motion.div>
-            ))}
           </motion.div>
         </motion.div>
       </Container>
 
       {/* Scroll indicator */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
-        <div className="w-6 h-10 border-2 border-[var(--accent-orange)] rounded-full flex items-center justify-center">
-          <div className="w-1 h-2 bg-[var(--accent-orange)] rounded-full animate-pulse" />
+      <motion.div
+        className="absolute bottom-10 left-1/2 -translate-x-1/2"
+        animate={{ y: [0, 12, 0] }}
+        transition={{ duration: 2, repeat: Infinity }}
+      >
+        <div className="w-8 h-12 border-2 border-[var(--accent-orange)] rounded-full flex items-center justify-center">
+          <motion.div
+            className="w-1.5 h-2.5 bg-[var(--accent-orange)] rounded-full"
+            animate={{ opacity: [0, 1, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+          />
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }

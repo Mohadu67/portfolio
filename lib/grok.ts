@@ -3,8 +3,8 @@ if (!apiKey) {
   throw new Error("GROK_API_KEY environment variable is not set");
 }
 
-// Use OpenAI-compatible API for Grok via xAI
-const GROK_API_URL = "https://api.x.ai/v1";
+// Use OpenAI-compatible API for Groq
+const GROK_API_URL = "https://api.groq.com/openai/v1";
 
 interface GrokMessage {
   role: "user" | "assistant" | "system";
@@ -27,7 +27,7 @@ async function callGrok(prompt: string, systemPrompt?: string): Promise<string> 
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "grok-2",
+      model: "llama-3.3-70b-versatile",
       messages,
       temperature: 0.7,
       max_tokens: 2048,

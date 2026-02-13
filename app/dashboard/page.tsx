@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { BarChart3, Lock, Clock, LogOut, FileText } from "lucide-react";
 import { SearchPanel } from "@/components/dashboard/SearchPanel";
 import { StatsBar } from "@/components/dashboard/StatsBar";
 import { CandidatureList } from "@/components/dashboard/CandidatureList";
 import { LetterModal } from "@/components/dashboard/LetterModal";
+import { SearchLoadingModal } from "@/components/dashboard/SearchLoadingModal";
+import { GenerateLetterModal } from "@/components/dashboard/GenerateLetterModal";
+import { FollowUpModal } from "@/components/dashboard/FollowUpModal";
+import { toast } from "sonner";
 import type { ICandidature } from "@/models/Candidature";
 import Link from "next/link";
 
@@ -16,8 +21,11 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [searchProgress, setSearchProgress] = useState(0);
   const [selectedCandidature, setSelectedCandidature] = useState<ICandidature | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showGenerateLetterModal, setShowGenerateLetterModal] = useState(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
 
   useEffect(() => {
     const savedKey = sessionStorage.getItem("api-key");
@@ -62,6 +70,19 @@ export default function Dashboard() {
 
   const handleSearch = async (keywords: string, location: string) => {
     setSearching(true);
+    setSearchProgress(0);
+
+    // Simulate progress
+    const progressInterval = setInterval(() => {
+      setSearchProgress((prev) => {
+        if (prev >= 90) {
+          clearInterval(progressInterval);
+          return prev;
+        }
+        return prev + Math.random() * 30;
+      });
+    }, 300);
+
     try {
       const res = await fetch("/api/search", {
         method: "POST",
@@ -74,15 +95,19 @@ export default function Dashboard() {
 
       if (res.ok) {
         const data = await res.json();
+        setSearchProgress(100);
+        await new Promise((resolve) => setTimeout(resolve, 500));
         await loadCandidatures(apiKey);
+        toast.success(`${data.nouvelles} nouvelles offres trouvées!`);
       } else {
         throw new Error("Erreur lors de la recherche");
       }
     } catch (error) {
-      console.error("Search error:", error);
-      throw error;
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la recherche");
     } finally {
+      clearInterval(progressInterval);
       setSearching(false);
+      setSearchProgress(0);
     }
   };
 
@@ -91,6 +116,49 @@ export default function Dashboard() {
     if (cand) {
       setSelectedCandidature(cand);
       setShowModal(true);
+    }
+  };
+
+  const handleOpenGenerateLetter = (candidature: ICandidature) => {
+    setSelectedCandidature(candidature);
+    setShowGenerateLetterModal(true);
+  };
+
+  const handleOpenFollowUp = (candidature: ICandidature) => {
+    setSelectedCandidature(candidature);
+    setShowFollowUpModal(true);
+  };
+
+  const handleSendCandidature = async (candidature: ICandidature, lettre: string, email: string) => {
+    try {
+      const res = await fetch("/api/send-email", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          candidature_id: candidature._id,
+          email_destinataire: email,
+          lettre,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Erreur lors de l'envoi");
+
+      await loadCandidatures(apiKey);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const handleScheduleFollowUp = async (candidature: ICandidature, followUpDate: string) => {
+    try {
+      await handleUpdateCandidature(candidature._id || "", {
+        notes: `Relance prévue pour ${followUpDate}`,
+      });
+    } catch (error) {
+      throw error;
     }
   };
 
@@ -142,7 +210,9 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
         <div className="text-center">
-          <div className="text-4xl mb-4">⏳</div>
+          <div className="mb-4">
+            <Clock size={48} className="mx-auto text-[var(--accent-orange)] animate-spin" />
+          </div>
           <p className="text-[var(--text-secondary)]">Chargement...</p>
         </div>
       </div>
@@ -154,9 +224,12 @@ export default function Dashboard() {
       <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center px-4">
         <div className="max-w-md w-full">
           <div className="card-elevated p-8">
-            <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">
-              🔐 Dashboard Privé
-            </h1>
+            <div className="flex items-center justify-center mb-4">
+              <Lock size={32} className="text-[var(--accent-orange)] mr-2" />
+              <h1 className="text-3xl font-bold text-[var(--text-primary)]">
+                Dashboard Privé
+              </h1>
+            </div>
             <p className="text-[var(--text-secondary)] mb-6">
               Authentifiez-vous avec votre clé secrète pour accéder au dashboard de
               recherche de stage.
@@ -206,17 +279,20 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[var(--bg-primary)]">
       {/* Navigation */}
-      <nav className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)] backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-              📊 Dashboard Stage
-            </h1>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Mohammed Hamiani
-            </p>
+      <nav className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)] backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <BarChart3 size={28} className="text-[var(--accent-orange)]" />
+            <div>
+              <h1 className="text-2xl font-bold text-[var(--text-primary)]">
+                Dashboard Stage
+              </h1>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Mohammed Hamiani
+              </p>
+            </div>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-center">
             <Link
               href="/"
               className="text-[var(--text-secondary)] hover:text-[var(--accent-orange)] transition-colors text-sm font-medium"
@@ -225,8 +301,9 @@ export default function Dashboard() {
             </Link>
             <button
               onClick={handleLogout}
-              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-medium"
+              className="flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-medium"
             >
+              <LogOut size={16} />
               Déconnexion
             </button>
           </div>
@@ -234,7 +311,7 @@ export default function Dashboard() {
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 md:py-10">
         {/* Search Panel */}
         <SearchPanel
           onSearch={handleSearch}
@@ -247,18 +324,54 @@ export default function Dashboard() {
 
         {/* Candidatures Section */}
         <div>
-          <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-6">
-            📋 Candidatures
-          </h2>
+          <div className="flex items-center gap-3 mb-6">
+            <FileText size={28} className="text-[var(--accent-orange)]" />
+            <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+              Candidatures
+            </h2>
+          </div>
           <CandidatureList
             candidatures={candidatures}
             onSelect={handleSelectCandidature}
             onDelete={handleDeleteCandidature}
+            onGenerateLetter={handleOpenGenerateLetter}
+            onFollowUp={handleOpenFollowUp}
             onUpdate={handleUpdateCandidature}
             apiKey={apiKey}
           />
         </div>
       </main>
+
+      {/* Search Loading Modal */}
+      <SearchLoadingModal isOpen={searching} progress={searchProgress} />
+
+      {/* Generate Letter Modal */}
+      {selectedCandidature && (
+        <GenerateLetterModal
+          candidature={selectedCandidature}
+          isOpen={showGenerateLetterModal}
+          onClose={() => {
+            setShowGenerateLetterModal(false);
+            setSelectedCandidature(null);
+          }}
+          apiKey={apiKey}
+          onSend={handleSendCandidature}
+          onUpdate={handleUpdateCandidature}
+        />
+      )}
+
+      {/* Follow Up Modal */}
+      {selectedCandidature && (
+        <FollowUpModal
+          candidature={selectedCandidature}
+          isOpen={showFollowUpModal}
+          onClose={() => {
+            setShowFollowUpModal(false);
+            setSelectedCandidature(null);
+          }}
+          onFollowUp={handleScheduleFollowUp}
+        />
+      )}
 
       {/* Letter Modal */}
       {selectedCandidature && (

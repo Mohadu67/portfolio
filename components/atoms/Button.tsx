@@ -1,22 +1,29 @@
-import React from "react";
+"use client";
 
-type ButtonVariant = "primary" | "secondary" | "ghost";
+import React from "react";
+import { motion, HTMLMotionProps } from "framer-motion";
+import { Loader } from "lucide-react";
+
+type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
 type ButtonSize = "sm" | "md" | "lg";
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<HTMLMotionProps<"button">, "className"> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   children: React.ReactNode;
   isLoading?: boolean;
+  className?: string;
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-[var(--accent-orange)] text-[var(--bg-primary)] hover:opacity-90 hover:scale-105",
+    "bg-[var(--accent-orange)] text-[var(--bg-primary)] hover:opacity-90",
   secondary:
-    "bg-[var(--accent-blue)] text-white hover:opacity-90 hover:scale-105",
+    "bg-[var(--accent-blue)] text-white hover:opacity-90",
   ghost:
     "border border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]",
+  destructive:
+    "bg-red-600 text-white hover:bg-red-700",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
@@ -35,25 +42,27 @@ export function Button({
   ...props
 }: ButtonProps) {
   return (
-    <button
+    <motion.button
       disabled={disabled || isLoading}
       className={`
-        font-semibold rounded-lg transition-all duration-300 transform
+        font-semibold rounded-lg transition-all duration-300
         ${variantStyles[variant]}
         ${sizeStyles[size]}
         disabled:opacity-50 disabled:cursor-not-allowed
         ${className}
       `}
+      whileHover={{ scale: disabled ? 1 : 1.05 }}
+      whileTap={{ scale: disabled ? 1 : 0.95 }}
       {...props}
     >
       {isLoading ? (
         <span className="inline-flex items-center gap-2">
-          <span className="animate-spin">⚙</span>
+          <Loader size={16} className="animate-spin" />
           {children}
         </span>
       ) : (
         children
       )}
-    </button>
+    </motion.button>
   );
 }

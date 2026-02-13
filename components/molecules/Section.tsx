@@ -6,6 +6,7 @@ interface SectionProps {
   description?: string;
   children: React.ReactNode;
   className?: string;
+  id?: string;
 }
 
 export function Section({
@@ -13,9 +14,10 @@ export function Section({
   description,
   children,
   className = "",
+  id,
 }: SectionProps) {
   return (
-    <section className={`py-20 px-4 sm:px-6 lg:px-8 ${className}`}>
+    <section id={id} className={`py-20 px-4 sm:px-6 lg:px-8 ${className}`}>
       <Container>
         {/* Header */}
         {title && (

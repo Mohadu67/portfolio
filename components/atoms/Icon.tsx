@@ -1,4 +1,5 @@
 import React from "react";
+import * as LucideIcons from "lucide-react";
 
 type IconName =
   | "github"
@@ -13,10 +14,13 @@ type IconName =
   | "link";
 
 interface IconProps {
-  name: IconName;
+  name?: IconName;
   size?: number;
   className?: string;
+  lucideIcon?: keyof typeof LucideIcons;
 }
+
+type LucideIconName = keyof typeof LucideIcons;
 
 const icons: Record<IconName, (size: number) => React.ReactNode> = {
   github: (size) => (
@@ -81,10 +85,21 @@ const icons: Record<IconName, (size: number) => React.ReactNode> = {
   ),
 };
 
-export function Icon({ name, size = 24, className = "" }: IconProps) {
+export function Icon({ name, size = 24, className = "", lucideIcon }: IconProps) {
+  // If lucideIcon is provided, use it
+  if (lucideIcon && lucideIcon in LucideIcons) {
+    const LucideComponent = LucideIcons[lucideIcon as LucideIconName] as React.ComponentType<{ size: number; className: string }>;
+    return (
+      <span className={`inline-flex items-center justify-center text-current ${className}`}>
+        <LucideComponent size={size} className={className} />
+      </span>
+    );
+  }
+
+  // Fall back to legacy icons
   return (
     <span className={`inline-flex items-center justify-center text-current ${className}`}>
-      {icons[name]?.(size)}
+      {name && icons[name]?.(size)}
     </span>
   );
 }

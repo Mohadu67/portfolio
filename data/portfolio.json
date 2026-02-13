@@ -3,7 +3,7 @@
     "name": "Mohammed Hamiani",
     "title": "Concepteur Développeur Fullstack",
     "tagline": "Dev by Day | Creator by Night",
-    "location": "France 🇫🇷",
+    "location": "France",
     "availability": "Stage 2025",
     "phone": "+33 07 83 33 06 94",
     "email": "Hamiani.Mohammed@hotmail.com",
@@ -45,77 +45,88 @@
       "name": "CSS3",
       "level": "Expert",
       "years": "3+",
-      "category": "Frontend"
+      "category": "Frontend",
+      "bugStory": "J'ai passé 2h à déboguer pourquoi mon margin ne s'appliquait pas. Après des heures de investigation, j'ai découvert un typo : j'avais écrit '.containerr' au lieu de '.container' 🤦"
     },
     {
       "id": "javascript",
       "name": "JavaScript",
       "level": "Expert",
       "years": "3+",
-      "category": "Frontend"
+      "category": "Frontend",
+      "bugStory": "parseInt('05') retournait 5, mais parseInt('08') retournait 0 ! C'était une question de base octale. Merci à la stack overflow des années 2000 😅"
     },
     {
       "id": "git",
       "name": "Git/GitHub",
       "level": "Avancé",
       "years": "3+",
-      "category": "Tools"
+      "category": "Tools",
+      "bugStory": "J'ai accidentellement mergé main dans ma branche de staging en prod. Heureusement, c'était un vendredi 15h (spoiler: ce n'était pas un accident) 🚀"
     },
     {
       "id": "react",
       "name": "React",
       "level": "Avancé",
       "years": "2+",
-      "category": "Frontend"
+      "category": "Frontend",
+      "bugStory": "useEffect sans dépendances? Oublie! J'ai créé une boucle infinie qui a tué mon navigateur. 'Pourquoi mon app crash?' → 'Avez-vous vérifié les deps?' 💀"
     },
     {
       "id": "nodejs",
       "name": "Node.js",
       "level": "Avancé",
       "years": "2+",
-      "category": "Backend"
+      "category": "Backend",
+      "bugStory": "'EADDRINUSE: address already in use :::3000'. Mon ancien serveur était encore en cours d'exécution. Kill port et restart = nouveau dev 🎊"
     },
     {
       "id": "express",
       "name": "Express",
       "level": "Avancé",
       "years": "2+",
-      "category": "Backend"
+      "category": "Backend",
+      "bugStory": "J'avais mis les routes avant les middleware. Résultat: toutes mes requêtes 404. L'ordre compte vraiment en Express! 🔄"
     },
     {
       "id": "sql",
       "name": "MariaDB/SQL",
       "level": "Avancé",
       "years": "2+",
-      "category": "Database"
+      "category": "Database",
+      "bugStory": "DELETE FROM users; // J'avais oublié le WHERE. 500 utilisateurs disparus en 0.5s. Git restore sauvé du jour! 😱"
     },
     {
       "id": "figma",
       "name": "Figma",
       "level": "Avancé",
       "years": "2+",
-      "category": "Design"
+      "category": "Design",
+      "bugStory": "Créé 500 frames par accident en cliquant sur la mauvaise option. Mon Figma était plus lent qu'un escargot. Auto-save = mon meilleur ami 🐌"
     },
     {
       "id": "php",
       "name": "PHP",
       "level": "Intermédiaire",
       "years": "1+",
-      "category": "Backend"
+      "category": "Backend",
+      "bugStory": "header('Location: /'); après un echo... Les headers ne peuvent pas être modifiés après la sortie! Lesson learned: headers d'abord! 📧"
     },
     {
       "id": "linux",
       "name": "Linux",
       "level": "Intermédiaire",
       "years": "2+",
-      "category": "DevOps"
+      "category": "DevOps",
+      "bugStory": "rm -rf /var au lieu de /var/www. Les 3 secondes les plus longues de ma vie. Humain et ligne de commande = dangereux ⚠️"
     },
     {
       "id": "mongodb",
       "name": "MongoDB",
       "level": "Avancé",
       "years": "2+",
-      "category": "Database"
+      "category": "Database",
+      "bugStory": "db.collection.deleteMany({}) sans filtre intentionnel. 10k documents disparus. Ctrl+Z ne marche pas en BD. Backup sauvé du jour! 🛟"
     }
   ],
   "projects": [

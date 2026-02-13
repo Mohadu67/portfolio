@@ -1,16 +1,44 @@
 @import "tailwindcss";
 
 :root {
-  /* Dark theme */
+  /* Dark theme - Premium colors */
   --bg-primary: #0D1117;
   --bg-card: #161B22;
   --bg-secondary: #21262D;
-  --border-color: rgba(255, 255, 255, 0.08);
-  --accent-orange: #F5A623;
-  --accent-blue: #1D6FC4;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --accent-orange: #FF9E64;
+  --accent-blue: #2E9FD8;
   --text-primary: #FFFFFF;
-  --text-secondary: #8B949E;
-  --text-tertiary: #6E7681;
+  --text-secondary: #A0AEC0;
+  --text-tertiary: #718096;
+
+  /* Candidature Status Colors - Enhanced */
+  --status-identifiee: #FF9E64;
+  --status-lettre: #2E9FD8;
+  --status-postule: #7C3AED;
+  --status-reponse: #10B981;
+  --status-entretien: #F59E0B;
+  --status-refus: #EF4444;
+  --status-acceptee: #34D399;
+
+  /* Typography scale */
+  --font-xs: 0.75rem;
+  --font-sm: 0.875rem;
+  --font-base: 1rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.25rem;
+  --font-2xl: 1.5rem;
+  --font-3xl: 1.875rem;
+  --font-4xl: 2.25rem;
+
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 2.5rem;
+  --space-3xl: 3rem;
 }
 
 @theme inline {
@@ -127,6 +155,58 @@ body {
   }
 }
 
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes count-up {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mesh-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
 .animate-fade-in-up {
   animation: fade-in-up 0.8s ease-out forwards;
   opacity: 0;
@@ -143,6 +223,51 @@ body {
 
 .animate-float {
   animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.5s ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.5s ease-out;
+}
+
+.animate-mesh-gradient {
+  animation: mesh-gradient 8s ease infinite;
+  background-size: 200% 200%;
+}
+
+.status-identifiee {
+  @apply border-l-4 border-[var(--status-identifiee)];
+}
+
+.status-lettre {
+  @apply border-l-4 border-[var(--status-lettre)];
+}
+
+.status-postule {
+  @apply border-l-4 border-[var(--status-postule)];
+}
+
+.status-reponse {
+  @apply border-l-4 border-[var(--status-reponse)];
+}
+
+.status-entretien {
+  @apply border-l-4 border-[var(--status-entretien)];
+}
+
+.status-refus {
+  @apply border-l-4 border-[var(--status-refus)];
+}
+
+.status-acceptee {
+  @apply border-l-4 border-[var(--status-acceptee)];
 }
 
 /* Smooth scrolling */

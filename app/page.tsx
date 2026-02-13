@@ -1,3 +1,4 @@
+import { NavBar } from "@/components/ui/NavBar";
 import {
   HeroSection,
   SkillsSection,
@@ -10,6 +11,7 @@ import {
 export default function Home() {
   return (
     <main className="bg-[var(--bg-primary)]">
+      <NavBar />
       <HeroSection />
       <SkillsSection />
       <EducationSection />

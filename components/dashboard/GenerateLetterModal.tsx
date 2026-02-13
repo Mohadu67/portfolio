@@ -41,10 +41,12 @@ export function GenerateLetterModal({
   const [template, setTemplate] = useState<keyof typeof LETTER_TEMPLATES>("formal");
   const [generatedLetter, setGeneratedLetter] = useState("");
   const [editingLetter, setEditingLetter] = useState("");
+  const [generatedCV, setGeneratedCV] = useState("");
   const [step, setStep] = useState<"template" | "generate" | "review">("template");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState(candidature?.email || "");
+  const [activeTab, setActiveTab] = useState<"cv" | "letter">("cv");
 
   if (!isOpen || !candidature) return null;
 
@@ -68,20 +70,23 @@ export function GenerateLetterModal({
       const data = await response.json();
       setGeneratedLetter(data.lettre);
       setEditingLetter(data.lettre);
+      setGeneratedCV(data.cv || "");
+      setActiveTab("cv");
       setStep("review");
-      toast.success("Lettre générée avec succès!");
+      toast.success("Lettre et CV générés avec succès!");
     } catch (error) {
-      toast.error("Erreur lors de la génération de la lettre");
+      toast.error("Erreur lors de la génération");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopyLetter = () => {
-    navigator.clipboard.writeText(editingLetter);
+  const handleCopyContent = () => {
+    const textToCopy = activeTab === "cv" ? generatedCV : editingLetter;
+    navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    toast.success("Lettre copiée!");
+    toast.success(activeTab === "cv" ? "CV copié!" : "Lettre copiée!");
   };
 
   const handleSend = async () => {
@@ -296,23 +301,77 @@ export function GenerateLetterModal({
                   />
                 </motion.div>
 
-                {/* Letter preview */}
+                {/* CV and Letter tabs */}
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
-                    Lettre de motivation
-                  </label>
-                  <motion.textarea
-                    value={editingLetter}
-                    onChange={(e) => setEditingLetter(e.target.value)}
-                    className="w-full h-64 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-blue)]/80 focus:shadow-lg focus:shadow-[var(--accent-blue)]/20 font-mono text-sm transition-all resize-none"
-                    whileFocus={{ scale: 1.01 }}
-                  />
+                  {/* Tab buttons */}
+                  <div className="flex gap-2 mb-3">
+                    <motion.button
+                      onClick={() => setActiveTab("cv")}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        activeTab === "cv"
+                          ? "bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)]"
+                          : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--border-color)]/50 hover:border-[var(--accent-orange)]/60"
+                      }`}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      📄 Curriculum Vitae
+                    </motion.button>
+                    <motion.button
+                      onClick={() => setActiveTab("letter")}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        activeTab === "letter"
+                          ? "bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-blue)]/80 text-white"
+                          : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--border-color)]/50 hover:border-[var(--accent-blue)]/60"
+                      }`}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      ✉️ Lettre de motivation
+                    </motion.button>
+                  </div>
+
+                  {/* Content */}
+                  <AnimatePresence mode="wait">
+                    {activeTab === "cv" && (
+                      <motion.div
+                        key="cv"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <motion.textarea
+                          value={generatedCV}
+                          readOnly
+                          className="w-full h-64 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)]/80 font-mono text-sm transition-all resize-none cursor-default"
+                        />
+                      </motion.div>
+                    )}
+
+                    {activeTab === "letter" && (
+                      <motion.div
+                        key="letter"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <motion.textarea
+                          value={editingLetter}
+                          onChange={(e) => setEditingLetter(e.target.value)}
+                          className="w-full h-64 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-blue)]/80 focus:shadow-lg focus:shadow-[var(--accent-blue)]/20 font-mono text-sm transition-all resize-none"
+                          whileFocus={{ scale: 1.01 }}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
 
                 {/* Copy button */}
                 <motion.button
                   type="button"
-                  onClick={handleCopyLetter}
+                  onClick={handleCopyContent}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.3 }}
@@ -332,7 +391,7 @@ export function GenerateLetterModal({
                   ) : (
                     <>
                       <Copy size={18} />
-                      Copier la lettre
+                      Copier {activeTab === "cv" ? "le CV" : "la lettre"}
                     </>
                   )}
                 </motion.button>

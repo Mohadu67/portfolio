@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature } from "@/models/Candidature";
-import { generateLettre } from "@/lib/claude";
+import { generateLettre, generateCV } from "@/lib/grok";
 import { verifyAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
@@ -27,12 +27,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Candidature not found" }, { status: 404 });
     }
 
-    // Generate letter with Claude
+    // Generate letter with Grok
     const lettre = await generateLettre(
       candidature.entreprise,
       candidature.poste,
       candidature.description
     );
+
+    // Generate CV with Grok
+    const cv = await generateCV();
 
     // Update candidature with letter and status
     candidature.lettre = lettre;
@@ -41,6 +44,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       lettre,
+      cv,
       candidature_id,
       statut: "lettre générée",
     });

@@ -20,6 +20,7 @@ export interface ICandidature {
   email: string;
   statut: CandidatureStatut;
   lettre: string | null;
+  cv: string | null;
   notes: string;
   date: string;
   created_at: Date;
@@ -41,6 +42,7 @@ const candidatureSchema = new Schema<ICandidature>(
       default: "identifiée",
     },
     lettre: { type: String, default: null },
+    cv: { type: String, default: null },
     notes: { type: String, default: "" },
     date: { type: String }, // YYYY-MM-DD
   },

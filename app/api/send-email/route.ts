@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature } from "@/models/Candidature";
 import { sendCandidature } from "@/lib/email";
+import { generateCV } from "@/lib/grok";
 import { verifyAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
@@ -34,12 +35,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate CV if not already present
+    let cv = candidature.cv;
+    if (!cv) {
+      cv = await generateCV();
+      candidature.cv = cv;
+    }
+
     // Send email
     await sendCandidature(
       candidature.entreprise,
       candidature.poste,
       email_destinataire,
       candidature.lettre,
+      cv,
       process.env.PROFIL_NOM || "Mohammed Hamiani"
     );
 

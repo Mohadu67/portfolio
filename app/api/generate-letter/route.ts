@@ -46,9 +46,15 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : "";
     console.error("Letter generation error:", errorMessage);
+    console.error("Error stack:", errorStack);
     return NextResponse.json(
-      { error: "Failed to generate letter", details: errorMessage },
+      {
+        error: "Failed to generate letter",
+        details: errorMessage,
+        ...(process.env.NODE_ENV === "development" && { stack: errorStack })
+      },
       { status: 500 }
     );
   }

@@ -8,6 +8,20 @@ export interface SearchResult {
   plateforme: "JSearch" | "Adzuna" | "France Travail";
 }
 
+// Helper to normalize and filter by location
+function isLocationMatch(jobLocation: string, searchLocation: string): boolean {
+  if (!jobLocation) return false;
+  const normalized = jobLocation.toLowerCase().trim();
+  const searchNorm = searchLocation.toLowerCase().trim();
+
+  // Exact match or contains search term
+  return (
+    normalized === searchNorm ||
+    normalized.includes(searchNorm) ||
+    searchNorm.includes(normalized.split(",")[0])
+  );
+}
+
 /**
  * JSearch - Via RapidAPI
  */
@@ -40,6 +54,7 @@ export async function searchJSearch(
     const data = await response.json();
 
     return (data.data || [])
+      .filter((job: any) => isLocationMatch(job.job_city || "", location))
       .slice(0, nbResults)
       .map((job: any) => ({
         entreprise: job.employer_name || "Unknown",
@@ -86,6 +101,7 @@ export async function searchAdzuna(
     const data = await response.json();
 
     return (data.results || [])
+      .filter((job: any) => isLocationMatch(job.location?.display_name || "", location))
       .slice(0, nbResults)
       .map((job: any) => ({
         entreprise: job.company?.display_name || "Unknown",
@@ -165,6 +181,7 @@ export async function searchFranceTravail(
     const jobData = await jobRes.json();
 
     return (jobData.resultats || [])
+      .filter((job: any) => isLocationMatch(job.lieuTravail?.commune || "", location))
       .slice(0, nbResults)
       .map((job: any) => ({
         entreprise: job.entreprise?.nom || "Unknown",

@@ -17,6 +17,19 @@ const QUICK_SEARCHES = [
   { label: "Développeur Web", keywords: "stage développeur web" },
 ];
 
+const POPULAR_CITIES = [
+  "Strasbourg",
+  "Paris",
+  "Lyon",
+  "Marseille",
+  "Toulouse",
+  "Nice",
+  "Nantes",
+  "Bordeaux",
+  "Lille",
+  "Rennes",
+];
+
 export function SearchPanel({
   onSearch,
   isLoading = false,
@@ -109,6 +122,33 @@ export function SearchPanel({
                 whileTap={{ scale: 0.95 }}
               >
                 {search.label}
+              </motion.button>
+            ))}
+          </div>
+        </div>
+
+        {/* Popular cities */}
+        <div>
+          <p className="text-xs text-[var(--text-secondary)] font-medium mb-3 flex items-center gap-2">
+            <MapPin size={14} />
+            Villes populaires
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {POPULAR_CITIES.map((city) => (
+              <motion.button
+                key={city}
+                type="button"
+                onClick={() => setLocation(city)}
+                disabled={isLoading}
+                className={`px-3 py-1.5 text-xs rounded-full border transition-colors disabled:opacity-50 ${
+                  location === city
+                    ? "bg-[var(--accent-orange)] border-[var(--accent-orange)] text-[var(--bg-primary)]"
+                    : "bg-[var(--bg-secondary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent-blue)]"
+                }`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                {city}
               </motion.button>
             ))}
           </div>

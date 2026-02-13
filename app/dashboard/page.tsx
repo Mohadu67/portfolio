@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import { SearchPanel } from "@/components/dashboard/SearchPanel";
 import { StatsBar } from "@/components/dashboard/StatsBar";
 import { CandidatureList } from "@/components/dashboard/CandidatureList";
+import { LetterModal } from "@/components/dashboard/LetterModal";
 import type { ICandidature } from "@/models/Candidature";
+import Link from "next/link";
 
 export default function Dashboard() {
   const [apiKey, setApiKey] = useState("");
@@ -14,6 +16,8 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [selectedCandidature, setSelectedCandidature] = useState<ICandidature | null>(null);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     const savedKey = sessionStorage.getItem("api-key");
@@ -69,34 +73,94 @@ export default function Dashboard() {
       });
 
       if (res.ok) {
+        const data = await res.json();
         await loadCandidatures(apiKey);
-        alert("Recherche terminée !");
       } else {
-        alert("Erreur lors de la recherche");
+        throw new Error("Erreur lors de la recherche");
       }
     } catch (error) {
       console.error("Search error:", error);
-      alert("Erreur lors de la recherche");
+      throw error;
     } finally {
       setSearching(false);
     }
   };
 
+  const handleSelectCandidature = (id: string) => {
+    const cand = candidatures.find((c) => c._id === id);
+    if (cand) {
+      setSelectedCandidature(cand);
+      setShowModal(true);
+    }
+  };
+
+  const handleDeleteCandidature = async (id: string) => {
+    try {
+      const res = await fetch(`/api/candidatures/${id}`, {
+        method: "DELETE",
+        headers: { "x-api-key": apiKey },
+      });
+      if (res.ok) {
+        await loadCandidatures(apiKey);
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      throw error;
+    }
+  };
+
+  const handleUpdateCandidature = async (
+    id: string,
+    updates: Partial<ICandidature>
+  ) => {
+    try {
+      const res = await fetch(`/api/candidatures/${id}`, {
+        method: "PATCH",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        await loadCandidatures(apiKey);
+        // Update selected candidature
+        if (selectedCandidature && selectedCandidature._id === id) {
+          const updated = candidatures.find((c) => c._id === id);
+          if (updated) {
+            setSelectedCandidature(updated);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Update error:", error);
+      throw error;
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <p className="text-slate-400">Chargement...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
+        <div className="text-center">
+          <div className="text-4xl mb-4">⏳</div>
+          <p className="text-[var(--text-secondary)]">Chargement...</p>
+        </div>
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center px-4">
         <div className="max-w-md w-full">
-          <div className="bg-slate-800/50 border border-purple-500/20 rounded-lg p-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Dashboard Privé</h1>
-            <p className="text-slate-400 mb-6">Authentifiez-vous avec votre clé secrète</p>
+          <div className="card-elevated p-8">
+            <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">
+              🔐 Dashboard Privé
+            </h1>
+            <p className="text-[var(--text-secondary)] mb-6">
+              Authentifiez-vous avec votre clé secrète pour accéder au dashboard de
+              recherche de stage.
+            </p>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <input
@@ -104,52 +168,111 @@ export default function Dashboard() {
                 placeholder="Clé secrète"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-purple-500"
+                className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded px-4 py-2 text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-orange)] transition-colors"
+                autoFocus
               />
               <button
                 type="submit"
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition-colors"
+                className="w-full btn-orange font-semibold py-3"
               >
                 Se connecter
               </button>
             </form>
+
+            <div className="mt-6 pt-6 border-t border-[var(--border-color)]">
+              <p className="text-xs text-[var(--text-tertiary)] text-center">
+                Besoin d'aide ? Contactez{" "}
+                <a
+                  href="mailto:Hamiani.Mohammed@hotmail.com"
+                  className="text-[var(--accent-orange)] hover:underline"
+                >
+                  Mohammed
+                </a>
+              </p>
+            </div>
           </div>
+
+          <Link
+            href="/"
+            className="block text-center mt-6 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            ← Retour au portfolio
+          </Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900">
-      <nav className="border-b border-purple-500/20 bg-slate-900/50 backdrop-blur-md">
+    <div className="min-h-screen bg-[var(--bg-primary)]">
+      {/* Navigation */}
+      <nav className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)] backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-white">Dashboard Stage</h1>
-          <button
-            onClick={handleLogout}
-            className="text-slate-400 hover:text-slate-300 transition-colors text-sm font-medium"
-          >
-            Déconnexion
-          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--text-primary)]">
+              📊 Dashboard Stage
+            </h1>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Mohammed Hamiani
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <Link
+              href="/"
+              className="text-[var(--text-secondary)] hover:text-[var(--accent-orange)] transition-colors text-sm font-medium"
+            >
+              Portfolio
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-medium"
+            >
+              Déconnexion
+            </button>
+          </div>
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Search Panel */}
         <SearchPanel
           onSearch={handleSearch}
           isLoading={searching}
           apiKey={apiKey}
         />
 
+        {/* Stats */}
         <StatsBar stats={stats} total={total} />
 
-        <div className="bg-slate-800/50 border border-purple-500/20 rounded-lg p-6">
-          <h2 className="text-xl font-bold text-white mb-4">📋 Candidatures</h2>
+        {/* Candidatures Section */}
+        <div>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-6">
+            📋 Candidatures
+          </h2>
           <CandidatureList
             candidatures={candidatures}
+            onSelect={handleSelectCandidature}
+            onDelete={handleDeleteCandidature}
+            onUpdate={handleUpdateCandidature}
             apiKey={apiKey}
           />
         </div>
       </main>
+
+      {/* Letter Modal */}
+      {selectedCandidature && (
+        <LetterModal
+          candidature={selectedCandidature}
+          isOpen={showModal}
+          onClose={() => {
+            setShowModal(false);
+            setSelectedCandidature(null);
+          }}
+          apiKey={apiKey}
+          onUpdate={handleUpdateCandidature}
+        />
+      )}
     </div>
   );
 }

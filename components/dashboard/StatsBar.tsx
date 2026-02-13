@@ -7,21 +7,36 @@ interface StatsBarProps {
 
 export function StatsBar({ stats, total }: StatsBarProps) {
   const statItems = [
-    { key: "identifiée", label: "Identifiées", color: "bg-blue-500" },
-    { key: "lettre générée", label: "Lettres", color: "bg-purple-500" },
-    { key: "postulée", label: "Postulées", color: "bg-green-500" },
-    { key: "entretien", label: "Entretiens", color: "bg-orange-500" },
-    { key: "acceptée", label: "Acceptées", color: "bg-emerald-500" },
+    { key: "identifiée", label: "Identifiées", icon: "📌" },
+    { key: "lettre générée", label: "Lettres", icon: "📝" },
+    { key: "postulée", label: "Postulées", icon: "✉️" },
+    { key: "entretien", label: "Entretiens", icon: "💬" },
+    { key: "acceptée", label: "Acceptées", icon: "✅" },
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-      {statItems.map(({ key, label, color }) => (
-        <div key={key} className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-white">{stats[key] || 0}</p>
-          <p className="text-xs text-slate-400">{label}</p>
-        </div>
-      ))}
+    <div>
+      {/* Total */}
+      <div className="card-elevated mb-6 p-6">
+        <p className="text-[var(--text-secondary)] text-sm mb-1">Total candidatures</p>
+        <p className="text-4xl font-bold text-[var(--text-primary)]">{total}</p>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        {statItems.map(({ key, label, icon }) => (
+          <div
+            key={key}
+            className="card p-4 text-center hover:border-[var(--accent-orange)] transition-colors"
+          >
+            <div className="text-2xl mb-2">{icon}</div>
+            <p className="text-2xl font-bold text-[var(--text-primary)]">
+              {stats[key] || 0}
+            </p>
+            <p className="text-xs text-[var(--text-secondary)] mt-1">{label}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

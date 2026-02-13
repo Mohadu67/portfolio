@@ -1,0 +1,164 @@
+{
+  "profile": {
+    "name": "Mohammed Hamiani",
+    "title": "Concepteur Développeur Fullstack",
+    "tagline": "Dev by Day | Creator by Night",
+    "location": "France 🇫🇷",
+    "availability": "Stage 2025",
+    "phone": "+33 07 83 33 06 94",
+    "email": "Hamiani.Mohammed@hotmail.com",
+    "photo": "/photoCV.png"
+  },
+  "socials": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "handle": "@Mohadu67",
+      "url": "https://github.com/Mohadu67/",
+      "icon": "github"
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "handle": "Mohammed Hamiani",
+      "url": "https://www.linkedin.com/in/mohammed-hamiani-461561243/",
+      "icon": "linkedin"
+    },
+    {
+      "id": "calendar",
+      "name": "Calendly",
+      "handle": "Book a call",
+      "url": "https://calendly.com/hamiani-mohammed/30min",
+      "icon": "calendar"
+    },
+    {
+      "id": "email",
+      "name": "Email",
+      "handle": "Hamiani.Mohammed@hotmail.com",
+      "url": "mailto:Hamiani.Mohammed@hotmail.com",
+      "icon": "mail"
+    }
+  ],
+  "skills": [
+    {
+      "id": "css3",
+      "name": "CSS3",
+      "level": "Expert",
+      "years": "3+",
+      "category": "Frontend"
+    },
+    {
+      "id": "javascript",
+      "name": "JavaScript",
+      "level": "Expert",
+      "years": "3+",
+      "category": "Frontend"
+    },
+    {
+      "id": "git",
+      "name": "Git/GitHub",
+      "level": "Avancé",
+      "years": "3+",
+      "category": "Tools"
+    },
+    {
+      "id": "react",
+      "name": "React",
+      "level": "Avancé",
+      "years": "2+",
+      "category": "Frontend"
+    },
+    {
+      "id": "nodejs",
+      "name": "Node.js",
+      "level": "Avancé",
+      "years": "2+",
+      "category": "Backend"
+    },
+    {
+      "id": "express",
+      "name": "Express",
+      "level": "Avancé",
+      "years": "2+",
+      "category": "Backend"
+    },
+    {
+      "id": "sql",
+      "name": "MariaDB/SQL",
+      "level": "Avancé",
+      "years": "2+",
+      "category": "Database"
+    },
+    {
+      "id": "figma",
+      "name": "Figma",
+      "level": "Avancé",
+      "years": "2+",
+      "category": "Design"
+    },
+    {
+      "id": "php",
+      "name": "PHP",
+      "level": "Intermédiaire",
+      "years": "1+",
+      "category": "Backend"
+    },
+    {
+      "id": "linux",
+      "name": "Linux",
+      "level": "Intermédiaire",
+      "years": "2+",
+      "category": "DevOps"
+    },
+    {
+      "id": "mongodb",
+      "name": "MongoDB",
+      "level": "Avancé",
+      "years": "2+",
+      "category": "Database"
+    }
+  ],
+  "projects": [
+    {
+      "id": "harmonith",
+      "name": "Harmonith",
+      "url": "https://harmonith.fr",
+      "description": "App de calcul d'IMC et calories. Interface moderne pour suivre nutrition et objectifs santé.",
+      "image": "/harmonith.svg",
+      "stack": ["React", "Vite", "Node.js", "Express", "MongoDB", "CSS Modules"]
+    },
+    {
+      "id": "equestra",
+      "name": "Equestra",
+      "url": "https://equestra.harmonith.fr",
+      "description": "Application web de gestion pour centre de loisirs. Membres, réservations, planification.",
+      "image": "/equestra.svg",
+      "stack": ["PHP", "MariaDB", "JavaScript", "HTML", "CSS"]
+    }
+  ],
+  "contact": {
+    "email": "Hamiani.Mohammed@hotmail.com",
+    "phone": "+33 07 83 33 06 94",
+    "calendly": "https://calendly.com/hamiani-mohammed/30min",
+    "cta": "Prêt à collaborer ?"
+  },
+  "education": [
+    {
+      "id": "education-1",
+      "school": "À compléter",
+      "degree": "À compléter",
+      "field": "À compléter",
+      "year": "2024"
+    }
+  ],
+  "experience": [
+    {
+      "id": "experience-1",
+      "company": "À compléter",
+      "position": "À compléter",
+      "description": "À compléter",
+      "startDate": "2024-01",
+      "endDate": "Présent"
+    }
+  ]
+}

@@ -353,13 +353,13 @@ export default function Dashboard() {
 
             <div>
               <div className="flex items-center gap-3 mb-6">
-                <FileText size={28} className="text-[var(--accent-orange)]" />
+                <Briefcase size={28} className="text-[var(--accent-orange)]" />
                 <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-                  Candidatures
+                  Candidatures - Offres d'emploi
                 </h2>
               </div>
               <CandidatureList
-                candidatures={candidatures}
+                candidatures={candidatures.filter((c) => c.plateforme !== "Web")}
                 onSelect={handleSelectCandidature}
                 onDelete={handleDeleteCandidature}
                 onGenerateLetter={handleOpenGenerateLetter}
@@ -379,17 +379,15 @@ export default function Dashboard() {
               onCandidatureCreated={() => loadCandidatures(apiKey)}
             />
 
-            <StatsBar stats={stats} total={total} />
-
             <div>
               <div className="flex items-center gap-3 mb-6">
-                <FileText size={28} className="text-[var(--accent-orange)]" />
+                <Building2 size={28} className="text-[var(--accent-blue)]" />
                 <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-                  Candidatures
+                  Candidatures - Recherche entreprises
                 </h2>
               </div>
               <CandidatureList
-                candidatures={candidatures}
+                candidatures={candidatures.filter((c) => c.plateforme === "Web")}
                 onSelect={handleSelectCandidature}
                 onDelete={handleDeleteCandidature}
                 onGenerateLetter={handleOpenGenerateLetter}

@@ -193,7 +193,8 @@
       "position": "Transporteur accompagnateur PMR",
       "description": "Accompagnement de personnes à mobilité réduite et assurance de leur sécurité lors des déplacements.",
       "startDate": "2025-03",
-      "endDate": "2025-09"
+      "endDate": "2025-09",
+      "details": "Accompagnement de personnes en situation de handicap. Assurance du confort et de la sécurité lors des déplacements. Respect des protocoles de sécurité et des besoins spécifiques de chaque client."
     },
     {
       "id": "rgm-kfc",
@@ -201,7 +202,8 @@
       "position": "RGM (Responsable Général du Magasin)",
       "description": "Ouverture de restaurant, formation des équipiers et managers, gestion des stocks/coûts, supervision des pôles, et actions marketing.",
       "startDate": "2023-03",
-      "endDate": "2023-12"
+      "endDate": "2023-12",
+      "details": "Pilotage de l'ouverture d'un nouveau restaurant KFC. Formation complète des équipes (équipiers et managers) sur les standards de qualité. Gestion optimale des stocks et contrôle des coûts. Supervision de tous les pôles opérationnels. Mise en place d'actions marketing pour le lancement. Atteinte des objectifs financiers dès les premiers mois."
     },
     {
       "id": "rgm-pizzahut",
@@ -209,7 +211,8 @@
       "position": "RGM (Responsable Général du Magasin)",
       "description": "Pilotage approvisionnement, opérations marketing, contrôle des coûts, analyse des tableaux de bord, formation des équipes.",
       "startDate": "2021-09",
-      "endDate": "2023-02"
+      "endDate": "2023-02",
+      "details": "Gestion complète du restaurant Pizza Hut. Pilotage de l'approvisionnement et gestion des stocks pour optimiser la rentabilité. Conception et exécution de stratégies marketing locales. Analyse détaillée des tableaux de bord de performance. Contrôle rigoureux des coûts d'exploitation. Formation continue des équipes aux standards de qualité. Amélioration de la satisfaction client et augmentation du chiffre d'affaires."
     },
     {
       "id": "manager-kfc",
@@ -217,7 +220,8 @@
       "position": "Manager",
       "description": "Gestion de service, proximité terrain, respect des standards et des normes d'hygiène, optimisation de la productivité.",
       "startDate": "2018-09",
-      "endDate": "2021-08"
+      "endDate": "2021-08",
+      "details": "Management d'équipe lors des services. Présence terrain constante pour assurer la qualité de service. Respect rigoureux des standards KFC et des normes d'hygiène alimentaire. Optimisation de la productivité et du flux de clients. Gestion des ressources humaines et motivation de l'équipe. Formation des nouveaux membres du personnel. Résolution des problèmes en temps réel pour garantir une excellente expérience client."
     }
   ]
 }

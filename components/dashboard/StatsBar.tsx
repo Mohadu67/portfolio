@@ -1,11 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Landmark, FileText, Send, MessageSquare, Trophy } from "lucide-react";
+import { Landmark, FileText, Send, MessageSquare, Trophy, Briefcase } from "lucide-react";
+import type { CandidatureStatut } from "@/models/Candidature";
 
 interface StatsBarProps {
   stats: Record<string, number>;
   total: number;
+  activeStatus: CandidatureStatut | null;
+  onStatusClick: (status: CandidatureStatut | null) => void;
 }
 
 const statIcons = {
@@ -17,9 +20,9 @@ const statIcons = {
 };
 
 const statLabels = {
-  "identifiée": "Identifiées",
-  "lettre générée": "Lettres",
-  "postulée": "Postulées",
+  "identifiée": "À traiter",
+  "lettre générée": "Prêtes",
+  "postulée": "Envoyées",
   "entretien": "Entretiens",
   "acceptée": "Acceptées",
 };
@@ -32,7 +35,15 @@ const statColors = {
   "acceptée": "text-[var(--status-acceptee)]",
 };
 
-export function StatsBar({ stats, total }: StatsBarProps) {
+const statBorderColors = {
+  "identifiée": "border-[var(--status-identifiee)]",
+  "lettre générée": "border-[var(--status-lettre)]",
+  "postulée": "border-[var(--status-postule)]",
+  "entretien": "border-[var(--status-entretien)]",
+  "acceptée": "border-[var(--status-acceptee)]",
+};
+
+export function StatsBar({ stats, total, activeStatus, onStatusClick }: StatsBarProps) {
   const statItems = [
     "identifiée",
     "lettre générée",
@@ -48,56 +59,56 @@ export function StatsBar({ stats, total }: StatsBarProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-      {/* Total KPI */}
-      <motion.div
-        className="card-elevated mb-6 p-4 sm:p-6 bg-gradient-to-br from-[var(--accent-orange)]/10 to-[var(--accent-blue)]/10 border border-[var(--accent-orange)]/20"
-        whileHover={{ y: -2 }}
-        transition={{ type: "spring", stiffness: 300 }}
-      >
-        <p className="text-xs sm:text-sm font-medium text-[var(--text-secondary)] mb-2 uppercase tracking-wide">
-          Total candidatures
-        </p>
-        <motion.p
-          className="text-3xl sm:text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)]"
-          initial={{ scale: 0.8 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", stiffness: 200 }}
+      {/* Stats grid */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+        {/* Total card - compact */}
+        <motion.div
+          onClick={() => onStatusClick(null)}
+          className={`card p-3 text-center cursor-pointer transition-all duration-300 h-full flex flex-col items-center justify-center ${
+            activeStatus === null
+              ? "border-[var(--accent-orange)] bg-[var(--accent-orange)]/5"
+              : "hover:border-[var(--accent-orange)]"
+          }`}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -3, scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
         >
-          {total}
-        </motion.p>
-      </motion.div>
+          <div className="text-[var(--accent-orange)] mb-1.5">
+            <Briefcase size={20} strokeWidth={1.5} />
+          </div>
+          <p className="text-lg sm:text-xl font-bold text-[var(--text-primary)]">{total}</p>
+          <p className="text-[10px] sm:text-xs text-[var(--text-secondary)] mt-0.5 font-medium">Total</p>
+        </motion.div>
 
-      {/* Stats grid - Mobile first */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
         {statItems.map((key, idx) => {
           const Icon = statIcons[key];
           const label = statLabels[key];
           const color = statColors[key];
+          const borderColor = statBorderColors[key];
           const count = stats[key] || 0;
+          const isActive = activeStatus === key;
 
           return (
             <motion.div
               key={key}
-              className="card p-3 sm:p-4 text-center hover:border-[var(--accent-orange)] transition-all duration-300 cursor-pointer h-full flex flex-col items-center justify-center"
+              onClick={() => onStatusClick(isActive ? null : key)}
+              className={`card p-3 text-center cursor-pointer transition-all duration-300 h-full flex flex-col items-center justify-center ${
+                isActive
+                  ? `${borderColor} bg-[var(--bg-secondary)]`
+                  : "hover:border-[var(--accent-orange)]"
+              }`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              whileHover={{ y: -4, scale: 1.05 }}
+              transition={{ delay: (idx + 1) * 0.08 }}
+              whileHover={{ y: -3, scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
             >
-              <div className={`${color} mb-2 flex-shrink-0`}>
-                <Icon size={24} strokeWidth={1.5} />
+              <div className={`${color} mb-1.5`}>
+                <Icon size={20} strokeWidth={1.5} />
               </div>
-              <motion.p
-                className="text-lg sm:text-2xl font-bold text-[var(--text-primary)]"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: idx * 0.15, duration: 0.5 }}
-              >
-                {count}
-              </motion.p>
-              <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1 font-medium">
-                {label}
-              </p>
+              <p className="text-lg sm:text-xl font-bold text-[var(--text-primary)]">{count}</p>
+              <p className="text-[10px] sm:text-xs text-[var(--text-secondary)] mt-0.5 font-medium">{label}</p>
             </motion.div>
           );
         })}

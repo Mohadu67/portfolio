@@ -43,56 +43,56 @@ async function callGrok(prompt: string, systemPrompt?: string): Promise<string> 
   return data.choices[0].message.content;
 }
 
+const PROFIL_CONTEXT = `
+**Profil du candidat — Mohammed Hamiani:**
+- Formation actuelle : Bachelier CDA (Concepteur Développeur d'Application) — formation intensive fullstack
+- Admissible au CNAM pour le titre d'ingénieur informatique (poursuite d'études visée)
+- Stack technique : JavaScript/TypeScript, React, Next.js, Node.js, Express, Python, SQL/MariaDB, MongoDB, Git, Docker, Linux, Figma
+- Projets concrets : Portfolio interactif avec dashboard de candidatures automatisé (scraping web, génération IA, envoi emails), applications fullstack complètes déployées
+- Expérience pro non-tech valorisante : 5 ans de management en restauration rapide (KFC, Pizza Hut) dont 2 ans comme Responsable Général de Magasin — pilotage d'ouverture de restaurant, formation d'équipes, gestion de P&L, optimisation des coûts, actions marketing
+- Soft skills prouvés : leadership, autonomie, gestion du stress, capacité à monter en compétence rapidement, esprit d'initiative
+- Recherche : Stage de 3 mois (validation bachelier CDA), avec possibilité d'alternance dès septembre 2026
+- Localisation : Strasbourg, mobile
+
+**IMPORTANT — Ton et positionnement :**
+- NE PAS demander de la charité ni supplier. Mohammed est un candidat qui APPORTE de la valeur.
+- Mettre en avant ce qu'il peut apporter à l'entreprise : autonomie, rigueur, capacité à livrer, expérience terrain du management
+- Son parcours atypique (management → dev) est une FORCE : il sait gérer des projets, des deadlines, des équipes
+- Le stage est une opportunité MUTUELLE : l'entreprise gagne un profil opérationnel, Mohammed valide sa formation
+- Mentionner naturellement la possibilité d'alternance en septembre 2026 comme une continuité logique, pas comme une demande
+`;
+
+const SYSTEM_PROMPT = `Tu es un rédacteur expert en lettres de motivation percutantes pour le secteur tech.
+Tu rédiges des lettres qui positionnent le candidat comme un atout, pas comme un demandeur.
+Le ton est professionnel, confiant et direct. Pas de formules creuses ni de flatterie excessive.
+Tu ne commences JAMAIS par "Madame, Monsieur," (c'est ajouté automatiquement dans le PDF).
+Tu ne termines JAMAIS par "Bien cordialement" ou une signature (c'est ajouté automatiquement dans le PDF).
+Tu écris directement le corps de la lettre, rien d'autre.`;
+
 export async function generateLettre(
   entreprise: string,
   poste: string,
   description: string
 ): Promise<string> {
-  const profil = {
-    nom: process.env.PROFIL_NOM || "Mohammed Hamiani",
-    formation: process.env.PROFIL_FORMATION || "Concepteur Développeur Fullstack",
-    competences: process.env.PROFIL_COMPETENCES || "JavaScript, React, Node.js, Python, SQL, Git, Docker",
-    experience: process.env.PROFIL_EXPERIENCE || "Projets fullstack, UI/UX design, développement web moderne",
-    recherche: process.env.PROFIL_RECHERCHE || "Stage développeur fullstack / web",
-    dispo: process.env.PROFIL_DISPO || "Dès que possible",
-  };
+  const prompt = `Rédige le corps d'une lettre de motivation pour cette candidature :
 
-  const systemPrompt = `Tu es un expert en rédaction de lettres de motivation hautement personnalisées et convaincantes.
-Tu dois générer des lettres professionnelles qui mettent en avant les compétences et la motivation du candidat.
-Sois créatif mais professionnel, enthousiaste mais crédible.`;
+${PROFIL_CONTEXT}
 
-  const prompt = `Génère une lettre de motivation personnalisée pour cette candidature:
+**Offre ciblée :**
+- Entreprise : ${entreprise}
+- Poste : ${poste}
+- Description : ${description}
 
-**Candidat:**
-- Nom: ${profil.nom}
-- Formation: ${profil.formation} (Bachelier CDA - Concepteur Développeur d'Application)
-- Compétences: ${profil.competences}
-- Expérience: ${profil.experience}
-- Objectifs: Stage de 3 mois pour valider l'année de bachelier CDA + Alternance à partir de septembre 2026
-- Statut: Admissible au CNAM pour titre d'ingénieur
+**Structure attendue (4 paragraphes, 350 mots max) :**
+1. Accroche directe : pourquoi ce poste chez cette entreprise spécifiquement (utiliser des éléments de la description)
+2. Ce que Mohammed apporte concrètement : compétences techniques + projets réalisés qui prouvent sa capacité à livrer
+3. La valeur ajoutée de son parcours atypique : 5 ans de management = rigueur, autonomie, gestion de projets, travail en équipe. C'est rare chez un dev junior.
+4. Projection : le stage comme point de départ d'une collaboration durable (mention naturelle de l'alternance possible en sept 2026)
 
-**Offre:**
-- Entreprise: ${entreprise}
-- Poste: ${poste}
-- Description: ${description}
-
-**Contraintes:**
-- Langue: Français
-- Format: 3 paragraphes
-- Max 320 mots
-- Ton: Professionnel, enthousiaste et déterminé
-
-**La lettre DOIT couvrir:**
-1. Le besoin d'un stage de 3 mois pour valider l'année de bachelier CDA
-2. Une opportunité pour montrer son potentiel et ses capacités
-3. L'intérêt pour une alternance en septembre 2026
-4. La perspective d'intégrer le programme d'ingénieur au CNAM
-5. Pourquoi cette entreprise et ce poste correspondent au projet professionnel
-
-Génère UNIQUEMENT la lettre, sans introduction ni explication.`;
+Écris UNIQUEMENT le corps de la lettre. Pas de "Madame, Monsieur," ni de signature.`;
 
   try {
-    return await callGrok(prompt, systemPrompt);
+    return await callGrok(prompt, SYSTEM_PROMPT);
   } catch (error) {
     console.error("Error generating letter with Grok:", error);
     throw error;
@@ -104,58 +104,31 @@ export async function generateLettreFromAbout(
   aboutText: string,
   poste?: string
 ): Promise<string> {
-  const profil = {
-    nom: process.env.PROFIL_NOM || "Mohammed Hamiani",
-    formation: process.env.PROFIL_FORMATION || "Concepteur Développeur Fullstack",
-    competences: process.env.PROFIL_COMPETENCES || "JavaScript, React, Node.js, Python, SQL, Git, Docker",
-    experience: process.env.PROFIL_EXPERIENCE || "Projets fullstack, UI/UX design, développement web moderne",
-    recherche: process.env.PROFIL_RECHERCHE || "Stage développeur fullstack / web",
-    dispo: process.env.PROFIL_DISPO || "Dès que possible",
-  };
-
   const posteInfo = poste
-    ? `- Poste visé: ${poste}`
-    : `- Type: Candidature spontanée (stage développeur)`;
+    ? `- Poste visé : ${poste}`
+    : `- Type : Candidature spontanée pour un stage développeur`;
 
-  const systemPrompt = `Tu es un expert en rédaction de lettres de motivation hautement personnalisées et convaincantes.
-Tu dois générer des lettres professionnelles qui mettent en avant les compétences et la motivation du candidat.
-Utilise les informations de la page "à propos" de l'entreprise pour personnaliser au maximum la lettre.
-Sois créatif mais professionnel, enthousiaste mais crédible.`;
+  const prompt = `Rédige le corps d'une lettre de motivation pour cette candidature :
 
-  const prompt = `Génère une lettre de motivation personnalisée pour cette candidature:
+${PROFIL_CONTEXT}
 
-**Candidat:**
-- Nom: ${profil.nom}
-- Formation: ${profil.formation} (Bachelier CDA - Concepteur Développeur d'Application)
-- Compétences: ${profil.competences}
-- Expérience: ${profil.experience}
-- Objectifs: Stage de 3 mois pour valider l'année de bachelier CDA + Alternance à partir de septembre 2026
-- Statut: Admissible au CNAM pour titre d'ingénieur
-
-**Entreprise:**
-- Nom: ${entreprise}
+**Entreprise ciblée :**
+- Nom : ${entreprise}
 ${posteInfo}
-- Informations "À propos" de l'entreprise:
+- Informations sur l'entreprise (page "À propos") :
 ${aboutText.substring(0, 1500)}
 
-**Contraintes:**
-- Langue: Français
-- Format: 3 paragraphes
-- Max 320 mots
-- Ton: Professionnel, enthousiaste et déterminé
-- Personnalise la lettre en citant des éléments concrets de la page "à propos" de l'entreprise
+**Structure attendue (4 paragraphes, 350 mots max) :**
+1. Accroche qui montre une vraie connaissance de l'entreprise (citer des éléments concrets du "à propos" : secteur, produits, valeurs, clients)
+2. Ce que Mohammed apporte techniquement : stack maîtrisée, projets concrets livrés, capacité à être opérationnel rapidement
+3. Son parcours atypique comme avantage compétitif : manager pendant 5 ans = il sait gérer les priorités, communiquer en équipe, tenir des deadlines. Un dev qui comprend le business, c'est rare.
+4. Vision : le stage comme début d'une collaboration, avec la perspective naturelle d'une alternance en sept 2026 et d'une montée en compétences continue (CNAM ingénieur)
 
-**La lettre DOIT couvrir:**
-1. Le besoin d'un stage de 3 mois pour valider l'année de bachelier CDA
-2. Pourquoi cette entreprise spécifiquement (en utilisant les infos du "à propos")
-3. L'intérêt pour une alternance en septembre 2026
-4. La perspective d'intégrer le programme d'ingénieur au CNAM
-5. Ce que le candidat peut apporter à l'entreprise
-
-Génère UNIQUEMENT la lettre, sans introduction ni explication.`;
+Personnalise au maximum avec les infos de l'entreprise. Sois spécifique, pas générique.
+Écris UNIQUEMENT le corps de la lettre. Pas de "Madame, Monsieur," ni de signature.`;
 
   try {
-    return await callGrok(prompt, systemPrompt);
+    return await callGrok(prompt, SYSTEM_PROMPT);
   } catch (error) {
     console.error("Error generating letter from about with Grok:", error);
     throw error;

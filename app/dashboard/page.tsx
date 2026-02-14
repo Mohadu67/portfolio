@@ -11,7 +11,7 @@ import { SearchLoadingModal } from "@/components/dashboard/SearchLoadingModal";
 import { GenerateLetterModal } from "@/components/dashboard/GenerateLetterModal";
 import { FollowUpModal } from "@/components/dashboard/FollowUpModal";
 import { toast } from "sonner";
-import type { ICandidature } from "@/models/Candidature";
+import type { ICandidature, CandidatureStatut } from "@/models/Candidature";
 import Link from "next/link";
 
 export default function Dashboard() {
@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [showGenerateLetterModal, setShowGenerateLetterModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [activeTab, setActiveTab] = useState<"offres" | "entreprises">("offres");
+  const [filterStatus, setFilterStatus] = useState<CandidatureStatut | null>(null);
 
   useEffect(() => {
     const savedKey = sessionStorage.getItem("api-key");
@@ -349,17 +350,20 @@ export default function Dashboard() {
               apiKey={apiKey}
             />
 
-            <StatsBar stats={stats} total={total} />
+            <StatsBar stats={stats} total={total} activeStatus={filterStatus} onStatusClick={setFilterStatus} />
 
             <div>
               <div className="flex items-center gap-3 mb-6">
                 <Briefcase size={28} className="text-[var(--accent-orange)]" />
                 <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-                  Candidatures - Offres d'emploi
+                  {filterStatus
+                    ? { "identifiée": "Offres à traiter", "lettre générée": "Prêtes à envoyer", "postulée": "Candidatures envoyées", "entretien": "Entretiens en cours", "acceptée": "Offres acceptées", "réponse reçue": "Réponses reçues", "refus": "Refus" }[filterStatus]
+                    : "Offres d'emploi"}
                 </h2>
               </div>
               <CandidatureList
                 candidatures={candidatures.filter((c) => c.plateforme !== "Web")}
+                filterStatus={filterStatus}
                 onSelect={handleSelectCandidature}
                 onDelete={handleDeleteCandidature}
                 onGenerateLetter={handleOpenGenerateLetter}
@@ -383,7 +387,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-3 mb-6">
                 <Building2 size={28} className="text-[var(--accent-blue)]" />
                 <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-                  Candidatures - Recherche entreprises
+                  Recherche entreprises
                 </h2>
               </div>
               <CandidatureList

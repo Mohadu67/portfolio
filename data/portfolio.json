@@ -144,7 +144,11 @@
       "url": "https://equestra.harmonith.fr",
       "description": "Application web de gestion pour centre de loisirs. Membres, réservations, planification.",
       "image": "/equestra.svg",
-      "stack": ["PHP", "MariaDB", "JavaScript", "HTML", "CSS"]
+      "stack": ["PHP", "MariaDB", "JavaScript", "HTML", "CSS"],
+      "credentials": {
+        "email": "invite@bienvenue.fr",
+        "password": "invite2025"
+      }
     }
   ],
   "contact": {
@@ -160,7 +164,8 @@
       "degree": "CDA — Concepteur Développeur d'Applications",
       "field": "Niveau 6 (Bachelor)",
       "period": "Septembre 2025 à Juillet 2026",
-      "description": "Architecture logicielle, POO, tests, développement front/back complet, patterns et gestion de projet avancée."
+      "description": "Architecture logicielle, POO, tests, développement front/back complet, patterns et gestion de projet avancée.",
+      "capabilities": "Architecture logicielle avancée et conception de systèmes scalables. Maîtrise complète de la Programmation Orientée Objet (POO), design patterns (Singleton, Factory, Observer, etc.) et principes SOLID. Tests unitaires, intégration et e2e avec frameworks modernes. Développement fullstack professionnel avec frameworks frontend/backend actuels. Gestion de projet Agile/Scrum, méthodologies DevOps, CI/CD et déploiement d'applications. Sécurité des applications, optimisation des performances et best practices d'entreprise."
     },
     {
       "id": "dwm",
@@ -168,7 +173,8 @@
       "degree": "Développeur Web et Web Mobile",
       "field": "Niveau 5 (Bac +2) - Certifiant RNCP",
       "period": "Septembre 2024 à Mars 2025",
-      "description": "HTML, CSS, JavaScript, PHP, SQL, React, sites responsives, Git, accessibilité, SEO."
+      "description": "HTML, CSS, JavaScript, PHP, SQL, React, sites responsives, Git, accessibilité, SEO.",
+      "capabilities": "Développement web complet, création de sites responsives, maîtrise de React et du frontend moderne, backend avec PHP et SQL, gestion de versions avec Git, et optimisation pour l'accessibilité et SEO."
     },
     {
       "id": "gestion-resto",
@@ -176,7 +182,8 @@
       "degree": "Gestion de restaurant",
       "field": "Certifiant",
       "period": "Septembre 2021 à Décembre 2021",
-      "description": "Management d'équipe, gestion des stocks et coûts, satisfaction client et optimisation des opérations."
+      "description": "Management d'équipe, gestion des stocks et coûts, satisfaction client et optimisation des opérations.",
+      "capabilities": "Leadership d'équipe, gestion financière et budgétaire, optimisation des processus opérationnels, service client d'excellence et prise de décision stratégique."
     }
   ],
   "experience": [

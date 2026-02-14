@@ -20,11 +20,19 @@ export function HeroSection() {
     setMousePosition({ x: x * 10, y: y * 10 });
   };
 
+  // Deterministic seed-based random for hydration consistency
+  const seededRandom = (seed: number) => {
+    const x = Math.sin(seed) * 10000;
+    return Math.round((x - Math.floor(x)) * 1000) / 1000;
+  };
+
   // Floating particles
   const particles = Array.from({ length: 20 }).map((_, i) => ({
     id: i,
-    delay: Math.random() * 0.5,
-    duration: 3 + Math.random() * 2,
+    delay: Math.round(seededRandom(i * 2) * 0.5 * 1000) / 1000,
+    duration: Math.round((3 + seededRandom(i * 2 + 1) * 2) * 1000) / 1000,
+    x: Math.round(seededRandom(i * 3) * 1200 * 100) / 100,
+    y: Math.round(seededRandom(i * 3 + 1) * 800 * 100) / 100,
   }));
 
   return (
@@ -64,8 +72,8 @@ export function HeroSection() {
             key={particle.id}
             className="absolute w-1 h-1 bg-[var(--accent-orange)]/30 rounded-full"
             initial={{
-              x: Math.random() * window.innerWidth,
-              y: Math.random() * window.innerHeight,
+              x: particle.x,
+              y: particle.y,
             }}
             animate={{
               y: [0, -200, 0],
@@ -82,13 +90,13 @@ export function HeroSection() {
 
       <Container className="relative z-10 h-full flex items-center">
         <motion.div
-          className="w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center"
+          className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12 items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6 }}
         >
           {/* Left: Epic Content */}
-          <motion.div className="flex flex-col justify-center order-2 md:order-1 space-y-8">
+          <motion.div className="flex flex-col justify-center order-2 md:order-1 space-y-4 md:space-y-8">
             {/* Top accent */}
             <motion.div
               initial={{ opacity: 0, x: -50 }}
@@ -113,7 +121,7 @@ export function HeroSection() {
               className="space-y-4"
             >
               <div className="relative">
-                <h1 className="text-6xl md:text-7xl font-black text-[var(--text-primary)] leading-tight">
+                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-[var(--text-primary)] leading-tight">
                   Mohammed
                   <span className="block mt-2 bg-gradient-to-r from-[var(--accent-orange)] via-[var(--accent-blue)] to-[var(--accent-orange)] bg-clip-text text-transparent animate-gradient-shift">
                     Hamiani
@@ -138,11 +146,11 @@ export function HeroSection() {
               transition={{ duration: 0.8, delay: 0.4 }}
               className="space-y-3"
             >
-              <p className="text-2xl md:text-3xl font-bold text-[var(--accent-orange)]">
+              <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[var(--accent-orange)]">
                 Concepteur Développeur Fullstack
               </p>
-              <p className="text-lg text-[var(--text-secondary)] max-w-md">
-                Dev by Day • Creator by Night — Transforming ideas into stunning digital experiences with modern tech stack
+              <p className="text-base md:text-lg text-[var(--text-secondary)] max-w-md">
+                Dev by Day • Creator by Night
               </p>
             </motion.div>
 
@@ -168,23 +176,24 @@ export function HeroSection() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6 }}
-              className="flex flex-col sm:flex-row gap-4 pt-4"
+              className="flex flex-row gap-3 pt-2"
             >
-              <Link href="/dashboard" className="w-full sm:w-auto">
+              <Link href="/dashboard" className="w-auto">
                 <motion.button
-                  className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-lg"
+                  className="px-5 py-2 md:px-8 md:py-4 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] rounded-xl font-bold text-sm md:text-lg flex items-center justify-center gap-2 shadow-lg"
                   whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(255, 158, 100, 0.5)" }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  Voir mon Dashboard
+                  <span className="md:hidden">Dashboard</span>
+                  <span className="hidden md:inline">Voir mon Dashboard</span>
                   <motion.div animate={{ x: [0, 5, 0] }} transition={{ duration: 0.8, repeat: Infinity }}>
                     <ArrowRight size={20} />
                   </motion.div>
                 </motion.button>
               </Link>
-              <a href={`mailto:${profile.email}`} className="w-full sm:w-auto">
+              <a href={`mailto:${profile.email}`} className="w-auto">
                 <motion.button
-                  className="w-full sm:w-auto px-8 py-4 border-2 border-[var(--accent-orange)] text-[var(--text-primary)] rounded-xl font-bold text-lg hover:bg-[var(--accent-orange)]/10 transition-colors"
+                  className="px-5 py-2 md:px-8 md:py-4 border-2 border-[var(--accent-orange)] text-[var(--text-primary)] rounded-xl font-bold text-sm md:text-lg hover:bg-[var(--accent-orange)]/10 transition-colors"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
@@ -203,7 +212,7 @@ export function HeroSection() {
             onMouseMove={handleMouseMove}
           >
             <motion.div
-              className="relative w-64 h-64 md:w-80 md:h-80 group cursor-pointer"
+              className="relative w-48 h-48 md:w-64 md:h-64 lg:w-80 lg:h-80 group cursor-pointer"
               style={{
                 rotateX: mousePosition.y,
                 rotateY: mousePosition.x,
@@ -246,7 +255,7 @@ export function HeroSection() {
 
       {/* Scroll indicator */}
       <motion.div
-        className="absolute bottom-10 left-1/2 -translate-x-1/2"
+        className="absolute bottom-2 left-1/2 -translate-x-1/2"
         animate={{ y: [0, 12, 0] }}
         transition={{ duration: 2, repeat: Infinity }}
       >

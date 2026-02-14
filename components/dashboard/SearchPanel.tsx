@@ -36,7 +36,7 @@ export function SearchPanel({
   apiKey,
 }: SearchPanelProps) {
   const [keywords, setKeywords] = useState("stage développeur fullstack");
-  const [location, setLocation] = useState("France");
+  const [location, setLocation] = useState("Strasbourg");
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {

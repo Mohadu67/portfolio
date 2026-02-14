@@ -341,65 +341,87 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Tab: Offres d'emploi */}
-        {activeTab === "offres" && (
-          <>
-            <SearchPanel
-              onSearch={handleSearch}
-              isLoading={searching}
+        {/* Stats bar — always visible */}
+        <StatsBar stats={stats} total={total} activeStatus={filterStatus} onStatusClick={setFilterStatus} />
+
+        {/* Filtered view — shows ALL candidatures matching the status */}
+        {filterStatus ? (
+          <div>
+            <div className="flex items-center gap-3 mb-6">
+              <Briefcase size={28} className="text-[var(--accent-orange)]" />
+              <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+                {{ "identifiée": "Offres à traiter", "lettre générée": "Prêtes à envoyer", "postulée": "Candidatures envoyées", "entretien": "Entretiens en cours", "acceptée": "Offres acceptées", "réponse reçue": "Réponses reçues", "refus": "Refus" }[filterStatus]}
+              </h2>
+            </div>
+            <CandidatureList
+              candidatures={candidatures}
+              filterStatus={filterStatus}
+              onSelect={handleSelectCandidature}
+              onDelete={handleDeleteCandidature}
+              onGenerateLetter={handleOpenGenerateLetter}
+              onFollowUp={handleOpenFollowUp}
+              onUpdate={handleUpdateCandidature}
               apiKey={apiKey}
             />
-
-            <StatsBar stats={stats} total={total} activeStatus={filterStatus} onStatusClick={setFilterStatus} />
-
-            <div>
-              <div className="flex items-center gap-3 mb-6">
-                <Briefcase size={28} className="text-[var(--accent-orange)]" />
-                <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-                  {filterStatus
-                    ? { "identifiée": "Offres à traiter", "lettre générée": "Prêtes à envoyer", "postulée": "Candidatures envoyées", "entretien": "Entretiens en cours", "acceptée": "Offres acceptées", "réponse reçue": "Réponses reçues", "refus": "Refus" }[filterStatus]
-                    : "Offres d'emploi"}
-                </h2>
-              </div>
-              <CandidatureList
-                candidatures={candidatures.filter((c) => c.plateforme !== "Web")}
-                filterStatus={filterStatus}
-                onSelect={handleSelectCandidature}
-                onDelete={handleDeleteCandidature}
-                onGenerateLetter={handleOpenGenerateLetter}
-                onFollowUp={handleOpenFollowUp}
-                onUpdate={handleUpdateCandidature}
-                apiKey={apiKey}
-              />
-            </div>
-          </>
-        )}
-
-        {/* Tab: Recherche entreprises */}
-        {activeTab === "entreprises" && (
+          </div>
+        ) : (
           <>
-            <CompanySearchPanel
-              apiKey={apiKey}
-              onCandidatureCreated={() => loadCandidatures(apiKey)}
-            />
+            {/* Tab: Offres d'emploi */}
+            {activeTab === "offres" && (
+              <>
+                <SearchPanel
+                  onSearch={handleSearch}
+                  isLoading={searching}
+                  apiKey={apiKey}
+                />
 
-            <div>
-              <div className="flex items-center gap-3 mb-6">
-                <Building2 size={28} className="text-[var(--accent-blue)]" />
-                <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-                  Recherche entreprises
-                </h2>
-              </div>
-              <CandidatureList
-                candidatures={candidatures.filter((c) => c.plateforme === "Web")}
-                onSelect={handleSelectCandidature}
-                onDelete={handleDeleteCandidature}
-                onGenerateLetter={handleOpenGenerateLetter}
-                onFollowUp={handleOpenFollowUp}
-                onUpdate={handleUpdateCandidature}
-                apiKey={apiKey}
-              />
-            </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <Briefcase size={28} className="text-[var(--accent-orange)]" />
+                    <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+                      Offres d&apos;emploi
+                    </h2>
+                  </div>
+                  <CandidatureList
+                    candidatures={candidatures.filter((c) => c.plateforme !== "Web")}
+                    onSelect={handleSelectCandidature}
+                    onDelete={handleDeleteCandidature}
+                    onGenerateLetter={handleOpenGenerateLetter}
+                    onFollowUp={handleOpenFollowUp}
+                    onUpdate={handleUpdateCandidature}
+                    apiKey={apiKey}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Tab: Recherche entreprises */}
+            {activeTab === "entreprises" && (
+              <>
+                <CompanySearchPanel
+                  apiKey={apiKey}
+                  onCandidatureCreated={() => loadCandidatures(apiKey)}
+                />
+
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <Building2 size={28} className="text-[var(--accent-blue)]" />
+                    <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+                      Recherche entreprises
+                    </h2>
+                  </div>
+                  <CandidatureList
+                    candidatures={candidatures.filter((c) => c.plateforme === "Web")}
+                    onSelect={handleSelectCandidature}
+                    onDelete={handleDeleteCandidature}
+                    onGenerateLetter={handleOpenGenerateLetter}
+                    onFollowUp={handleOpenFollowUp}
+                    onUpdate={handleUpdateCandidature}
+                    apiKey={apiKey}
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
       </main>

@@ -20,7 +20,7 @@ const FOLLOW_UP_TEMPLATES = {
     days: 7,
     icon: "⚡",
     message:
-      "Bonjour,\n\nJe suis revenu vers vous concernant ma candidature pour le poste de {poste}. Je reste très motivé par cette opportunité au sein de {entreprise}.\n\nCordialement,\nMohammed",
+      "Bonjour,\n\nJe me permets de revenir vers vous suite à ma candidature pour le poste de {poste} chez {entreprise}, envoyée il y a une semaine.\n\nJe souhaitais m'assurer que vous aviez bien reçu mon dossier (CV + lettre de motivation) et vous confirmer ma disponibilité pour un échange à votre convenance.\n\nN'hésitez pas à me contacter si vous avez besoin d'informations complémentaires.\n\nBien cordialement,\nMohammed Hamiani",
   },
   second: {
     title: "Relance 2",
@@ -28,7 +28,7 @@ const FOLLOW_UP_TEMPLATES = {
     days: 21,
     icon: "🔥",
     message:
-      "Bonjour,\n\nJ'espère que vous avez bien reçu ma candidature pour {poste}. Je suis toujours très intéressé par cette position et reste à votre disposition pour discuter davantage.\n\nCordialement,\nMohammed",
+      "Bonjour,\n\nJe reviens vers vous concernant ma candidature au poste de {poste}. Depuis mon dernier message, j'ai continué à travailler sur des projets fullstack qui renforcent ma conviction que je pourrais apporter une vraie valeur à votre équipe.\n\nJe serais ravi d'échanger avec vous, même brièvement, pour vous présenter mon parcours et comprendre vos besoins actuels. Je suis flexible sur les créneaux.\n\nBien cordialement,\nMohammed Hamiani",
   },
   final: {
     title: "Relance 3",
@@ -36,7 +36,7 @@ const FOLLOW_UP_TEMPLATES = {
     days: 35,
     icon: "🎯",
     message:
-      "Bonjour,\n\nComme suite à ma candidature envoyée le {date}, je tenais à vous recontacter pour connaître l'avancement du processus de sélection pour le poste de {poste}.\n\nJe reste à votre écoute.\nCordialement,\nMohammed",
+      "Bonjour,\n\nJe me permets un dernier message concernant ma candidature pour le poste de {poste} chez {entreprise}.\n\nJe comprends que les processus de recrutement prennent du temps et que vous recevez de nombreuses candidatures. Si le poste est toujours ouvert, je reste très motivé et disponible pour un entretien. Dans le cas contraire, je vous souhaite de trouver le profil idéal.\n\nMerci pour le temps accordé à ma candidature.\n\nBien cordialement,\nMohammed Hamiani",
   },
 };
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature } from "@/models/Candidature";
 import { sendCandidature } from "@/lib/email";
-import { generateCV } from "@/lib/grok";
+import { generateLettrePDF } from "@/lib/pdf-generator";
 import { verifyAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
@@ -35,20 +35,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate CV if not already present
-    let cv = candidature.cv;
-    if (!cv) {
-      cv = await generateCV();
-      candidature.cv = cv;
-    }
+    // Generate letter PDF
+    const letterPdfBuffer = await generateLettrePDF(
+      candidature.lettre,
+      candidature.entreprise,
+      candidature.poste
+    );
 
-    // Send email
+    // Send email with PDF attachments
     await sendCandidature(
       candidature.entreprise,
       candidature.poste,
       email_destinataire,
       candidature.lettre,
-      cv,
+      letterPdfBuffer,
       process.env.PROFIL_NOM || "Mohammed Hamiani"
     );
 

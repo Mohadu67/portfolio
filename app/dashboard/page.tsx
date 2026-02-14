@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BarChart3, Lock, Clock, LogOut, FileText } from "lucide-react";
+import { BarChart3, Lock, Clock, LogOut, FileText, Briefcase, Building2 } from "lucide-react";
 import { SearchPanel } from "@/components/dashboard/SearchPanel";
+import { CompanySearchPanel } from "@/components/dashboard/CompanySearchPanel";
 import { StatsBar } from "@/components/dashboard/StatsBar";
 import { CandidatureList } from "@/components/dashboard/CandidatureList";
 import { LetterModal } from "@/components/dashboard/LetterModal";
@@ -26,6 +27,7 @@ export default function Dashboard() {
   const [showModal, setShowModal] = useState(false);
   const [showGenerateLetterModal, setShowGenerateLetterModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<"offres" | "entreprises">("offres");
 
   useEffect(() => {
     const savedKey = sessionStorage.getItem("api-key");
@@ -312,34 +314,92 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 md:py-10">
-        {/* Search Panel */}
-        <SearchPanel
-          onSearch={handleSearch}
-          isLoading={searching}
-          apiKey={apiKey}
-        />
-
-        {/* Stats */}
-        <StatsBar stats={stats} total={total} />
-
-        {/* Candidatures Section */}
-        <div>
-          <div className="flex items-center gap-3 mb-6">
-            <FileText size={28} className="text-[var(--accent-orange)]" />
-            <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-              Candidatures
-            </h2>
-          </div>
-          <CandidatureList
-            candidatures={candidatures}
-            onSelect={handleSelectCandidature}
-            onDelete={handleDeleteCandidature}
-            onGenerateLetter={handleOpenGenerateLetter}
-            onFollowUp={handleOpenFollowUp}
-            onUpdate={handleUpdateCandidature}
-            apiKey={apiKey}
-          />
+        {/* Tabs */}
+        <div className="flex gap-2 mb-8">
+          <button
+            onClick={() => setActiveTab("offres")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+              activeTab === "offres"
+                ? "bg-[var(--accent-orange)] text-[var(--bg-primary)]"
+                : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)]"
+            }`}
+          >
+            <Briefcase size={18} />
+            Offres d'emploi
+          </button>
+          <button
+            onClick={() => setActiveTab("entreprises")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+              activeTab === "entreprises"
+                ? "bg-[var(--accent-blue)] text-white"
+                : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)]"
+            }`}
+          >
+            <Building2 size={18} />
+            Recherche entreprises
+          </button>
         </div>
+
+        {/* Tab: Offres d'emploi */}
+        {activeTab === "offres" && (
+          <>
+            <SearchPanel
+              onSearch={handleSearch}
+              isLoading={searching}
+              apiKey={apiKey}
+            />
+
+            <StatsBar stats={stats} total={total} />
+
+            <div>
+              <div className="flex items-center gap-3 mb-6">
+                <FileText size={28} className="text-[var(--accent-orange)]" />
+                <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+                  Candidatures
+                </h2>
+              </div>
+              <CandidatureList
+                candidatures={candidatures}
+                onSelect={handleSelectCandidature}
+                onDelete={handleDeleteCandidature}
+                onGenerateLetter={handleOpenGenerateLetter}
+                onFollowUp={handleOpenFollowUp}
+                onUpdate={handleUpdateCandidature}
+                apiKey={apiKey}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Tab: Recherche entreprises */}
+        {activeTab === "entreprises" && (
+          <>
+            <CompanySearchPanel
+              apiKey={apiKey}
+              onCandidatureCreated={() => loadCandidatures(apiKey)}
+            />
+
+            <StatsBar stats={stats} total={total} />
+
+            <div>
+              <div className="flex items-center gap-3 mb-6">
+                <FileText size={28} className="text-[var(--accent-orange)]" />
+                <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+                  Candidatures
+                </h2>
+              </div>
+              <CandidatureList
+                candidatures={candidatures}
+                onSelect={handleSelectCandidature}
+                onDelete={handleDeleteCandidature}
+                onGenerateLetter={handleOpenGenerateLetter}
+                onFollowUp={handleOpenFollowUp}
+                onUpdate={handleUpdateCandidature}
+                apiKey={apiKey}
+              />
+            </div>
+          </>
+        )}
       </main>
 
       {/* Search Loading Modal */}

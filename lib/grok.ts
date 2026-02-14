@@ -99,6 +99,69 @@ Génère UNIQUEMENT la lettre, sans introduction ni explication.`;
   }
 }
 
+export async function generateLettreFromAbout(
+  entreprise: string,
+  aboutText: string,
+  poste?: string
+): Promise<string> {
+  const profil = {
+    nom: process.env.PROFIL_NOM || "Mohammed Hamiani",
+    formation: process.env.PROFIL_FORMATION || "Concepteur Développeur Fullstack",
+    competences: process.env.PROFIL_COMPETENCES || "JavaScript, React, Node.js, Python, SQL, Git, Docker",
+    experience: process.env.PROFIL_EXPERIENCE || "Projets fullstack, UI/UX design, développement web moderne",
+    recherche: process.env.PROFIL_RECHERCHE || "Stage développeur fullstack / web",
+    dispo: process.env.PROFIL_DISPO || "Dès que possible",
+  };
+
+  const posteInfo = poste
+    ? `- Poste visé: ${poste}`
+    : `- Type: Candidature spontanée (stage développeur)`;
+
+  const systemPrompt = `Tu es un expert en rédaction de lettres de motivation hautement personnalisées et convaincantes.
+Tu dois générer des lettres professionnelles qui mettent en avant les compétences et la motivation du candidat.
+Utilise les informations de la page "à propos" de l'entreprise pour personnaliser au maximum la lettre.
+Sois créatif mais professionnel, enthousiaste mais crédible.`;
+
+  const prompt = `Génère une lettre de motivation personnalisée pour cette candidature:
+
+**Candidat:**
+- Nom: ${profil.nom}
+- Formation: ${profil.formation} (Bachelier CDA - Concepteur Développeur d'Application)
+- Compétences: ${profil.competences}
+- Expérience: ${profil.experience}
+- Objectifs: Stage de 3 mois pour valider l'année de bachelier CDA + Alternance à partir de septembre 2026
+- Statut: Admissible au CNAM pour titre d'ingénieur
+
+**Entreprise:**
+- Nom: ${entreprise}
+${posteInfo}
+- Informations "À propos" de l'entreprise:
+${aboutText.substring(0, 1500)}
+
+**Contraintes:**
+- Langue: Français
+- Format: 3 paragraphes
+- Max 320 mots
+- Ton: Professionnel, enthousiaste et déterminé
+- Personnalise la lettre en citant des éléments concrets de la page "à propos" de l'entreprise
+
+**La lettre DOIT couvrir:**
+1. Le besoin d'un stage de 3 mois pour valider l'année de bachelier CDA
+2. Pourquoi cette entreprise spécifiquement (en utilisant les infos du "à propos")
+3. L'intérêt pour une alternance en septembre 2026
+4. La perspective d'intégrer le programme d'ingénieur au CNAM
+5. Ce que le candidat peut apporter à l'entreprise
+
+Génère UNIQUEMENT la lettre, sans introduction ni explication.`;
+
+  try {
+    return await callGrok(prompt, systemPrompt);
+  } catch (error) {
+    console.error("Error generating letter from about with Grok:", error);
+    throw error;
+  }
+}
+
 export async function generateCV(): Promise<string> {
   const profil = {
     nom: process.env.PROFIL_NOM || "Mohammed Hamiani",

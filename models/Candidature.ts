@@ -13,11 +13,12 @@ export interface ICandidature {
   _id?: string;
   entreprise: string;
   poste: string;
-  plateforme: "JSearch" | "Adzuna" | "France Travail" | "Autre";
+  plateforme: "JSearch" | "Adzuna" | "France Travail" | "Web" | "Autre";
   localisation: string;
   url: string;
   description: string;
   email: string;
+  aboutText?: string;
   statut: CandidatureStatut;
   lettre: string | null;
   cv: string | null;
@@ -31,11 +32,12 @@ const candidatureSchema = new Schema<ICandidature>(
   {
     entreprise: { type: String, required: true },
     poste: { type: String, required: true },
-    plateforme: { type: String, enum: ["JSearch", "Adzuna", "France Travail", "Autre"], required: true },
+    plateforme: { type: String, enum: ["JSearch", "Adzuna", "France Travail", "Web", "Autre"], required: true },
     localisation: { type: String, required: true },
     url: { type: String, required: true, unique: true },
     description: { type: String, maxlength: 500 },
     email: { type: String },
+    aboutText: { type: String, default: "" },
     statut: {
       type: String,
       enum: ["identifiée", "lettre générée", "postulée", "réponse reçue", "entretien", "refus", "acceptée"],

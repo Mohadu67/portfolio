@@ -4,6 +4,8 @@ import { Candidature } from "@/models/Candidature";
 import { sendCandidature } from "@/lib/email";
 import { generateLettrePDF } from "@/lib/pdf-generator";
 import { verifyAuth } from "@/lib/auth";
+import fs from "fs";
+import path from "path";
 
 export async function POST(request: NextRequest) {
   if (!verifyAuth(request)) {
@@ -42,12 +44,16 @@ export async function POST(request: NextRequest) {
       candidature.poste
     );
 
+    // Save LM PDF to candidatureModel/
+    const lmFileName = `LM_${candidature.entreprise.replace(/[^a-zA-Z0-9À-ÿ]/g, "_")}.pdf`;
+    const lmPath = path.join(process.cwd(), "candidatureModel", lmFileName);
+    fs.writeFileSync(lmPath, letterPdfBuffer);
+
     // Send email with PDF attachments
     await sendCandidature(
       candidature.entreprise,
       candidature.poste,
       email_destinataire,
-      candidature.lettre,
       letterPdfBuffer,
       process.env.PROFIL_NOM || "Mohammed Hamiani"
     );

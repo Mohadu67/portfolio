@@ -44,4 +44,7 @@ next-env.d.ts
 
 # temporary files
 db.json
-*.pdf
+
+# Generated LM PDFs (but keep the static CV)
+candidatureModel/LM_*.pdf
+

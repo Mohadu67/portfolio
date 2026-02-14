@@ -36,7 +36,6 @@ export async function sendCandidature(
   entreprise: string,
   poste: string,
   email: string,
-  lettre: string,
   letterPdfBuffer: Buffer,
   candidatName: string = "Mohammed Hamiani"
 ): Promise<void> {
@@ -55,7 +54,7 @@ export async function sendCandidature(
     </div>
   `;
 
-  const cvPath = path.join(process.cwd(), "models", "cv-mohammed.pdf");
+  const cvPath = path.join(process.cwd(), "candidatureModel", "cv-mohammed.pdf");
   const cvBuffer = fs.readFileSync(cvPath);
 
   const transporter = getTransporter();

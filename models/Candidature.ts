@@ -33,7 +33,7 @@ const candidatureSchema = new Schema<ICandidature>(
     entreprise: { type: String, required: true },
     poste: { type: String, required: true },
     plateforme: { type: String, enum: ["JSearch", "Adzuna", "France Travail", "Web", "Autre"], required: true },
-    localisation: { type: String, required: true },
+    localisation: { type: String, default: "" },
     url: { type: String, required: true, unique: true },
     description: { type: String, maxlength: 500 },
     email: { type: String },

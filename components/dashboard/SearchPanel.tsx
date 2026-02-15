@@ -180,7 +180,7 @@ export function SearchPanel({
 
         {/* Info */}
         <p className="text-xs text-[var(--text-tertiary)] text-center">
-          Recherche sur: JSearch, Adzuna, France Travail
+          Recherche sur: JSearch, France Travail, Indeed
         </p>
       </form>
     </motion.div>

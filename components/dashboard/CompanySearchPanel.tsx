@@ -340,7 +340,7 @@ export function CompanySearchPanel({ apiKey, onCandidatureCreated }: CompanySear
             </motion.button>
 
             <p className="text-xs text-[var(--text-tertiary)] text-center">
-              Recherche via Google Custom Search API (100 requêtes/jour)
+              Recherche via SerpAPI (100 requêtes/mois)
             </p>
           </form>
         )}

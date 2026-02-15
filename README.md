@@ -73,7 +73,7 @@ Accessible sur `/` — c'est ta vitrine publique avec :
 
 1. **🔍 Recherche d'offres**
    - Tape tes mots-clés et ta localisation
-   - Récupère automatiquement les offres depuis **Indeed** et **LinkedIn** (via RapidAPI)
+   - Récupère automatiquement les offres depuis **JSearch**, **France Travail** et **Indeed**
    - Les offres s'ajoutent à la base de données (doublons éliminés)
 
 2. **📊 Statistiques en temps réel**
@@ -150,7 +150,7 @@ Le dashboard est protégé par une **clé secrète** :
 | Base de données | **MongoDB** + **Mongoose** |
 | IA | **Anthropic Claude** |
 | Email | **Nodemailer** + **Gmail SMTP** |
-| Offres | **RapidAPI** (Indeed + LinkedIn) |
+| Offres | **JSearch** + **France Travail** + **Indeed** (via RapidAPI) |
 
 ---
 

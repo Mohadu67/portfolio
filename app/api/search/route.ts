@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature } from "@/models/Candidature";
-import { searchJSearch, searchAdzuna, searchFranceTravail } from "@/lib/scraper";
+import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed } from "@/lib/scraper";
 import { verifyAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
@@ -22,18 +22,20 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
-    // Search all 3 sources in parallel: JSearch, Adzuna, France Travail
-    const [jsearchResults, adzunaResults, franceTravailResults] =
+    // Search all 4 sources in parallel: JSearch, Adzuna, France Travail, Indeed
+    const [jsearchResults, adzunaResults, franceTravailResults, indeedResults] =
       await Promise.all([
         searchJSearch(keywords, location, nb_results),
         searchAdzuna(keywords, location, nb_results),
         searchFranceTravail(keywords, location, nb_results),
+        searchIndeed(keywords, location, nb_results),
       ]);
 
     const allResults = [
       ...jsearchResults,
       ...adzunaResults,
       ...franceTravailResults,
+      ...indeedResults,
     ];
 
     let newCount = 0;

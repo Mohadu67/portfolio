@@ -13,7 +13,7 @@ export interface ICandidature {
   _id?: string;
   entreprise: string;
   poste: string;
-  plateforme: "JSearch" | "Adzuna" | "France Travail" | "Web" | "Autre";
+  plateforme: "JSearch" | "Adzuna" | "France Travail" | "Indeed" | "Web" | "Autre";
   localisation: string;
   url: string;
   description: string;
@@ -32,7 +32,7 @@ const candidatureSchema = new Schema<ICandidature>(
   {
     entreprise: { type: String, required: true },
     poste: { type: String, required: true },
-    plateforme: { type: String, enum: ["JSearch", "Adzuna", "France Travail", "Web", "Autre"], required: true },
+    plateforme: { type: String, enum: ["JSearch", "Adzuna", "France Travail", "Indeed", "Web", "Autre"], required: true },
     localisation: { type: String, default: "" },
     url: { type: String, required: true, unique: true },
     description: { type: String, maxlength: 500 },

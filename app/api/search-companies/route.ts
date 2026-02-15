@@ -14,12 +14,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "query is required" }, { status: 400 });
     }
 
-    const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
-    const cx = process.env.GOOGLE_SEARCH_CX;
+    const apiKey = process.env.SERPAPI_KEY;
 
-    if (!apiKey || !cx) {
+    if (!apiKey) {
       return NextResponse.json(
-        { error: "Google Search API not configured (GOOGLE_SEARCH_API_KEY / GOOGLE_SEARCH_CX)" },
+        { error: "SerpAPI not configured (SERPAPI_KEY)" },
         { status: 500 }
       );
     }
@@ -27,25 +26,25 @@ export async function POST(request: NextRequest) {
     const searchQuery = location ? `${query} ${location}` : query;
 
     const res = await fetch(
-      `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(searchQuery)}&num=10`
+      `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(searchQuery)}&gl=fr&hl=fr&num=10&api_key=${apiKey}`
     );
 
     if (!res.ok) {
       const error = await res.text();
-      console.error("Google Search API error:", error);
+      console.error("SerpAPI error:", error);
       return NextResponse.json(
-        { error: "Google Search API error", details: error },
+        { error: "Search API error", details: error },
         { status: res.status }
       );
     }
 
     const data = await res.json();
 
-    const results = (data.items || []).map((item: any) => ({
+    const results = (data.organic_results || []).map((item: any) => ({
       name: item.title || "",
       url: item.link || "",
       snippet: item.snippet || "",
-      displayUrl: item.displayLink || "",
+      displayUrl: item.displayed_link || "",
     }));
 
     return NextResponse.json({ results });

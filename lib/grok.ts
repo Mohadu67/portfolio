@@ -72,8 +72,13 @@ Tu écris directement le corps de la lettre, rien d'autre.`;
 export async function generateLettre(
   entreprise: string,
   poste: string,
-  description: string
+  description: string,
+  customInstructions?: string
 ): Promise<string> {
+  const instructionsSection = customInstructions
+    ? `\n\n**Instructions supplémentaires de l'utilisateur :**\n${customInstructions}`
+    : "";
+
   const prompt = `Rédige le corps d'une lettre de motivation pour cette candidature :
 
 ${PROFIL_CONTEXT}
@@ -88,6 +93,7 @@ ${PROFIL_CONTEXT}
 2. Ce que Mohammed apporte concrètement : compétences techniques + projets réalisés qui prouvent sa capacité à livrer
 3. La valeur ajoutée de son parcours atypique : 5 ans de management = rigueur, autonomie, gestion de projets, travail en équipe. C'est rare chez un dev junior.
 4. Projection : le stage comme point de départ d'une collaboration durable (mention naturelle de l'alternance possible en sept 2026)
+${instructionsSection}
 
 Écris UNIQUEMENT le corps de la lettre. Pas de "Madame, Monsieur," ni de signature.`;
 
@@ -102,11 +108,16 @@ ${PROFIL_CONTEXT}
 export async function generateLettreFromAbout(
   entreprise: string,
   aboutText: string,
-  poste?: string
+  poste?: string,
+  customInstructions?: string
 ): Promise<string> {
   const posteInfo = poste
     ? `- Poste visé : ${poste}`
     : `- Type : Candidature spontanée pour un stage développeur`;
+
+  const instructionsSection = customInstructions
+    ? `\n\n**Instructions supplémentaires de l'utilisateur :**\n${customInstructions}`
+    : "";
 
   const prompt = `Rédige le corps d'une lettre de motivation pour cette candidature :
 
@@ -125,6 +136,7 @@ ${aboutText.substring(0, 1500)}
 4. Vision : le stage comme début d'une collaboration, avec la perspective naturelle d'une alternance en sept 2026 et d'une montée en compétences continue (CNAM ingénieur)
 
 Personnalise au maximum avec les infos de l'entreprise. Sois spécifique, pas générique.
+${instructionsSection}
 Écris UNIQUEMENT le corps de la lettre. Pas de "Madame, Monsieur," ni de signature.`;
 
   try {

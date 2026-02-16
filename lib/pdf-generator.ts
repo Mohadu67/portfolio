@@ -78,7 +78,8 @@ export async function generateLettrePDF(
   doc.text("Objet :", marginLeft, y);
 
   doc.setFont("helvetica", "normal");
-  const objetText = `Candidature au poste de ${poste}`;
+  const isSpontanee = poste.toLowerCase().includes("spontanée") || poste.toLowerCase().includes("spontanee");
+  const objetText = isSpontanee ? "Candidature spontanée" : `Candidature au poste de ${poste}`;
   doc.text(objetText, marginLeft + doc.getTextWidth("Objet : ") + 1, y);
   y += 5;
 

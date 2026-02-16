@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { candidature_id } = body;
+    const { candidature_id, customInstructions } = body;
 
     if (!candidature_id) {
       return NextResponse.json(
@@ -33,13 +33,15 @@ export async function POST(request: NextRequest) {
       lettre = await generateLettreFromAbout(
         candidature.entreprise,
         candidature.aboutText,
-        candidature.poste
+        candidature.poste,
+        customInstructions
       );
     } else {
       lettre = await generateLettre(
         candidature.entreprise,
         candidature.poste,
-        candidature.description
+        candidature.description,
+        customInstructions
       );
     }
 

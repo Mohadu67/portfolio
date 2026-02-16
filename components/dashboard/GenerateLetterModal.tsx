@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Copy, Check, Send, Sparkles } from "lucide-react";
+import { X, Copy, Check, Send, Sparkles, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { ICandidature } from "@/models/Candidature";
 
@@ -45,6 +45,8 @@ export function GenerateLetterModal({
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState(candidature?.email || "");
+  const [customInstructions, setCustomInstructions] = useState("");
+  const [showRegenerateInput, setShowRegenerateInput] = useState(false);
 
   if (!isOpen || !candidature) return null;
 
@@ -60,6 +62,7 @@ export function GenerateLetterModal({
         body: JSON.stringify({
           candidature_id: candidature._id,
           template,
+          ...(customInstructions.trim() && { customInstructions: customInstructions.trim() }),
         }),
       });
 
@@ -312,33 +315,93 @@ export function GenerateLetterModal({
                   </p>
                 </motion.div>
 
-                {/* Copy button */}
-                <motion.button
-                  type="button"
-                  onClick={handleCopyContent}
+                {/* Action buttons row */}
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.3 }}
-                  className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
-                    copied
-                      ? "bg-[var(--accent-blue)]/20 text-[var(--accent-blue)] border border-[var(--accent-blue)]/30"
-                      : "bg-gradient-to-r from-[var(--accent-orange)]/10 to-[var(--accent-orange)]/5 text-[var(--text-primary)] border border-[var(--accent-orange)]/30 hover:border-[var(--accent-orange)]/60"
-                  }`}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  className="flex gap-3"
                 >
-                  {copied ? (
-                    <>
-                      <Check size={18} />
-                      Copié!
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={18} />
-                      Copier la lettre
-                    </>
+                  <motion.button
+                    type="button"
+                    onClick={handleCopyContent}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
+                      copied
+                        ? "bg-[var(--accent-blue)]/20 text-[var(--accent-blue)] border border-[var(--accent-blue)]/30"
+                        : "bg-gradient-to-r from-[var(--accent-orange)]/10 to-[var(--accent-orange)]/5 text-[var(--text-primary)] border border-[var(--accent-orange)]/30 hover:border-[var(--accent-orange)]/60"
+                    }`}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    {copied ? (
+                      <>
+                        <Check size={18} />
+                        Copié!
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={18} />
+                        Copier la lettre
+                      </>
+                    )}
+                  </motion.button>
+
+                  <motion.button
+                    type="button"
+                    onClick={() => setShowRegenerateInput(!showRegenerateInput)}
+                    className={`flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all border ${
+                      showRegenerateInput
+                        ? "bg-[var(--accent-blue)]/15 text-[var(--accent-blue)] border-[var(--accent-blue)]/30"
+                        : "bg-[var(--bg-secondary)]/50 text-[var(--text-primary)] border-[var(--border-color)]/50 hover:border-[var(--accent-blue)]/60"
+                    }`}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <RefreshCw size={18} />
+                    Régénérer
+                  </motion.button>
+                </motion.div>
+
+                {/* Regenerate with instructions */}
+                <AnimatePresence>
+                  {showRegenerateInput && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-3 pt-1">
+                        <label className="block text-sm font-semibold text-[var(--text-primary)]">
+                          Précisions pour la régénération
+                        </label>
+                        <motion.textarea
+                          value={customInstructions}
+                          onChange={(e) => setCustomInstructions(e.target.value)}
+                          className="w-full h-24 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--accent-blue)]/30 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-blue)]/80 focus:shadow-lg focus:shadow-[var(--accent-blue)]/20 text-sm transition-all resize-none"
+                          placeholder='Ex: "Insiste plus sur le management", "Mentionne Docker et Kubernetes", "Ton plus décontracté"...'
+                          whileFocus={{ scale: 1.01 }}
+                        />
+                        <motion.button
+                          type="button"
+                          onClick={() => {
+                            setShowRegenerateInput(false);
+                            setStep("generate");
+                            setTimeout(handleGenerateLetter, 500);
+                          }}
+                          disabled={loading}
+                          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-semibold bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-blue)]/80 text-white hover:shadow-lg hover:shadow-[var(--accent-blue)]/30 disabled:opacity-50 transition-all"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <RefreshCw size={18} />
+                          Régénérer la lettre
+                        </motion.button>
+                      </div>
+                    </motion.div>
                   )}
-                </motion.button>
+                </AnimatePresence>
               </motion.div>
             )}
           </AnimatePresence>

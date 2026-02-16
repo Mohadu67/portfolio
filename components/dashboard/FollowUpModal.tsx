@@ -20,7 +20,7 @@ const FOLLOW_UP_TEMPLATES = {
     days: 7,
     icon: "⚡",
     message:
-      "Bonjour,\n\nJe me permets de revenir vers vous suite à ma candidature pour le poste de {poste} chez {entreprise}, envoyée il y a une semaine.\n\nJe souhaitais m'assurer que vous aviez bien reçu mon dossier (CV + lettre de motivation) et vous confirmer ma disponibilité pour un échange à votre convenance.\n\nN'hésitez pas à me contacter si vous avez besoin d'informations complémentaires.\n\nBien cordialement,\nMohammed Hamiani",
+      "Bonjour,\n\nJe me permets de revenir vers vous suite à ma candidature {contexte}, envoyée il y a une semaine.\n\nJe souhaitais m'assurer que vous aviez bien reçu mon dossier (CV + lettre de motivation) et vous confirmer ma disponibilité pour un échange à votre convenance.\n\nN'hésitez pas à me contacter si vous avez besoin d'informations complémentaires.\n\nBien cordialement,\nMohammed Hamiani",
   },
   second: {
     title: "Relance 2",
@@ -28,7 +28,7 @@ const FOLLOW_UP_TEMPLATES = {
     days: 21,
     icon: "🔥",
     message:
-      "Bonjour,\n\nJe reviens vers vous concernant ma candidature au poste de {poste}. Depuis mon dernier message, j'ai continué à travailler sur des projets fullstack qui renforcent ma conviction que je pourrais apporter une vraie valeur à votre équipe.\n\nJe serais ravi d'échanger avec vous, même brièvement, pour vous présenter mon parcours et comprendre vos besoins actuels. Je suis flexible sur les créneaux.\n\nBien cordialement,\nMohammed Hamiani",
+      "Bonjour,\n\nJe reviens vers vous concernant ma candidature {contexte}. Depuis mon dernier message, j'ai continué à travailler sur des projets fullstack qui renforcent ma conviction que je pourrais apporter une vraie valeur à votre équipe.\n\nJe serais ravi d'échanger avec vous, même brièvement, pour vous présenter mon parcours et comprendre vos besoins actuels. Je suis flexible sur les créneaux.\n\nBien cordialement,\nMohammed Hamiani",
   },
   final: {
     title: "Relance 3",
@@ -36,7 +36,7 @@ const FOLLOW_UP_TEMPLATES = {
     days: 35,
     icon: "🎯",
     message:
-      "Bonjour,\n\nJe me permets un dernier message concernant ma candidature pour le poste de {poste} chez {entreprise}.\n\nJe comprends que les processus de recrutement prennent du temps et que vous recevez de nombreuses candidatures. Si le poste est toujours ouvert, je reste très motivé et disponible pour un entretien. Dans le cas contraire, je vous souhaite de trouver le profil idéal.\n\nMerci pour le temps accordé à ma candidature.\n\nBien cordialement,\nMohammed Hamiani",
+      "Bonjour,\n\nJe me permets un dernier message concernant ma candidature {contexte}.\n\nJe comprends que les processus de recrutement prennent du temps et que vous recevez de nombreuses candidatures. Si mon profil correspond à vos besoins, je reste très motivé et disponible pour un entretien.\n\nMerci pour le temps accordé à ma candidature.\n\nBien cordialement,\nMohammed Hamiani",
   },
 };
 
@@ -53,6 +53,10 @@ export function FollowUpModal({
 
   if (!isOpen || !candidature) return null;
 
+  const isSpontanee = candidature.poste.toLowerCase().includes("spontanée") || candidature.poste.toLowerCase().includes("spontanee");
+  const contexte = isSpontanee
+    ? `pour un stage en développement chez ${candidature.entreprise}`
+    : `pour le poste de ${candidature.poste} chez ${candidature.entreprise}`;
   const template = FOLLOW_UP_TEMPLATES[selectedTemplate];
   const followUpDate = new Date();
   followUpDate.setDate(followUpDate.getDate() + template.days);
@@ -207,7 +211,7 @@ export function FollowUpModal({
               Aperçu du message
             </p>
             <div className="p-4 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 rounded-xl font-mono text-xs sm:text-sm text-[var(--text-primary)] whitespace-pre-wrap border border-[var(--border-color)]/30 max-h-40 overflow-y-auto">
-              {template.message.replace("{poste}", candidature.poste).replace("{entreprise}", candidature.entreprise)}
+              {template.message.replace("{contexte}", contexte)}
             </div>
           </motion.div>
         </div>

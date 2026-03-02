@@ -126,12 +126,15 @@ export function ProjectsSection() {
                 </div>
               </div>
 
-              <button
+              <a
+                href={currentProject.url}
+                target="_blank"
+                rel="noopener noreferrer"
                 onClick={() => setSelectedProject(null)}
-                className="w-full mt-6 px-4 py-3 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] rounded-lg font-semibold hover:shadow-lg transition-shadow"
+                className="block w-full mt-6 px-4 py-3 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] rounded-lg font-semibold hover:shadow-lg transition-shadow text-center"
               >
                 Accéder au projet
-              </button>
+              </a>
             </motion.div>
           </motion.div>
         )}

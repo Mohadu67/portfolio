@@ -46,7 +46,7 @@
       "level": "Expert",
       "years": "3+",
       "category": "Frontend",
-      "bugStory": "2h à crier sur ma box model, margin qui refuse d'exister... C'était juste '.containerr' au lieu de '.container'. CSS je t'aime, mais parfois tu me fais flipper 😭"
+      "bugStory": "Grid, Flexbox, animations, responsive mobile-first. 2h sur un bug de box model → typo dans '.containerr'. Depuis, les DevTools sont ouverts en permanence."
     },
     {
       "id": "javascript",
@@ -54,7 +54,7 @@
       "level": "Expert",
       "years": "3+",
       "category": "Frontend",
-      "bugStory": "parseInt('08') = 0 et personne ne sait pourquoi... merci la base octale! J'ai appris ça en criant sur Stack Overflow à 2h du matin 😂"
+      "bugStory": "ES6+, async/await, closures, manipulation DOM. parseInt('08') = 0 en base octale → toujours lire la doc avant de crier sur Stack Overflow à 2h du mat."
     },
     {
       "id": "git",
@@ -62,7 +62,7 @@
       "level": "Avancé",
       "years": "3+",
       "category": "Tools",
-      "bugStory": "Merge main en prod par accident un vendredi 15h... 'accidentellement' 😅 Les pires bugs arrivent quand le chef part en WE"
+      "bugStory": "Branching strategies, PR reviews, CI workflows. Un merge accidentel en prod un vendredi → branches protégées et PR obligatoires depuis."
     },
     {
       "id": "react",
@@ -70,7 +70,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Frontend",
-      "bugStory": "useEffect sans les deps = mon navi qui crash en 2 secondes. 'Pourquoi ça lag?' → 'Les dépendances mon gars!' J'ai compris la leçon à la dure 😅"
+      "bugStory": "Hooks, Context API, composants modulaires, state management. useEffect sans deps = crash navigateur. La règle du tableau de dépendances, gravée à vie."
     },
     {
       "id": "nodejs",
@@ -78,7 +78,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Backend",
-      "bugStory": "'Port 3000 déjà utilisé' → l'ancien serveur zombie qui refait surface 🧟 pkill node et ça repart. Classique du lundi matin"
+      "bugStory": "API REST, middleware, streams, event loop. 'Port 3000 already in use' → gestion propre du shutdown avec process.on('SIGTERM') et graceful restart."
     },
     {
       "id": "express",
@@ -86,7 +86,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Backend",
-      "bugStory": "Routes avant les middleware = toutes les requêtes meurent 🪦 Pourquoi? Parce que Express c'est un hippopotame qui lit de haut en bas"
+      "bugStory": "Routing, middleware chain, error handling, auth JWT. Routes avant middleware = requêtes mortes. Express lit de haut en bas, sans exception."
     },
     {
       "id": "sql",
@@ -94,7 +94,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Database",
-      "bugStory": "DELETE FROM users; sans WHERE = 500 utilisateurs volatilisés en 0.5 secondes 💀 C'est là que j'ai appris la valeur du backup"
+      "bugStory": "Jointures complexes, transactions, index, procédures stockées. DELETE sans WHERE = 500 lignes perdues. Transactions et backups automatisés, non négociables."
     },
     {
       "id": "figma",
@@ -102,7 +102,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Design",
-      "bugStory": "500 frames créées par accident → Figma qui devient aussi rapide qu'un escargot en fauteuil roulant. Merci Ctrl+Z de m'avoir sauvé 🙏"
+      "bugStory": "Design systems, prototypage interactif, auto-layout, composants. 500 frames par accident → nomenclature rigoureuse et composants réutilisables depuis."
     },
     {
       "id": "php",
@@ -110,7 +110,7 @@
       "level": "Intermédiaire",
       "years": "1+",
       "category": "Backend",
-      "bugStory": "echo quelque chose puis header('Location: /') = 'Headers already sent'! PHP c'est strict... et ça crie, beaucoup 😤"
+      "bugStory": "POO, architecture MVC, PDO, sessions sécurisées. echo avant header('Location') = 'Headers already sent'. PHP exige de la rigueur dans le flux d'exécution."
     },
     {
       "id": "linux",
@@ -118,7 +118,7 @@
       "level": "Intermédiaire",
       "years": "2+",
       "category": "DevOps",
-      "bugStory": "rm -rf /var au lieu de /var/www = 3 secondes horrifiantes 😱 Linux fait pas de blague. Une leçon très chère en fatigue nerveuse"
+      "bugStory": "Administration VPS, déploiement Nginx, systemd, SSL Let's Encrypt. rm -rf /var au lieu de /var/www → alias de sécurité et backups automatiques configurés."
     },
     {
       "id": "mongodb",
@@ -126,7 +126,7 @@
       "level": "Avancé",
       "years": "2+",
       "category": "Database",
-      "bugStory": "deleteMany({}) accidentellement = 10k documents envoyés en l'air ✈️ Ctrl+Z ne marche pas là-bas. C'est comme ça qu'on apprend la valeur du backup"
+      "bugStory": "Aggregation pipeline, indexes composés, schéma flexible. deleteMany({}) sans filtre = 10k docs perdus. Première config sur tout projet : les backups."
     }
   ],
   "projects": [
@@ -134,7 +134,7 @@
       "id": "harmonith",
       "name": "Harmonith",
       "url": "https://harmonith.fr",
-      "description": "App de calcul d'IMC et calories. Interface moderne pour suivre nutrition et objectifs santé.",
+      "description": "Application fullstack de suivi nutritionnel : calcul d'IMC, suivi calorique journalier, objectifs personnalisés. API REST avec authentification, déployée en production sur VPS Linux.",
       "image": "/harmonith.svg",
       "stack": ["React", "Vite", "Node.js", "Express", "MongoDB", "CSS Modules"]
     },
@@ -142,13 +142,29 @@
       "id": "equestra",
       "name": "Equestra",
       "url": "https://equestra.harmonith.fr",
-      "description": "Application web de gestion pour centre de loisirs. Membres, réservations, planification.",
+      "description": "Application de gestion pour centre équestre : CRUD complet (membres, chevaux, cours), planning interactif, système de rôles admin/moniteur/membre. Architecture MVC, base relationnelle 10+ tables.",
       "image": "/equestra.svg",
       "stack": ["PHP", "MariaDB", "JavaScript", "HTML", "CSS"],
       "credentials": {
         "email": "invite@bienvenue.fr",
         "password": "invite2025"
       }
+    },
+    {
+      "id": "generation-connect",
+      "name": "Generation Connect",
+      "url": "https://generation-connect.nutriform.store/",
+      "description": "Plateforme de mise en relation intergénérationnelle : matching de profils, recherche avancée, messagerie. Interface responsive déployée en production.",
+      "image": "/generation-connect.svg",
+      "stack": ["Next.js", "React", "Node.js", "MongoDB", "Tailwind CSS"]
+    },
+    {
+      "id": "atelier-du-nuage",
+      "name": "Atelier du Nuage",
+      "url": "https://atelierdunuage.fr/",
+      "description": "E-commerce artisanal de tiramisu premium : catalogue 12 saveurs, panier dynamique, fiches produit détaillées avec allergènes. SSR Next.js, design responsive avec gradient theming par produit.",
+      "image": "/atelierdunuage.svg",
+      "stack": ["Next.js", "React", "TypeScript", "Tailwind CSS", "SSR"]
     }
   ],
   "contact": {

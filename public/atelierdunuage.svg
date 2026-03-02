@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 230 230">
+  <defs>
+    <style>
+      .nuage-main { fill: #f7f6f2; stroke: #1d1d1b; stroke-width: 1.5; stroke-miterlimit: 10; }
+      .nuage-accent { fill: #b8ddd1; stroke: #1d1d1b; stroke-width: 1; stroke-miterlimit: 10; }
+      .nuage-base { fill: #f7b186; stroke: #1d1d1b; stroke-width: 1.5; stroke-miterlimit: 10; }
+    </style>
+  </defs>
+  <!-- Main cloud -->
+  <path class="nuage-main" d="M168,128 c18,0,32-14,32-30 c0-17-14-30-32-30 c-3,0-5,0.4-8,1.2 C156,52,142,40,125,40 c-19,0-34,13-38,30 c-2-0.5-4-0.7-6-0.7 c-14,0-26,11-26,26 c0,15,12,26,26,26 l87,0z"/>
+  <!-- Small accent cloud -->
+  <ellipse class="nuage-accent" cx="172" cy="78" rx="14" ry="10"/>
+  <!-- Base tray -->
+  <rect class="nuage-base" x="52" y="138" width="126" height="22" rx="6"/>
+  <!-- Cup detail -->
+  <path class="nuage-accent" d="M95,148 l4,0 l2,8 l-8,0 z"/>
+  <path class="nuage-accent" d="M125,148 l4,0 l2,8 l-8,0 z"/>
+  <!-- Small decorative dots -->
+  <circle class="nuage-base" cx="80" cy="108" r="4"/>
+  <circle class="nuage-base" cx="145" cy="100" r="3"/>
+  <circle class="nuage-base" cx="110" cy="85" r="3.5"/>
+</svg>

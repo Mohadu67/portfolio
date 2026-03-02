@@ -23,6 +23,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+      console.error("Missing GMAIL_USER or GMAIL_APP_PASSWORD env variables");
+      return NextResponse.json(
+        { error: "Email service not configured" },
+        { status: 500 }
+      );
+    }
+
     await connectDB();
     const candidature = await Candidature.findById(candidature_id);
 
@@ -44,10 +52,17 @@ export async function POST(request: NextRequest) {
       candidature.poste
     );
 
-    // Save LM PDF to candidatureModel/
-    const lmFileName = `LM_${candidature.entreprise.replace(/[^a-zA-Z0-9À-ÿ]/g, "_")}.pdf`;
-    const lmPath = path.join(process.cwd(), "candidatureModel", lmFileName);
-    fs.writeFileSync(lmPath, letterPdfBuffer);
+    // Save LM PDF locally (non-critical, archival only)
+    try {
+      const lmFileName = `LM_${candidature.entreprise.replace(/[^a-zA-Z0-9À-ÿ]/g, "_")}.pdf`;
+      const lmDir = path.join(process.cwd(), "candidatureModel");
+      if (!fs.existsSync(lmDir)) {
+        fs.mkdirSync(lmDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(lmDir, lmFileName), letterPdfBuffer);
+    } catch (writeError) {
+      console.warn("Could not save LM PDF locally:", writeError);
+    }
 
     // Send email with PDF attachments
     await sendCandidature(
@@ -70,7 +85,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Email sending error:", errorMessage);
+    const errorStack = error instanceof Error ? error.stack : "";
+    console.error("Email sending error:", errorMessage, errorStack);
     return NextResponse.json(
       { error: "Failed to send email", details: errorMessage },
       { status: 500 }

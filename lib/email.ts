@@ -65,6 +65,9 @@ export async function sendCandidature(
   `;
 
   const cvPath = path.join(process.cwd(), "candidatureModel", "cv-mohammed.pdf");
+  if (!fs.existsSync(cvPath)) {
+    throw new Error(`CV file not found at ${cvPath}. Make sure candidatureModel/cv-mohammed.pdf exists.`);
+  }
   const cvBuffer = fs.readFileSync(cvPath);
 
   const transporter = getTransporter();

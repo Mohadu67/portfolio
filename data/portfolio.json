@@ -127,6 +127,46 @@
       "years": "2+",
       "category": "Database",
       "bugStory": "Aggregation pipeline, indexes composés, schéma flexible. deleteMany({}) sans filtre = 10k docs perdus. Première config sur tout projet : les backups."
+    },
+    {
+      "id": "typescript",
+      "name": "TypeScript",
+      "level": "Intermédiaire",
+      "years": "1+",
+      "category": "Frontend/Backend",
+      "bugStory": "Typage statique, interfaces, types génériques, intégration avec React/Node. any pour contourner une erreur de typage → discipline stricte sur les types et revue de code renforcée."
+    },
+    {
+      "id": "nextjs",
+      "name": "Next.js",
+      "level": "Intermédiaire",
+      "years": "1+",
+      "category": "Frontend/Backend",
+      "bugStory": "SSR, SSG, API routes, middleware, optimisations. getServerSideProps sans gestion d'erreur = page blanche. Toujours prévoir un fallback et une gestion d'erreur robuste."
+    },
+    {
+      "id": "Gestion de projet Agile",
+      "name": "Gestion de projet Agile",
+      "level": "Intermédiaire",
+      "years": "1+",
+      "category": "DevOps",
+      "bugStory": "Scrum, Kanban, sprints, réunions d'équipe. Retrospective sans action concrète = répétition des mêmes erreurs. Documentation claire des tâches et suivi des points bloquants."
+    },
+    {
+      "id": "SEO",
+      "name": "SEO",
+      "level": "Intermédiaire",
+      "years": "1+",
+      "category": "Frontend",
+      "bugStory": "Balises meta, structure sémantique, performance, accessibilité. Oublier les alt sur les images = pénalité SEO. Accessibilité et SEO vont de pair pour une expérience utilisateur optimale."
+    },
+    {
+      "id": "accessibilité",
+      "name": "Accessibilité (a11y)",
+      "level": "Intermédiaire",
+      "years": "1+",
+      "category": "Frontend",
+      "bugStory": "ARIA, navigation clavier, contraste, lecteurs d'écran. Oublier les labels sur les inputs = expérience inaccessible. L'accessibilité est une priorité pour toucher tous les utilisateurs."
     }
   ],
   "projects": [
@@ -153,10 +193,10 @@
     {
       "id": "generation-connect",
       "name": "Generation Connect",
-      "url": "https://generation-connect.nutriform.store/",
+      "url": "https://generation-connect.nutriform.store",
       "description": "Plateforme de mise en relation intergénérationnelle : matching de profils, recherche avancée, messagerie. Interface responsive déployée en production.",
-      "image": "/generation-connect.svg",
-      "stack": ["Next.js", "React", "Node.js", "MongoDB", "Tailwind CSS"]
+      "image": "/logoGC.svg",
+      "stack": ["React", "Node.js", "Express", "PostgreSQL", "CSS Modules"]
     },
     {
       "id": "atelier-du-nuage",

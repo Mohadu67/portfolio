@@ -13,6 +13,7 @@ import { FollowUpModal } from "@/components/dashboard/FollowUpModal";
 import { toast } from "sonner";
 import type { ICandidature, CandidatureStatut } from "@/models/Candidature";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function Dashboard() {
   const [apiKey, setApiKey] = useState("");
@@ -223,6 +224,7 @@ export default function Dashboard() {
   }
 
   if (!isAuthenticated) {
+    const router = useRouter();
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center px-4">
         <div className="max-w-md w-full">
@@ -257,13 +259,15 @@ export default function Dashboard() {
 
             <div className="mt-6 pt-6 border-t border-[var(--border-color)]">
               <p className="text-xs text-[var(--text-tertiary)] text-center">
-                Besoin d'aide ? Contactez{" "}
-                <a
-                  href="mailto:Hamiani.Mohammed@hotmail.com"
+                Besoin d'aide ? {" "}
+                <button
+                  onClick={() => {
+                    router.push("/#contact");
+                  }}
                   className="text-[var(--accent-orange)] hover:underline"
                 >
-                  Mohammed
-                </a>
+                  Contactez-moi
+                </button>
               </p>
             </div>
           </div>

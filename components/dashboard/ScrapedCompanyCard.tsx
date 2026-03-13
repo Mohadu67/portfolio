@@ -116,26 +116,8 @@ export function ScrapedCompanyCard({
   };
 
   const handleSendFromModal = async (cand: ICandidature, letterContent: string, emailAddress: string) => {
-    try {
-      const res = await fetch("/api/send-email", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          candidature_id: cand._id,
-          email_destinataire: emailAddress,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Erreur lors de l'envoi");
-
-      toast.success(`Email envoyé à ${emailAddress} !`);
-      onCandidatureCreated();
-    } catch (error) {
-      toast.error("Erreur lors de l'envoi de l'email");
-    }
+    // Modal handles sending directly - this is now a no-op for compatibility
+    onCandidatureCreated();
   };
 
   const handleSendEmail = async () => {

@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ScrapedCompanyData } from "@/lib/web-scraper";
+import type { ICandidature } from "@/models/Candidature";
+import { GenerateLetterModal } from "./GenerateLetterModal";
 
 interface ScrapedCompanyCardProps {
   data: ScrapedCompanyData;
@@ -40,6 +42,8 @@ export function ScrapedCompanyCard({
   const [sending, setSending] = useState(false);
   const [poste, setPoste] = useState("");
   const [candidatureId, setCandidatureId] = useState<string | null>(null);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [candidature, setCandidature] = useState<ICandidature | null>(null);
 
   const handleCreateCandidature = async () => {
     setCreating(true);
@@ -71,6 +75,8 @@ export function ScrapedCompanyCard({
 
       const created = await res.json();
       setCandidatureId(created._id);
+      setCandidature(created);
+      setShowGenerateModal(true);
       toast.success("Candidature créée !");
       onCandidatureCreated();
     } catch (error) {
@@ -80,29 +86,55 @@ export function ScrapedCompanyCard({
     }
   };
 
-  const handleGenerateLetter = async () => {
-    if (!candidatureId) return;
-    setGeneratingLetter(true);
+  const handleOpenGenerateModal = () => {
+    if (!candidatureId || !candidature) return;
+    setShowGenerateModal(true);
+  };
+
+  const handleUpdateCandidature = async (id: string, updates: Partial<ICandidature>) => {
     try {
-      const res = await fetch("/api/generate-letter", {
+      const res = await fetch(`/api/candidatures/${id}`, {
+        method: "PATCH",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!res.ok) throw new Error("Erreur lors de la mise à jour");
+
+      const updated = await res.json();
+      setCandidature(updated);
+      if (updates.lettre) {
+        setLettre(updates.lettre as string);
+        onCandidatureCreated();
+      }
+    } catch (error) {
+      toast.error("Erreur lors de la mise à jour");
+    }
+  };
+
+  const handleSendFromModal = async (cand: ICandidature, letterContent: string, emailAddress: string) => {
+    try {
+      const res = await fetch("/api/send-email", {
         method: "POST",
         headers: {
           "x-api-key": apiKey,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ candidature_id: candidatureId }),
+        body: JSON.stringify({
+          candidature_id: cand._id,
+          email_destinataire: emailAddress,
+        }),
       });
 
-      if (!res.ok) throw new Error("Erreur lors de la génération");
+      if (!res.ok) throw new Error("Erreur lors de l'envoi");
 
-      const result = await res.json();
-      setLettre(result.lettre);
-      toast.success("Lettre générée !");
+      toast.success(`Email envoyé à ${emailAddress} !`);
       onCandidatureCreated();
     } catch (error) {
-      toast.error("Erreur lors de la génération de la lettre");
-    } finally {
-      setGeneratingLetter(false);
+      toast.error("Erreur lors de l'envoi de l'email");
     }
   };
 
@@ -286,14 +318,14 @@ export function ScrapedCompanyCard({
           <>
             {!lettre ? (
               <motion.button
-                onClick={handleGenerateLetter}
+                onClick={handleOpenGenerateModal}
                 disabled={generatingLetter}
                 className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-[var(--accent-orange)]/20 text-[var(--accent-orange)] hover:bg-[var(--accent-orange)]/30 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                {generatingLetter ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
-                {generatingLetter ? "Génération..." : "Générer lettre"}
+                <FileText size={16} />
+                Générer lettre
               </motion.button>
             ) : (
               <motion.button
@@ -326,6 +358,18 @@ export function ScrapedCompanyCard({
             {lettre}
           </div>
         </motion.div>
+      )}
+
+      {/* Generate Letter Modal */}
+      {candidature && (
+        <GenerateLetterModal
+          candidature={candidature}
+          isOpen={showGenerateModal}
+          onClose={() => setShowGenerateModal(false)}
+          apiKey={apiKey}
+          onSend={handleSendFromModal}
+          onUpdate={handleUpdateCandidature}
+        />
       )}
     </motion.div>
   );

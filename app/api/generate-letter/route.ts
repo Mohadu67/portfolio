@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature } from "@/models/Candidature";
-import { generateLettre, generateLettreFromAbout } from "@/lib/grok";
+import { improveLetter } from "@/lib/grok";
 import { verifyAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
@@ -11,11 +11,25 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { candidature_id, customInstructions, personalNeeds } = body;
+    const { candidature_id, letterText, type } = body;
 
     if (!candidature_id) {
       return NextResponse.json(
         { error: "candidature_id is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!letterText || !letterText.trim()) {
+      return NextResponse.json(
+        { error: "letterText is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!type || !["stage", "alternance", "cdi"].includes(type)) {
+      return NextResponse.json(
+        { error: "type must be 'stage', 'alternance', or 'cdi'" },
         { status: 400 }
       );
     }
@@ -27,51 +41,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Candidature not found" }, { status: 404 });
     }
 
-    // Combine personalNeeds with customInstructions for generation
-    let finalInstructions = customInstructions || "";
-    if (personalNeeds) {
-      const needsPrefix = "**Attentes personnelles du candidat :**\n" + personalNeeds;
-      finalInstructions = customInstructions
-        ? `${needsPrefix}\n\n${customInstructions}`
-        : needsPrefix;
-    }
-
-    // Generate letter with Grok - use aboutText if available
-    let lettre: string;
-    if (candidature.aboutText) {
-      lettre = await generateLettreFromAbout(
-        candidature.entreprise,
-        candidature.aboutText,
-        candidature.poste,
-        finalInstructions
-      );
-    } else {
-      lettre = await generateLettre(
-        candidature.entreprise,
-        candidature.poste,
-        candidature.description,
-        finalInstructions
-      );
-    }
+    // Improve the letter with Grok
+    const improvedLetter = await improveLetter(letterText, type);
 
     // Update candidature with letter and status
-    candidature.lettre = lettre;
+    candidature.lettre = improvedLetter;
     candidature.statut = "lettre générée";
     await candidature.save();
 
     return NextResponse.json({
-      lettre,
+      lettre: improvedLetter,
       candidature_id,
       statut: "lettre générée",
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : "";
-    console.error("Letter generation error:", errorMessage);
+    console.error("Letter improvement error:", errorMessage);
     console.error("Error stack:", errorStack);
     return NextResponse.json(
       {
-        error: "Failed to generate letter",
+        error: "Failed to improve letter",
         details: errorMessage,
         ...(process.env.NODE_ENV === "development" && { stack: errorStack })
       },

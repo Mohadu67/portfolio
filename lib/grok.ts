@@ -69,83 +69,42 @@ Tu ne commences JAMAIS par "Madame, Monsieur," (c'est ajouté automatiquement da
 Tu ne termines JAMAIS par "Bien cordialement" ou une signature (c'est ajouté automatiquement dans le PDF).
 Tu écris directement le corps de la lettre, rien d'autre.`;
 
-export async function generateLettre(
-  entreprise: string,
-  poste: string,
-  description: string,
-  customInstructions?: string
+export async function improveLetter(
+  letterText: string,
+  type: "stage" | "alternance" | "cdi"
 ): Promise<string> {
-  const instructionsSection = customInstructions
-    ? `\n\n**Instructions supplémentaires de l'utilisateur :**\n${customInstructions}`
-    : "";
+  const typeLabel = {
+    stage: "un stage de 3 mois",
+    alternance: "une alternance",
+    cdi: "un CDI"
+  }[type];
 
-  const prompt = `Rédige le corps d'une lettre de motivation pour cette candidature :
+  const systemPrompt = `Tu es un expert en rédaction de lettres de motivation. Ton rôle est d'AMÉLIORER un texte existant.
+Tu dois:
+- Corriger la grammaire et l'orthographe
+- Améliorer la structure et la fluidité
+- Renforcer le ton professionnel et confiant
+- Optimiser la formulation SANS changer le sens ou les idées de l'auteur
+- Garder l'authenticité et la personnalité du candidat
 
-${PROFIL_CONTEXT}
+Ne rédige PAS une nouvelle lettre. N'invente PAS de contenu. Améliore seulement ce qui est écrit.`;
 
-**Offre ciblée :**
-- Entreprise : ${entreprise}
-- Poste : ${poste}
-- Description : ${description}
+  const prompt = `Améliore cette lettre de motivation pour ${typeLabel} :
 
-**Structure attendue (4 paragraphes, 350 mots max) :**
-1. Accroche directe : pourquoi ce poste chez cette entreprise spécifiquement (utiliser des éléments de la description)
-2. Ce que Mohammed apporte concrètement : compétences techniques + projets réalisés qui prouvent sa capacité à livrer
-3. La valeur ajoutée de son parcours atypique : 5 ans de management = rigueur, autonomie, gestion de projets, travail en équipe. C'est rare chez un dev junior.
-4. Projection : le stage comme point de départ d'une collaboration durable (mention naturelle de l'alternance possible en sept 2026)
-${instructionsSection}
+---
+${letterText}
+---
 
-Écris UNIQUEMENT le corps de la lettre. Pas de "Madame, Monsieur," ni de signature.`;
+Retourne UNIQUEMENT la lettre améliorée, prête à envoyer. Pas d'introduction, pas d'explication.`;
 
   try {
-    return await callGrok(prompt, SYSTEM_PROMPT);
+    return await callGrok(prompt, systemPrompt);
   } catch (error) {
-    console.error("Error generating letter with Grok:", error);
+    console.error("Error improving letter with Grok:", error);
     throw error;
   }
 }
 
-export async function generateLettreFromAbout(
-  entreprise: string,
-  aboutText: string,
-  poste?: string,
-  customInstructions?: string
-): Promise<string> {
-  const posteInfo = poste
-    ? `- Poste visé : ${poste}`
-    : `- Type : Candidature spontanée pour un stage développeur`;
-
-  const instructionsSection = customInstructions
-    ? `\n\n**Instructions supplémentaires de l'utilisateur :**\n${customInstructions}`
-    : "";
-
-  const prompt = `Rédige le corps d'une lettre de motivation pour cette candidature :
-
-${PROFIL_CONTEXT}
-
-**Entreprise ciblée :**
-- Nom : ${entreprise}
-${posteInfo}
-- Informations sur l'entreprise (page "À propos") :
-${aboutText.substring(0, 1500)}
-
-**Structure attendue (4 paragraphes, 350 mots max) :**
-1. Accroche qui montre une vraie connaissance de l'entreprise (citer des éléments concrets du "à propos" : secteur, produits, valeurs, clients)
-2. Ce que Mohammed apporte techniquement : stack maîtrisée, projets concrets livrés, capacité à être opérationnel rapidement
-3. Son parcours atypique comme avantage compétitif : manager pendant 5 ans = il sait gérer les priorités, communiquer en équipe, tenir des deadlines. Un dev qui comprend le business, c'est rare.
-4. Vision : le stage comme début d'une collaboration, avec la perspective naturelle d'une alternance en sept 2026 et d'une montée en compétences continue (CNAM ingénieur)
-
-Personnalise au maximum avec les infos de l'entreprise. Sois spécifique, pas générique.
-${instructionsSection}
-Écris UNIQUEMENT le corps de la lettre. Pas de "Madame, Monsieur," ni de signature.`;
-
-  try {
-    return await callGrok(prompt, SYSTEM_PROMPT);
-  } catch (error) {
-    console.error("Error generating letter from about with Grok:", error);
-    throw error;
-  }
-}
 
 export async function generateCV(): Promise<string> {
   const profil = {

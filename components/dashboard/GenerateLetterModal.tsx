@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Copy, Check, Send, Sparkles, RefreshCw } from "lucide-react";
+import { X, Copy, Check, Send, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ICandidature } from "@/models/Candidature";
 
@@ -15,21 +15,6 @@ interface GenerateLetterModalProps {
   onUpdate: (id: string, updates: Partial<ICandidature>) => Promise<void>;
 }
 
-const LETTER_TEMPLATES = {
-  formal:
-    "Madame, Monsieur,\n\nC'est avec un grand intérêt que je vous présente ma candidature pour le poste de {poste} au sein de votre entreprise {entreprise}.",
-  passionate:
-    "Passionné par le développement web et l'innovation, je suis ravi de postuler pour le rôle de {poste} chez {entreprise}.",
-  technical:
-    "Fort d'une expertise en {competences} et d'une expérience concrète en développement fullstack, je suis intéressé par cette opportunité de {poste} chez {entreprise}.",
-};
-
-const templateDescriptions = {
-  formal: "Approche professionnelle et formelle, idéale pour les grandes entreprises",
-  passionate: "Style motivé et enthousiaste pour montrer votre passion",
-  technical: "Accent sur vos compétences techniques et expérience",
-};
-
 export function GenerateLetterModal({
   candidature,
   isOpen,
@@ -38,20 +23,22 @@ export function GenerateLetterModal({
   onSend,
   onUpdate,
 }: GenerateLetterModalProps) {
-  const [template, setTemplate] = useState<keyof typeof LETTER_TEMPLATES>("formal");
-  const [generatedLetter, setGeneratedLetter] = useState("");
-  const [editingLetter, setEditingLetter] = useState("");
-  const [step, setStep] = useState<"needs" | "template" | "generate" | "review">("needs");
+  const [letterText, setLetterText] = useState("");
+  const [type, setType] = useState<"stage" | "alternance" | "cdi">("stage");
+  const [improvedLetter, setImprovedLetter] = useState("");
+  const [step, setStep] = useState<"write" | "improved" | "review">("write");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState(candidature?.email || "");
-  const [customInstructions, setCustomInstructions] = useState("");
-  const [showRegenerateInput, setShowRegenerateInput] = useState(false);
-  const [personalNeeds, setPersonalNeeds] = useState("");
 
   if (!isOpen || !candidature) return null;
 
-  const handleGenerateLetter = async () => {
+  const handleImprove = async () => {
+    if (!letterText.trim()) {
+      toast.error("Écris d'abord ta lettre");
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await fetch("/api/generate-letter", {
@@ -62,28 +49,26 @@ export function GenerateLetterModal({
         },
         body: JSON.stringify({
           candidature_id: candidature._id,
-          template,
-          ...(personalNeeds.trim() && { personalNeeds: personalNeeds.trim() }),
-          ...(customInstructions.trim() && { customInstructions: customInstructions.trim() }),
+          letterText: letterText.trim(),
+          type,
         }),
       });
 
-      if (!response.ok) throw new Error("Erreur lors de la génération");
+      if (!response.ok) throw new Error("Erreur lors de l'amélioration");
 
       const data = await response.json();
-      setGeneratedLetter(data.lettre);
-      setEditingLetter(data.lettre);
-      setStep("review");
-      toast.success("Lettre générée avec succès!");
+      setImprovedLetter(data.lettre);
+      setStep("improved");
+      toast.success("Lettre améliorée!");
     } catch (error) {
-      toast.error("Erreur lors de la génération");
+      toast.error("Erreur lors de l'amélioration");
     } finally {
       setLoading(false);
     }
   };
 
   const handleCopyContent = () => {
-    navigator.clipboard.writeText(editingLetter);
+    navigator.clipboard.writeText(improvedLetter);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     toast.success("Lettre copiée!");
@@ -96,9 +81,9 @@ export function GenerateLetterModal({
     }
     setLoading(true);
     try {
-      await onSend(candidature, editingLetter, email);
+      await onSend(candidature, improvedLetter, email);
       await onUpdate(candidature._id || "", {
-        lettre: editingLetter,
+        lettre: improvedLetter,
         statut: "postulée",
         email,
       });
@@ -128,7 +113,6 @@ export function GenerateLetterModal({
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Glow Background Effect */}
         <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-[var(--accent-blue)]/5 via-transparent to-[var(--accent-orange)]/5 pointer-events-none" />
 
         {/* Header */}
@@ -139,13 +123,11 @@ export function GenerateLetterModal({
           transition={{ delay: 0.1 }}
         >
           <motion.h2 className="text-2xl font-bold bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] bg-clip-text text-transparent">
-            {step === "needs"
-              ? "Exprimer vos besoins"
-              : step === "template"
-                ? "Choisir un modèle"
-                : step === "generate"
-                  ? "Génération en cours..."
-                  : "Réviser et envoyer"}
+            {step === "write"
+              ? "Écris ta lettre"
+              : step === "improved"
+                ? "Lettre améliorée"
+                : "Réviser et envoyer"}
           </motion.h2>
           <motion.button
             onClick={onClose}
@@ -160,9 +142,9 @@ export function GenerateLetterModal({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 relative z-10">
           <AnimatePresence mode="wait">
-            {step === "needs" && (
+            {step === "write" && (
               <motion.div
-                key="needs"
+                key="write"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
@@ -178,198 +160,75 @@ export function GenerateLetterModal({
 
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
                   <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
-                    Vos attentes / besoins
+                    Type de candidature
                   </label>
-                  <p className="text-xs text-[var(--text-secondary)] mb-3">
-                    Exprimez en quelques lignes ce que vous recherchez chez cette entreprise, vos attentes, ou ce qui vous intéresse particulièrement. L'IA personnalisera la lettre en fonction.
-                  </p>
-                  <motion.textarea
-                    value={personalNeeds}
-                    onChange={(e) => setPersonalNeeds(e.target.value)}
-                    className="w-full h-40 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)]/80 focus:shadow-lg focus:shadow-[var(--accent-orange)]/20 font-mono text-sm transition-all resize-none"
-                    placeholder="Ex: Je cherche une équipe collaborative, je suis intéressé par la tech du cloud, je veux m'impliquer dans le produit..."
-                    whileFocus={{ scale: 1.01 }}
-                  />
+                  <div className="flex gap-2">
+                    {(["stage", "alternance", "cdi"] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setType(t)}
+                        className={`flex-1 py-2 rounded-lg font-medium transition-all ${
+                          type === t
+                            ? "bg-[var(--accent-blue)] text-white"
+                            : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        }`}
+                      >
+                        {t === "stage" ? "Stage" : t === "alternance" ? "Alternance" : "CDI"}
+                      </button>
+                    ))}
+                  </div>
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-                  <p className="text-xs text-[var(--text-tertiary)]">
-                    Vous pourrez aussi ajouter des précisions pendant la régénération si nécessaire.
-                  </p>
-                </motion.div>
-              </motion.div>
-            )}
-
-            {step === "template" && (
-              <motion.div
-                key="template"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-5"
-              >
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-                  <p className="text-[var(--text-secondary)] mb-2 text-sm">Candidature pour</p>
-                  <p className="text-lg font-semibold text-[var(--text-primary)]">
-                    {candidature.entreprise} • {candidature.poste}
-                  </p>
-                </motion.div>
-
-                <div className="space-y-3">
-                  {Object.entries(LETTER_TEMPLATES).map(([key, preview], idx) => (
-                    <motion.button
-                      key={key}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.2 + idx * 0.1 }}
-                      className={`w-full p-4 rounded-xl text-left border-2 transition-all group relative overflow-hidden ${
-                        template === key
-                          ? "border-[var(--accent-orange)] bg-gradient-to-r from-[var(--accent-orange)]/15 to-[var(--accent-orange)]/5"
-                          : "border-[var(--border-color)]/50 hover:border-[var(--accent-orange)]/60 bg-[var(--bg-secondary)]/30"
-                      }`}
-                      onClick={() => setTemplate(key as keyof typeof LETTER_TEMPLATES)}
-                      whileHover={{ scale: 1.02, boxShadow: "0 10px 30px rgba(255, 158, 100, 0.15)" }}
-                    >
-                      {template === key && (
-                        <motion.div
-                          className="absolute -top-1 -right-1 text-[var(--accent-orange)]"
-                          initial={{ rotate: -180, scale: 0 }}
-                          animate={{ rotate: 0, scale: 1 }}
-                          transition={{ type: "spring", stiffness: 200 }}
-                        >
-                          <Sparkles size={20} />
-                        </motion.div>
-                      )}
-                      <div className="flex items-start gap-3">
-                        <div className="w-3 h-3 rounded-full mt-1 flex-shrink-0 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)]" />
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-[var(--text-primary)] capitalize">
-                            {key === "formal"
-                              ? "Formel"
-                              : key === "passionate"
-                                ? "Passionné"
-                                : "Technique"}
-                          </h3>
-                          <p className="text-xs text-[var(--text-secondary)] mt-1">
-                            {templateDescriptions[key as keyof typeof templateDescriptions]}
-                          </p>
-                        </div>
-                      </div>
-                    </motion.button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {step === "generate" && (
-              <motion.div
-                key="generate"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="text-center space-y-8 py-12"
-              >
-                <motion.div
-                  className="flex justify-center relative"
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] rounded-full blur-2xl opacity-30"
-                    animate={{ scale: [1, 1.3, 1] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                  />
-                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear" }}>
-                    <Send size={56} className="text-[var(--accent-orange)] relative z-10 drop-shadow-lg" />
-                  </motion.div>
-                </motion.div>
-
-                <div>
-                  <motion.p
-                    className="text-xl font-semibold text-[var(--text-primary)]"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                  >
-                    Génération de votre lettre...
-                  </motion.p>
-                  <motion.p
-                    className="text-sm text-[var(--text-secondary)] mt-2"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.4 }}
-                  >
-                    Basée sur le modèle <span className="text-[var(--accent-orange)] font-medium">{template}</span>
-                  </motion.p>
-                </div>
-
-                {/* Loading dots animation */}
-                <motion.div className="flex justify-center gap-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-                  {[0, 1, 2].map((i) => (
-                    <motion.div
-                      key={i}
-                      className="w-2 h-2 rounded-full bg-[var(--accent-orange)]"
-                      animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
-                      transition={{ duration: 1.5, delay: i * 0.2, repeat: Infinity }}
-                    />
-                  ))}
-                </motion.div>
-              </motion.div>
-            )}
-
-            {step === "review" && (
-              <motion.div
-                key="review"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-5"
-              >
-                {/* Email input */}
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
                   <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
-                    Email de l&apos;entreprise
+                    Ta lettre de motivation
                   </label>
-                  <motion.input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)]/80 focus:shadow-lg focus:shadow-[var(--accent-orange)]/20 transition-all"
-                    placeholder="contact@entreprise.com"
-                    whileFocus={{ scale: 1.01 }}
-                  />
-                </motion.div>
-
-                {/* Letter content */}
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
-                    Lettre de motivation
-                  </label>
+                  <p className="text-xs text-[var(--text-secondary)] mb-3">
+                    Écris ta lettre comme tu le souhaites. L'IA l'améliorera au niveau du style et de la structure.
+                  </p>
                   <motion.textarea
-                    value={editingLetter}
-                    onChange={(e) => setEditingLetter(e.target.value)}
-                    className="w-full h-64 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-blue)]/80 focus:shadow-lg focus:shadow-[var(--accent-blue)]/20 font-mono text-sm transition-all resize-none"
+                    value={letterText}
+                    onChange={(e) => setLetterText(e.target.value)}
+                    className="w-full h-80 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)]/80 focus:shadow-lg focus:shadow-[var(--accent-orange)]/20 font-mono text-sm transition-all resize-none"
+                    placeholder="Écris ici ce que tu veux dire à l'entreprise..."
                     whileFocus={{ scale: 1.01 }}
                   />
                   <p className="text-xs text-[var(--text-tertiary)] mt-2">
-                    CV PDF et Lettre PDF seront joints à l&apos;email
+                    {letterText.length} caractères
+                  </p>
+                </motion.div>
+              </motion.div>
+            )}
+
+            {step === "improved" && (
+              <motion.div
+                key="improved"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-5"
+              >
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
+                    Lettre améliorée
+                  </label>
+                  <motion.textarea
+                    value={improvedLetter}
+                    onChange={(e) => setImprovedLetter(e.target.value)}
+                    className="w-full h-72 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-blue)]/80 focus:shadow-lg focus:shadow-[var(--accent-blue)]/20 font-mono text-sm transition-all resize-none"
+                    whileFocus={{ scale: 1.01 }}
+                  />
+                  <p className="text-xs text-[var(--text-tertiary)] mt-2">
+                    Tu peux modifier si tu veux
                   </p>
                 </motion.div>
 
-                {/* Action buttons row */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                  className="flex gap-3"
-                >
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
                   <motion.button
                     type="button"
                     onClick={handleCopyContent}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
+                    className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
                       copied
                         ? "bg-[var(--accent-blue)]/20 text-[var(--accent-blue)] border border-[var(--accent-blue)]/30"
                         : "bg-gradient-to-r from-[var(--accent-orange)]/10 to-[var(--accent-orange)]/5 text-[var(--text-primary)] border border-[var(--accent-orange)]/30 hover:border-[var(--accent-orange)]/60"
@@ -389,63 +248,47 @@ export function GenerateLetterModal({
                       </>
                     )}
                   </motion.button>
+                </motion.div>
+              </motion.div>
+            )}
 
-                  <motion.button
-                    type="button"
-                    onClick={() => setShowRegenerateInput(!showRegenerateInput)}
-                    className={`flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all border ${
-                      showRegenerateInput
-                        ? "bg-[var(--accent-blue)]/15 text-[var(--accent-blue)] border-[var(--accent-blue)]/30"
-                        : "bg-[var(--bg-secondary)]/50 text-[var(--text-primary)] border-[var(--border-color)]/50 hover:border-[var(--accent-blue)]/60"
-                    }`}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <RefreshCw size={18} />
-                    Régénérer
-                  </motion.button>
+            {step === "review" && (
+              <motion.div
+                key="review"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-5"
+              >
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
+                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
+                    Email de l&apos;entreprise
+                  </label>
+                  <motion.input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)]/80 focus:shadow-lg focus:shadow-[var(--accent-orange)]/20 transition-all"
+                    placeholder="contact@entreprise.com"
+                    whileFocus={{ scale: 1.01 }}
+                  />
                 </motion.div>
 
-                {/* Regenerate with instructions */}
-                <AnimatePresence>
-                  {showRegenerateInput && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="space-y-3 pt-1">
-                        <label className="block text-sm font-semibold text-[var(--text-primary)]">
-                          Précisions pour la régénération
-                        </label>
-                        <motion.textarea
-                          value={customInstructions}
-                          onChange={(e) => setCustomInstructions(e.target.value)}
-                          className="w-full h-24 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--accent-blue)]/30 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-blue)]/80 focus:shadow-lg focus:shadow-[var(--accent-blue)]/20 text-sm transition-all resize-none"
-                          placeholder='Ex: "Insiste plus sur le management", "Mentionne Docker et Kubernetes", "Ton plus décontracté"...'
-                          whileFocus={{ scale: 1.01 }}
-                        />
-                        <motion.button
-                          type="button"
-                          onClick={() => {
-                            setShowRegenerateInput(false);
-                            setStep("generate");
-                            setTimeout(handleGenerateLetter, 500);
-                          }}
-                          disabled={loading}
-                          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-semibold bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-blue)]/80 text-white hover:shadow-lg hover:shadow-[var(--accent-blue)]/30 disabled:opacity-50 transition-all"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          <RefreshCw size={18} />
-                          Régénérer la lettre
-                        </motion.button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
+                    Lettre de motivation
+                  </label>
+                  <motion.div
+                    className="w-full h-64 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] font-mono text-sm transition-all overflow-y-auto"
+                    whileFocus={{ scale: 1.01 }}
+                  >
+                    {improvedLetter}
+                  </motion.div>
+                  <p className="text-xs text-[var(--text-tertiary)] mt-2">
+                    CV PDF et Lettre PDF seront joints à l&apos;email
+                  </p>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -458,13 +301,13 @@ export function GenerateLetterModal({
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          {step !== "needs" && (
+          {step !== "write" && (
             <motion.button
               onClick={() => {
-                if (step === "generate") {
-                  setStep("template");
-                } else if (step === "template") {
-                  setStep("needs");
+                if (step === "improved") {
+                  setStep("write");
+                } else {
+                  setStep("improved");
                 }
               }}
               className="px-6 py-3 rounded-lg border border-[var(--border-color)]/50 text-[var(--text-primary)] hover:border-[var(--accent-orange)]/60 hover:bg-[var(--accent-orange)]/5 transition-all font-medium"
@@ -475,9 +318,22 @@ export function GenerateLetterModal({
             </motion.button>
           )}
 
-          {step === "needs" && (
+          {step === "write" && (
             <motion.button
-              onClick={() => setStep("template")}
+              onClick={handleImprove}
+              disabled={loading || !letterText.trim()}
+              className="ml-auto px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] font-semibold hover:shadow-lg hover:shadow-[var(--accent-orange)]/30 disabled:opacity-50 transition-all flex items-center gap-2"
+              whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(255, 158, 100, 0.3)" }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Wand2 size={18} />
+              Améliorer la lettre
+            </motion.button>
+          )}
+
+          {step === "improved" && (
+            <motion.button
+              onClick={() => setStep("review")}
               className="ml-auto px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-blue)]/80 text-white font-semibold hover:shadow-lg hover:shadow-[var(--accent-blue)]/30 transition-all"
               whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(46, 159, 216, 0.3)" }}
               whileTap={{ scale: 0.95 }}
@@ -486,29 +342,15 @@ export function GenerateLetterModal({
             </motion.button>
           )}
 
-          {step === "template" && (
-            <motion.button
-              onClick={() => {
-                setStep("generate");
-                setTimeout(handleGenerateLetter, 500);
-              }}
-              disabled={loading}
-              className="ml-auto px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] font-semibold hover:shadow-lg hover:shadow-[var(--accent-orange)]/30 disabled:opacity-50 transition-all"
-              whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(255, 158, 100, 0.3)" }}
-              whileTap={{ scale: 0.95 }}
-            >
-              Générer la lettre
-            </motion.button>
-          )}
-
           {step === "review" && (
             <motion.button
               onClick={handleSend}
               disabled={loading || !email}
-              className="ml-auto px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-blue)]/80 text-white font-semibold hover:shadow-lg hover:shadow-[var(--accent-blue)]/30 disabled:opacity-50 transition-all"
+              className="ml-auto px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-blue)]/80 text-white font-semibold hover:shadow-lg hover:shadow-[var(--accent-blue)]/30 disabled:opacity-50 transition-all flex items-center gap-2"
               whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(46, 159, 216, 0.3)" }}
               whileTap={{ scale: 0.95 }}
             >
+              <Send size={18} />
               {loading ? "Envoi en cours..." : "Envoyer la candidature"}
             </motion.button>
           )}

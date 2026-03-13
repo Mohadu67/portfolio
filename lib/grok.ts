@@ -69,33 +69,83 @@ Tu ne commences JAMAIS par "Madame, Monsieur," (c'est ajouté automatiquement da
 Tu ne termines JAMAIS par "Bien cordialement" ou une signature (c'est ajouté automatiquement dans le PDF).
 Tu écris directement le corps de la lettre, rien d'autre.`;
 
+export async function generateLetterProposal(
+  entreprise: string,
+  aboutText: string,
+  poste?: string
+): Promise<string> {
+  const systemPrompt = `Tu es un expert en lettres de motivation naturelles et humaines pour le secteur tech.
+Ton style: direct, concis, honnête. Pas de blabla, pas de formules creuses.
+La lettre doit ressembler à quelqu'un qui parle vraiment, pas à un robot marketing.`;
+
+  const posteInfo = poste && !poste.toLowerCase().includes("spontanée")
+    ? `pour le poste de ${poste}`
+    : "pour une alternance";
+
+  const prompt = `Génère une lettre de motivation naturelle et humaine ${posteInfo} chez ${entreprise}.
+
+PROFIL DU CANDIDAT:
+- Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans
+- Recherche alternance à partir de septembre 2026 (2j entreprise + 1j cours)
+- Bachelor concepteur développeur informatique en cours
+- Compétences: Figma, Adobe XD, UML, Merise, Node.js, Express, PHP, Prisma, PostgreSQL, MariaDB, MongoDB, React, Vite, Next.js, TypeScript, Docker, Linux, Ubuntu, SSH, VPS, CI/CD, Lynis, Fail2ban
+- Capable de gérer des projets de A à Z, autonome, adaptatif
+
+À PROPOS DE L'ENTREPRISE:
+${aboutText.substring(0, 1000)}
+
+INSTRUCTIONS:
+- Rédige une lettre qui parle directement, sans phrases creuses
+- Mentionne 2-3 détails concrets de l'entreprise (si l'about text le permet)
+- Montre les compétences techniques pertinentes naturellement, pas sous forme de liste
+- Ton: direct, honnête, confiant. Comme quelqu'un qui parle vraiment
+- Longueur: 4-5 paragraphes, pas plus
+- Ne mets PAS "Madame, Monsieur," au début ni de signature à la fin
+
+Exemple de style souhaité:
+"Je recherche une alternance à partir de septembre 2026 dans une équipe qui travaille sur des projets modernes.
+Actuellement en bachelor concepteur développeur, j'ai acquis des compétences solides en full-stack:
+React/Next.js côté frontend, Node.js/Express ou PHP côté backend, avec PostgreSQL ou MongoDB.
+Je travaille aussi avec Docker, Linux et j'ai configuré des déploiements CI/CD sur VPS..."
+
+Génère UNIQUEMENT la lettre, sans introduction.`;
+
+  try {
+    return await callGrok(prompt, systemPrompt);
+  } catch (error) {
+    console.error("Error generating letter proposal with Grok:", error);
+    throw error;
+  }
+}
+
 export async function improveLetter(
   letterText: string,
   type: "stage" | "alternance" | "cdi"
 ): Promise<string> {
-  const typeLabel = {
-    stage: "un stage de 3 mois",
-    alternance: "une alternance",
-    cdi: "un CDI"
-  }[type];
+  const systemPrompt = `Tu es un correcteur de lettres de motivation. Tu es MINIMALISTE et DIRECT.
 
-  const systemPrompt = `Tu es un expert en rédaction de lettres de motivation. Ton rôle est d'AMÉLIORER un texte existant.
-Tu dois:
-- Corriger la grammaire et l'orthographe
-- Améliorer la structure et la fluidité
-- Renforcer le ton professionnel et confiant
-- Optimiser la formulation SANS changer le sens ou les idées de l'auteur
-- Garder l'authenticité et la personnalité du candidat
+Ton rôle UNIQUE:
+- Corriger l'orthographe et la grammaire
+- Améliorer très légèrement la fluidité si vraiment nécessaire
+- Garder EXACTEMENT le ton et le style de l'auteur
 
-Ne rédige PAS une nouvelle lettre. N'invente PAS de contenu. Améliore seulement ce qui est écrit.`;
+NE PAS:
+- Ajouter des phrases marketing ou creuses
+- Changer la structure
+- "Améliorer" le contenu
+- Rendre plus "poli" ou "formel"
+- Ajouter de la blabla
 
-  const prompt = `Améliore cette lettre de motivation pour ${typeLabel} :
+La lettre doit rester directe, concrète, humaine. Comme si une personne parle.`;
+
+  const prompt = `Corrige juste l'orthographe, la grammaire et la fluidité. Garde le ton exactement pareil.
+Pas d'embellissements, pas de changements de structure. Juste les corrections nécessaires.
 
 ---
 ${letterText}
 ---
 
-Retourne UNIQUEMENT la lettre améliorée, prête à envoyer. Pas d'introduction, pas d'explication.`;
+Retourne UNIQUEMENT la lettre corrigée, sans introduction.`;
 
   try {
     return await callGrok(prompt, systemPrompt);

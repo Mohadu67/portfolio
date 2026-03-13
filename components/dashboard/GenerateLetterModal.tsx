@@ -30,8 +30,37 @@ export function GenerateLetterModal({
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState(candidature?.email || "");
+  const [generatingProposal, setGeneratingProposal] = useState(false);
 
   if (!isOpen || !candidature) return null;
+
+  const handleGenerateProposal = async () => {
+    setGeneratingProposal(true);
+    try {
+      const response = await fetch("/api/generate-proposal", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          entreprise: candidature.entreprise,
+          aboutText: candidature.aboutText || "",
+          poste: candidature.poste,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Erreur lors de la génération");
+
+      const data = await response.json();
+      setLetterText(data.lettre);
+      toast.success("Proposition générée! Relis et améliore si besoin.");
+    } catch (error) {
+      toast.error("Erreur lors de la génération");
+    } finally {
+      setGeneratingProposal(false);
+    }
+  };
 
   const handleImprove = async () => {
     if (!letterText.trim()) {
@@ -195,11 +224,22 @@ export function GenerateLetterModal({
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
-                    Ta lettre de motivation
-                  </label>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-sm font-semibold text-[var(--text-primary)]">
+                      Ta lettre de motivation
+                    </label>
+                    <motion.button
+                      onClick={handleGenerateProposal}
+                      disabled={generatingProposal || !candidature.aboutText}
+                      className="text-xs px-3 py-1 rounded bg-[var(--accent-orange)]/20 text-[var(--accent-orange)] hover:bg-[var(--accent-orange)]/30 disabled:opacity-50 transition-all"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {generatingProposal ? "Génération..." : "Générer une proposition"}
+                    </motion.button>
+                  </div>
                   <p className="text-xs text-[var(--text-secondary)] mb-3">
-                    Écris ta lettre comme tu le souhaites. L'IA l'améliorera au niveau du style et de la structure.
+                    Écris ta lettre comme tu le souhaites, ou clique sur "Générer une proposition" pour avoir une base. L'IA l'améliorera au niveau du style et de la structure.
                   </p>
                   <motion.textarea
                     value={letterText}

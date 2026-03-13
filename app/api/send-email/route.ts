@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { candidature_id, email_destinataire } = body;
+    const { candidature_id, email_destinataire, type } = body;
 
     if (!candidature_id || !email_destinataire) {
       return NextResponse.json(
@@ -70,7 +70,8 @@ export async function POST(request: NextRequest) {
       candidature.poste,
       email_destinataire,
       letterPdfBuffer,
-      process.env.PROFIL_NOM || "Mohammed Hamiani"
+      process.env.PROFIL_NOM || "Mohammed Hamiani",
+      type || "stage"
     );
 
     // Update status to "postulée"

@@ -195,7 +195,7 @@ export function LetterModal({
                 disabled={isGenerating}
                 className="btn-orange text-sm disabled:opacity-50"
               >
-                {isGenerating ? "Génération..." : "Générer avec Claude"}
+                {isGenerating ? "Génération..." : "Générer avec Grok"}
               </button>
             )}
           </div>
@@ -208,7 +208,7 @@ export function LetterModal({
             </div>
           ) : (
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded p-8 text-center text-[var(--text-tertiary)]">
-              Aucune lettre générée. Cliquez sur "Générer avec Claude" pour en créer une.
+              Aucune lettre générée. Cliquez sur "Générer avec Grok" pour en créer une.
             </div>
           )}
 

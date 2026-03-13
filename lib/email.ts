@@ -37,24 +37,48 @@ export async function sendCandidature(
   poste: string,
   email: string,
   letterPdfBuffer: Buffer,
-  candidatName: string = "Mohammed Hamiani"
+  candidatName: string = "Mohammed Hamiani",
+  type: "stage" | "alternance" | "cdi" = "stage"
 ): Promise<void> {
   const isSpontanee = poste.toLowerCase().includes("spontanée") || poste.toLowerCase().includes("spontanee");
+
+  let subjectPrefix = "Candidature";
+  let typeLabel = "stage";
+  let emailBody = "";
+
+  if (type === "stage") {
+    typeLabel = "stage";
+    subjectPrefix = "Candidature - Stage";
+  } else if (type === "alternance") {
+    typeLabel = "alternance";
+    subjectPrefix = "Candidature - Alternance";
+  } else if (type === "cdi") {
+    typeLabel = "CDI";
+    subjectPrefix = "Candidature - CDI";
+  }
+
   const subject = isSpontanee
-    ? `Candidature spontanée - Stage développeur - ${candidatName}`
-    : `Candidature - ${poste} - ${candidatName}`;
-  const html = isSpontanee
-    ? `
+    ? `${subjectPrefix} développeur - ${candidatName}`
+    : `${subjectPrefix} - ${poste} - ${candidatName}`;
+
+  if (isSpontanee) {
+    const typeText =
+      type === "cdi" ? "un CDI en développement web" :
+      type === "alternance" ? "une alternance en développement web dès septembre 2026" :
+      "un stage de 3 mois en développement web, avec la possibilité de poursuivre en alternance dès septembre 2026";
+
+    emailBody = `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
       <p>Bonjour,</p>
       <p>Actuellement en formation Concepteur Développeur d'Applications, je me permets de vous contacter car le travail de <strong>${entreprise}</strong> m'intéresse particulièrement.</p>
-      <p>Je suis à la recherche d'un <strong>stage de 3 mois</strong> en développement web, avec la possibilité de poursuivre en alternance dès septembre 2026.</p>
+      <p>Je suis à la recherche de <strong>${typeText}</strong>.</p>
       <p>Vous trouverez ci-joint mon CV ainsi qu'une lettre de motivation détaillant mon parcours et mes motivations.</p>
       <p>Je serais ravi d'échanger avec vous à ce sujet.</p>
       <p>Cordialement,<br><strong>${candidatName}</strong></p>
     </div>
-  `
-    : `
+  `;
+  } else {
+    emailBody = `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
       <p>Bonjour,</p>
       <p>Votre offre de <strong>${poste}</strong> a retenu toute mon attention et je souhaite vous proposer ma candidature.</p>
@@ -63,6 +87,9 @@ export async function sendCandidature(
       <p>Cordialement,<br><strong>${candidatName}</strong></p>
     </div>
   `;
+  }
+
+  const html = emailBody;
 
   const cvPath = path.join(process.cwd(), "candidatureModel", "cv-mohammed.pdf");
   if (!fs.existsSync(cvPath)) {

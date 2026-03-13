@@ -81,7 +81,22 @@ export function GenerateLetterModal({
     }
     setLoading(true);
     try {
-      await onSend(candidature, improvedLetter, email);
+      // Send with type parameter
+      const res = await fetch("/api/send-email", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          candidature_id: candidature._id,
+          email_destinataire: email,
+          type,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Erreur lors de l'envoi");
+
       await onUpdate(candidature._id || "", {
         lettre: improvedLetter,
         statut: "postulée",

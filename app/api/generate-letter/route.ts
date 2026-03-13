@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { candidature_id, customInstructions } = body;
+    const { candidature_id, customInstructions, personalNeeds } = body;
 
     if (!candidature_id) {
       return NextResponse.json(
@@ -27,6 +27,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Candidature not found" }, { status: 404 });
     }
 
+    // Combine personalNeeds with customInstructions for generation
+    let finalInstructions = customInstructions || "";
+    if (personalNeeds) {
+      const needsPrefix = "**Attentes personnelles du candidat :**\n" + personalNeeds;
+      finalInstructions = customInstructions
+        ? `${needsPrefix}\n\n${customInstructions}`
+        : needsPrefix;
+    }
+
     // Generate letter with Grok - use aboutText if available
     let lettre: string;
     if (candidature.aboutText) {
@@ -34,14 +43,14 @@ export async function POST(request: NextRequest) {
         candidature.entreprise,
         candidature.aboutText,
         candidature.poste,
-        customInstructions
+        finalInstructions
       );
     } else {
       lettre = await generateLettre(
         candidature.entreprise,
         candidature.poste,
         candidature.description,
-        customInstructions
+        finalInstructions
       );
     }
 

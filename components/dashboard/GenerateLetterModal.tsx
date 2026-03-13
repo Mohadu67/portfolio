@@ -41,12 +41,13 @@ export function GenerateLetterModal({
   const [template, setTemplate] = useState<keyof typeof LETTER_TEMPLATES>("formal");
   const [generatedLetter, setGeneratedLetter] = useState("");
   const [editingLetter, setEditingLetter] = useState("");
-  const [step, setStep] = useState<"template" | "generate" | "review">("template");
+  const [step, setStep] = useState<"needs" | "template" | "generate" | "review">("needs");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState(candidature?.email || "");
   const [customInstructions, setCustomInstructions] = useState("");
   const [showRegenerateInput, setShowRegenerateInput] = useState(false);
+  const [personalNeeds, setPersonalNeeds] = useState("");
 
   if (!isOpen || !candidature) return null;
 
@@ -62,6 +63,7 @@ export function GenerateLetterModal({
         body: JSON.stringify({
           candidature_id: candidature._id,
           template,
+          ...(personalNeeds.trim() && { personalNeeds: personalNeeds.trim() }),
           ...(customInstructions.trim() && { customInstructions: customInstructions.trim() }),
         }),
       });
@@ -137,11 +139,13 @@ export function GenerateLetterModal({
           transition={{ delay: 0.1 }}
         >
           <motion.h2 className="text-2xl font-bold bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] bg-clip-text text-transparent">
-            {step === "template"
-              ? "Choisir un modèle"
-              : step === "generate"
-                ? "Génération en cours..."
-                : "Réviser et envoyer"}
+            {step === "needs"
+              ? "Exprimer vos besoins"
+              : step === "template"
+                ? "Choisir un modèle"
+                : step === "generate"
+                  ? "Génération en cours..."
+                  : "Réviser et envoyer"}
           </motion.h2>
           <motion.button
             onClick={onClose}
@@ -156,6 +160,46 @@ export function GenerateLetterModal({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 relative z-10">
           <AnimatePresence mode="wait">
+            {step === "needs" && (
+              <motion.div
+                key="needs"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-5"
+              >
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                  <p className="text-[var(--text-secondary)] mb-2 text-sm">Candidature pour</p>
+                  <p className="text-lg font-semibold text-[var(--text-primary)]">
+                    {candidature.entreprise} • {candidature.poste}
+                  </p>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
+                    Vos attentes / besoins
+                  </label>
+                  <p className="text-xs text-[var(--text-secondary)] mb-3">
+                    Exprimez en quelques lignes ce que vous recherchez chez cette entreprise, vos attentes, ou ce qui vous intéresse particulièrement. L'IA personnalisera la lettre en fonction.
+                  </p>
+                  <motion.textarea
+                    value={personalNeeds}
+                    onChange={(e) => setPersonalNeeds(e.target.value)}
+                    className="w-full h-40 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)]/80 focus:shadow-lg focus:shadow-[var(--accent-orange)]/20 font-mono text-sm transition-all resize-none"
+                    placeholder="Ex: Je cherche une équipe collaborative, je suis intéressé par la tech du cloud, je veux m'impliquer dans le produit..."
+                    whileFocus={{ scale: 1.01 }}
+                  />
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
+                  <p className="text-xs text-[var(--text-tertiary)]">
+                    Vous pourrez aussi ajouter des précisions pendant la régénération si nécessaire.
+                  </p>
+                </motion.div>
+              </motion.div>
+            )}
+
             {step === "template" && (
               <motion.div
                 key="template"
@@ -414,14 +458,31 @@ export function GenerateLetterModal({
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          {step !== "template" && (
+          {step !== "needs" && (
             <motion.button
-              onClick={() => setStep(step === "generate" ? "template" : "generate")}
+              onClick={() => {
+                if (step === "generate") {
+                  setStep("template");
+                } else if (step === "template") {
+                  setStep("needs");
+                }
+              }}
               className="px-6 py-3 rounded-lg border border-[var(--border-color)]/50 text-[var(--text-primary)] hover:border-[var(--accent-orange)]/60 hover:bg-[var(--accent-orange)]/5 transition-all font-medium"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
               Retour
+            </motion.button>
+          )}
+
+          {step === "needs" && (
+            <motion.button
+              onClick={() => setStep("template")}
+              className="ml-auto px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-blue)]/80 text-white font-semibold hover:shadow-lg hover:shadow-[var(--accent-blue)]/30 transition-all"
+              whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(46, 159, 216, 0.3)" }}
+              whileTap={{ scale: 0.95 }}
+            >
+              Continuer
             </motion.button>
           )}
 

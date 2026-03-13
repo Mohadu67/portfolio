@@ -12,8 +12,17 @@ const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 const PHONE_REGEX = /(?:\+33|0)\s*[1-9](?:[\s.-]*\d{2}){4}/g;
 
 const ABOUT_LINK_PATTERNS = [
+  // About/Company pages
   /\b(about|a-propos|a_propos|apropos|qui-sommes-nous|qui_sommes_nous|notre-histoire|notre-equipe|notre-mission|presentation|l-association|lassociation|notre-association)\b/i,
-  /\b(contact|nous-contacter|contactez-nous)\b/i,
+  // Contact pages
+  /\b(contact|nous-contacter|contactez-nous|get-in-touch)\b/i,
+];
+
+const LEGAL_LINK_PATTERNS = [
+  // Legal/Privacy pages - HIGH PRIORITY (emails often here)
+  /\b(rgpd|privacy|confidentialite|conditions|conditions-generales|cgu|cgv|legal|mentions-legales|mentions_legales|données-personnelles|donnees-personnelles|data-protection|politique-de-confidentialite|politique-confidentialite|protection-donnees|protection-données)\b/i,
+  // Footer links (where legal pages are often found)
+  /\b(footer|sitemap|plan-du-site|plan_du_site)\b/i,
 ];
 
 function extractEmails(html: string): string[] {
@@ -30,7 +39,7 @@ function extractPhones(text: string): string[] {
   return [...new Set(matches.map((p) => p.replace(/[\s.-]/g, "")))];
 }
 
-function findAboutLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
+function findLinksByPatterns($: cheerio.CheerioAPI, baseUrl: string, patterns: RegExp[]): string[] {
   const links: string[] = [];
   $("a[href]").each((_, el) => {
     const href = $(el).attr("href");
@@ -38,11 +47,11 @@ function findAboutLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
     if (!href) return;
 
     const hrefLower = href.toLowerCase();
-    const isAboutLink =
-      ABOUT_LINK_PATTERNS.some((p) => p.test(hrefLower)) ||
-      ABOUT_LINK_PATTERNS.some((p) => p.test(text));
+    const isMatch =
+      patterns.some((p) => p.test(hrefLower)) ||
+      patterns.some((p) => p.test(text));
 
-    if (isAboutLink) {
+    if (isMatch) {
       try {
         const fullUrl = new URL(href, baseUrl).href;
         if (fullUrl.startsWith("http")) links.push(fullUrl);
@@ -50,6 +59,14 @@ function findAboutLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
     }
   });
   return [...new Set(links)];
+}
+
+function findAboutLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
+  return findLinksByPatterns($, baseUrl, ABOUT_LINK_PATTERNS);
+}
+
+function findLegalLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
+  return findLinksByPatterns($, baseUrl, LEGAL_LINK_PATTERNS);
 }
 
 function extractCompanyName($: cheerio.CheerioAPI): string {
@@ -147,11 +164,15 @@ export async function scrapeCompanyWebsite(url: string): Promise<ScrapedCompanyD
   result.emails = extractEmails(homeHtml);
   result.phones = extractPhones($home.text());
 
-  // 2. Find about/contact links
+  // 2. Find about/contact and legal links (prioritize legal pages - emails are often there)
   const aboutLinks = findAboutLinks($home, url);
+  const legalLinks = findLegalLinks($home, url);
 
-  // 3. Scrape about/contact pages (max 3)
-  const pagesToScrape = aboutLinks.slice(0, 3);
+  // Combine and prioritize: legal pages first (more likely to have emails), then about/contact
+  const allLinks = [...new Set([...legalLinks, ...aboutLinks])];
+
+  // 3. Scrape multiple pages (legal + about/contact, max 6)
+  const pagesToScrape = allLinks.slice(0, 6);
   const pageResults = await Promise.all(pagesToScrape.map(fetchPage));
 
   for (const pageHtml of pageResults) {

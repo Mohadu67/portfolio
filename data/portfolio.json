@@ -193,7 +193,7 @@
     {
       "id": "generation-connect",
       "name": "Generation Connect",
-      "url": "https://generation-connect.nutriform.store",
+      "url": "https://generationconnecte.fr",
       "description": "Plateforme de mise en relation intergénérationnelle : matching de profils, recherche avancée, messagerie. Interface responsive déployée en production.",
       "image": "/logoGC.svg",
       "stack": ["React", "Node.js", "Express", "PostgreSQL", "CSS Modules"]

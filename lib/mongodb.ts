@@ -1,9 +1,11 @@
 import mongoose from "mongoose";
 
-const MONGODB_URI: string = process.env.MONGO_URI as string;
-
-if (!MONGODB_URI) {
-  throw new Error("Please define the MONGO_URI environment variable inside .env.local");
+function getMongoURI(): string {
+  const uri = process.env.MONGO_URI;
+  if (!uri) {
+    throw new Error("Please define the MONGO_URI environment variable");
+  }
+  return uri;
 }
 
 // Singleton pattern pour éviter les connexions multiples en développement
@@ -32,7 +34,7 @@ export async function connectDB() {
       bufferCommands: false,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts);
+    cached.promise = mongoose.connect(getMongoURI(), opts);
   }
 
   try {

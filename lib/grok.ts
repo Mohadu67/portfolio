@@ -1,6 +1,9 @@
-const apiKey = process.env.GROK_API_KEY;
-if (!apiKey) {
-  throw new Error("GROK_API_KEY environment variable is not set");
+function getGrokApiKey(): string {
+  const key = process.env.GROK_API_KEY;
+  if (!key) {
+    throw new Error("GROK_API_KEY environment variable is not set");
+  }
+  return key;
 }
 
 // Use OpenAI-compatible API for Groq
@@ -23,7 +26,7 @@ async function callGrok(prompt: string, systemPrompt?: string): Promise<string> 
   const response = await fetch(`${GROK_API_URL}/chat/completions`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${apiKey}`,
+      "Authorization": `Bearer ${getGrokApiKey()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

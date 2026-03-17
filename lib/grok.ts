@@ -74,44 +74,54 @@ export async function generateLetterProposal(
   aboutText: string,
   poste?: string
 ): Promise<string> {
-  const systemPrompt = `Tu es un expert en lettres de motivation naturelles et humaines pour le secteur tech.
-Ton style: direct, concis, honnête. Pas de blabla, pas de formules creuses.
-La lettre doit ressembler à quelqu'un qui parle vraiment, pas à un robot marketing.`;
+  const systemPrompt = `Tu es un expert en lettres de motivation. Tu génères UNIQUEMENT un court paragraphe de transition qui fait le lien entre le profil du candidat et l'entreprise ciblée. Rien d'autre.
+Ton style: direct, concis, professionnel. Pas de blabla, pas de formules creuses.`;
 
-  const posteInfo = poste && !poste.toLowerCase().includes("spontanée")
-    ? `pour le poste de ${poste}`
-    : "pour une alternance";
+  const prompt = `Je rédige une lettre de motivation pour ${entreprise}.
 
-  const prompt = `Génère une lettre de motivation naturelle et humaine ${posteInfo} chez ${entreprise}.
+Voici la structure FIXE de ma lettre (ne la modifie PAS, ne la répète PAS) :
 
-PROFIL DU CANDIDAT:
-- Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans
-- Recherche alternance à partir de septembre 2026 (2j entreprise + 1j cours)
-- Bachelor concepteur développeur informatique en cours
-- Compétences: Figma, Adobe XD, UML, Merise, Node.js, Express, PHP, Prisma, PostgreSQL, MariaDB, MongoDB, React, Vite, Next.js, TypeScript, Docker, Linux, Ubuntu, SSH, VPS, CI/CD, Lynis, Fail2ban
-- Capable de gérer des projets de A à Z, autonome, adaptatif
+---
+Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans et également admis en Master Manager en Ingénierie Informatique, je recherche une alternance dès la rentrée 2026 (2 jours en entreprise / 1 jour en cours).
+
+Actuellement en fin de bachelor concepteur développeur d'applications, je conçois et développe des applications web complètes, de la modélisation à la mise en production. J'ai l'habitude de travailler avec des méthodes structurées et de livrer des solutions fonctionnelles, maintenables et sécurisées.
+
+Je maîtrise des environnements full-stack (Node.js, React, PHP) et le déploiement en conditions réelles avec des pratiques de CI/CD.
+
+[PARAGRAPHE À GÉNÉRER ICI]
+
+Je cherche aujourd'hui un environnement exigeant où je pourrai être rapidement confronté à des problématiques concrètes et apporter une contribution technique utile.
+
+Je reste disponible pour un échange.
+---
 
 À PROPOS DE L'ENTREPRISE:
 ${aboutText.substring(0, 1000)}
 
 INSTRUCTIONS:
-- Rédige une lettre qui parle directement, sans phrases creuses
-- Mentionne 2-3 détails concrets de l'entreprise (si l'about text le permet)
-- Montre les compétences techniques pertinentes naturellement, pas sous forme de liste
-- Ton: direct, honnête, confiant. Comme quelqu'un qui parle vraiment
-- Longueur: 4-5 paragraphes, pas plus
-- Ne mets PAS "Madame, Monsieur," au début ni de signature à la fin
-
-Exemple de style souhaité:
-"Je recherche une alternance à partir de septembre 2026 dans une équipe qui travaille sur des projets modernes.
-Actuellement en bachelor concepteur développeur, j'ai acquis des compétences solides en full-stack:
-React/Next.js côté frontend, Node.js/Express ou PHP côté backend, avec PostgreSQL ou MongoDB.
-Je travaille aussi avec Docker, Linux et j'ai configuré des déploiements CI/CD sur VPS..."
-
-Génère UNIQUEMENT la lettre, sans introduction.`;
+- Génère UNIQUEMENT le paragraphe manquant [PARAGRAPHE À GÉNÉRER ICI]
+- Ce paragraphe doit faire le lien entre mes compétences et ce que fait ${entreprise}
+- Mentionne 1-2 éléments concrets de l'entreprise (activité, techno, produit) tirés du texte "à propos"
+- Explique pourquoi ${entreprise} m'intéresse et ce que je peux apporter
+- 2-3 phrases max, ton direct et professionnel
+- Ne mets PAS de guillemets autour du paragraphe
+- Ne répète PAS le reste de la lettre, JUSTE le paragraphe de transition`;
 
   try {
-    return await callGrok(prompt, systemPrompt);
+    const paragraph = await callGrok(prompt, systemPrompt);
+
+    // Assemble the full letter with the generated paragraph
+    return `Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans et également admis en Master Manager en Ingénierie Informatique, je recherche une alternance dès la rentrée 2026 (2 jours en entreprise / 1 jour en cours).
+
+Actuellement en fin de bachelor concepteur développeur d'applications, je conçois et développe des applications web complètes, de la modélisation à la mise en production. J'ai l'habitude de travailler avec des méthodes structurées et de livrer des solutions fonctionnelles, maintenables et sécurisées.
+
+Je maîtrise des environnements full-stack (Node.js, React, PHP) et le déploiement en conditions réelles avec des pratiques de CI/CD.
+
+${paragraph.trim()}
+
+Je cherche aujourd'hui un environnement exigeant où je pourrai être rapidement confronté à des problématiques concrètes et apporter une contribution technique utile.
+
+Je reste disponible pour un échange.`;
   } catch (error) {
     console.error("Error generating letter proposal with Grok:", error);
     throw error;

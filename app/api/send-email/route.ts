@@ -74,9 +74,10 @@ export async function POST(request: NextRequest) {
       type || "stage"
     );
 
-    // Update status to "postulée"
+    // Update status to "postulée" and save type
     candidature.statut = "postulée";
     candidature.email = email_destinataire;
+    candidature.type = type || "stage";
     await candidature.save();
 
     return NextResponse.json({

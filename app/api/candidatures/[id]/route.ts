@@ -21,6 +21,8 @@ export async function PATCH(
       {
         ...(body.statut && { statut: body.statut as CandidatureStatut }),
         ...(body.notes !== undefined && { notes: body.notes }),
+        ...(body.type && { type: body.type }),
+        ...(body.relance !== undefined && { relance: body.relance }),
       },
       { new: true }
     );

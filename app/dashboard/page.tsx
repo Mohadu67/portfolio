@@ -11,7 +11,7 @@ import { SearchLoadingModal } from "@/components/dashboard/SearchLoadingModal";
 import { GenerateLetterModal } from "@/components/dashboard/GenerateLetterModal";
 import { FollowUpModal } from "@/components/dashboard/FollowUpModal";
 import { toast } from "sonner";
-import type { ICandidature, CandidatureStatut } from "@/models/Candidature";
+import type { ICandidature, IRelance, CandidatureStatut } from "@/models/Candidature";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -156,10 +156,43 @@ export default function Dashboard() {
     }
   };
 
-  const handleScheduleFollowUp = async (candidature: ICandidature, followUpDate: string) => {
+  const handleScheduleFollowUp = async (candidature: ICandidature, relance: IRelance) => {
     try {
       await handleUpdateCandidature(candidature._id || "", {
-        notes: `Relance prévue pour ${followUpDate}`,
+        relance,
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const handleSendRelanceNow = async (candidature: ICandidature, message: string, templateTitle: string) => {
+    try {
+      const res = await fetch("/api/send-relance", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          candidature_id: candidature._id,
+          message,
+          templateTitle,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Erreur lors de l'envoi de la relance");
+
+      await loadCandidatures(apiKey);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const handleCancelRelance = async (candidature: ICandidature) => {
+    try {
+      await handleUpdateCandidature(candidature._id || "", {
+        relance: null,
       });
     } catch (error) {
       throw error;
@@ -292,7 +325,7 @@ export default function Dashboard() {
             <BarChart3 size={28} className="text-[var(--accent-orange)]" />
             <div>
               <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-                Dashboard Stage
+                Dashboard Candidatures
               </h1>
               <p className="text-xs text-[var(--text-secondary)]">
                 Mohammed Hamiani
@@ -457,7 +490,10 @@ export default function Dashboard() {
             setShowFollowUpModal(false);
             setSelectedCandidature(null);
           }}
-          onFollowUp={handleScheduleFollowUp}
+          onSchedule={handleScheduleFollowUp}
+          onSendNow={handleSendRelanceNow}
+          onCancel={handleCancelRelance}
+          apiKey={apiKey}
         />
       )}
 

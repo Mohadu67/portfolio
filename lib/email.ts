@@ -117,3 +117,37 @@ export async function sendCandidature(
     ],
   });
 }
+
+export async function sendRelance(
+  entreprise: string,
+  poste: string,
+  email: string,
+  message: string,
+  templateTitle: string,
+  type: "stage" | "alternance" | "cdi" = "stage",
+  candidatName: string = "Mohammed Hamiani"
+): Promise<void> {
+  const isSpontanee = poste.toLowerCase().includes("spontanée") || poste.toLowerCase().includes("spontanee");
+
+  let typeLabel = "Stage";
+  if (type === "alternance") typeLabel = "Alternance";
+  else if (type === "cdi") typeLabel = "CDI";
+
+  const subject = isSpontanee
+    ? `${templateTitle} - Candidature ${typeLabel} développeur - ${candidatName}`
+    : `${templateTitle} - ${poste} - ${candidatName}`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
+      ${message.split("\n").map(line => line.trim() ? `<p>${line}</p>` : "").join("")}
+    </div>
+  `;
+
+  const transporter = getTransporter();
+  await transporter.sendMail({
+    from: process.env.GMAIL_USER,
+    to: email,
+    subject,
+    html,
+  });
+}

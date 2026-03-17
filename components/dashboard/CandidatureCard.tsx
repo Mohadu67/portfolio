@@ -121,6 +121,28 @@ export function CandidatureCard({
         </span>
       </div>
 
+      {/* Relance scheduled */}
+      {candidature.relance && candidature.relance.status === "programmée" && (
+        <div className="mb-3 p-2 bg-[var(--accent-orange)]/10 rounded border border-[var(--accent-orange)]/30 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[var(--accent-orange)] font-semibold flex items-center gap-1">
+              <Clock size={14} />
+              Relance le {new Date(candidature.relance.date + "T00:00:00").toLocaleDateString("fr-FR")}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Relance sent */}
+      {candidature.relance && candidature.relance.status === "envoyée" && (
+        <div className="mb-3 p-2 bg-green-500/10 rounded border border-green-500/30 text-sm">
+          <span className="text-green-400 font-semibold flex items-center gap-1">
+            <Mail size={14} />
+            Relance envoyée
+          </span>
+        </div>
+      )}
+
       {/* Notes if present */}
       {candidature.notes && (
         <div className="mb-3 p-2 bg-[var(--bg-secondary)] rounded border border-[var(--border-color)] text-sm text-[var(--text-secondary)]">
@@ -166,12 +188,16 @@ export function CandidatureCard({
               e.stopPropagation();
               onFollowUp?.(candidature);
             }}
-            className="text-xs px-3 py-1.5 flex items-center gap-1 rounded bg-[var(--accent-orange)]/20 text-[var(--accent-orange)] hover:bg-[var(--accent-orange)]/30 transition-colors flex-1"
+            className={`text-xs px-3 py-1.5 flex items-center gap-1 rounded transition-colors flex-1 ${
+              candidature.relance?.status === "programmée"
+                ? "bg-[var(--accent-orange)]/30 text-[var(--accent-orange)] border border-[var(--accent-orange)]/40"
+                : "bg-[var(--accent-orange)]/20 text-[var(--accent-orange)] hover:bg-[var(--accent-orange)]/30"
+            }`}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
             <Clock size={14} />
-            Relance
+            {candidature.relance?.status === "programmée" ? "Gérer relance" : "Relance"}
           </motion.button>
         )}
 

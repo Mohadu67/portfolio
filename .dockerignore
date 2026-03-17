@@ -8,3 +8,8 @@ npm-debug.log
 .env
 .env.local
 .env.*.local
+docker-compose*.yml
+.github
+logs
+screens
+README.md

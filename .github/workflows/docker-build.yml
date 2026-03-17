@@ -1,0 +1,95 @@
+name: Build & Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: mohadu67/curriculum
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-app
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-app:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-app:buildcache,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 62326
+          script: |
+            cd /home/moha/srv-docker/projects/portfolio
+
+            # Login GHCR
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u mohadu67 --password-stdin
+
+            # Pull l'image
+            docker pull ghcr.io/mohadu67/curriculum-app:latest
+
+            # Relance la prod
+            docker compose -f docker-compose.prod.yml up -d
+
+            # Logout
+            docker logout ghcr.io
+
+            echo "Deploiement termine"
+
+  notify-deployment:
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy]
+    if: always()
+    steps:
+      - name: Image pushed successfully
+        run: |
+          echo "Docker image pushed to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-app:latest"
+          echo "Ready to deploy on VPS"

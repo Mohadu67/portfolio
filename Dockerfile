@@ -1,4 +1,4 @@
-FROM node:18-alpine AS base
+FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -39,7 +39,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 RUN mkdir -p .next/cache/images && \
     chown -R nextjs:nodejs .next/cache
 
-# Fix: copy candidatureModel (CV + LM templates) and make writable for runtime PDF generation
+# Copy candidatureModel (CV + LM templates) and make writable for runtime PDF generation
 COPY --from=builder --chown=nextjs:nodejs /app/candidatureModel ./candidatureModel
 
 USER nextjs

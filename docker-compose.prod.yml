@@ -1,0 +1,88 @@
+# Production Compose - Pull images from GHCR only (no build)
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: portfolio-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS:-admin}
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - portfolio-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  app:
+    image: ghcr.io/mohadu67/curriculum-app:latest
+    pull_policy: always
+    container_name: portfolio
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      # MongoDB
+      MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASS:-admin}@mongodb:27017/stage_agent?authSource=admin
+
+      # Auth
+      API_SECRET: ${API_SECRET:?API secret required}
+
+      # AI
+      GROK_API_KEY: ${GROK_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+
+      # Gmail SMTP
+      GMAIL_USER: ${GMAIL_USER}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
+
+      # RapidAPI (JSearch + Adzuna)
+      RAPIDAPI_KEY: ${RAPIDAPI_KEY}
+
+      # France Travail OAuth2
+      FRANCE_TRAVAIL_CLIENT_ID: ${FRANCE_TRAVAIL_CLIENT_ID}
+      FRANCE_TRAVAIL_CLIENT_SECRET: ${FRANCE_TRAVAIL_CLIENT_SECRET}
+
+      # SerpAPI
+      SERPAPI_KEY: ${SERPAPI_KEY}
+
+      # Profil
+      PROFIL_NOM: ${PROFIL_NOM:-Mohammed Hamiani}
+      PROFIL_FORMATION: ${PROFIL_FORMATION:-Concepteur Développeur Fullstack}
+      PROFIL_COMPETENCES: ${PROFIL_COMPETENCES}
+      PROFIL_EXPERIENCE: ${PROFIL_EXPERIENCE}
+      PROFIL_RECHERCHE: ${PROFIL_RECHERCHE}
+      PROFIL_DISPO: ${PROFIL_DISPO}
+
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - portfolio-network
+    volumes:
+      - ./candidatureModel:/app/candidatureModel
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  portfolio-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local

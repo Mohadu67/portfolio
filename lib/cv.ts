@@ -110,12 +110,14 @@ export async function getCVData(): Promise<CVData> {
   }
 }
 
-export const SEED_SECTIONS: Array<Omit<ICVSection, "_id" | "created_at" | "updated_at">> = [
-  { key: "profile", type: "profile", title: "Profil", order: 0, isVisible: true, content: portfolioData.profile },
-  { key: "skills", type: "skills", title: "Compétences Techniques", order: 1, isVisible: true, content: { items: portfolioData.skills } },
-  { key: "education", type: "education", title: "Formation", order: 2, isVisible: true, content: { items: portfolioData.education } },
-  { key: "experience", type: "experience", title: "Expérience Professionnelle", order: 3, isVisible: true, content: { items: portfolioData.experience } },
-  { key: "projects", type: "projects", title: "Projets", order: 4, isVisible: true, content: { items: portfolioData.projects } },
-  { key: "contact", type: "contact", title: "Me contacter", order: 5, isVisible: true, content: portfolioData.contact },
-  { key: "socials", type: "socials", title: "Connectez-vous", order: 6, isVisible: true, content: { items: portfolioData.socials } },
+type SeedSection = Omit<ICVSection, "_id" | "created_at" | "updated_at">;
+
+export const SEED_SECTIONS: SeedSection[] = [
+  { key: "profile", type: "profile", title: "Profil", order: 0, isVisible: true, content: portfolioData.profile as CVProfileContent },
+  { key: "skills", type: "skills", title: "Compétences Techniques", order: 1, isVisible: true, content: { items: portfolioData.skills as CVSkillItem[] } },
+  { key: "education", type: "education", title: "Formation", order: 2, isVisible: true, content: { items: portfolioData.education as CVEducationItem[] } },
+  { key: "experience", type: "experience", title: "Expérience Professionnelle", order: 3, isVisible: true, content: { items: portfolioData.experience as CVExperienceItem[] } },
+  { key: "projects", type: "projects", title: "Projets", order: 4, isVisible: true, content: { items: portfolioData.projects as CVProjectItem[] } },
+  { key: "contact", type: "contact", title: "Me contacter", order: 5, isVisible: true, content: portfolioData.contact as CVContactContent },
+  { key: "socials", type: "socials", title: "Connectez-vous", order: 6, isVisible: true, content: { items: portfolioData.socials as CVSocialItem[] } },
 ];

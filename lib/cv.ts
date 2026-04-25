@@ -1,15 +1,25 @@
 import { connectDB } from "@/lib/mongodb";
-import { CVSection, ICVSection } from "@/models/CVSection";
+import {
+  CVSection,
+  ICVSection,
+  CVProfileContent,
+  CVSocialItem,
+  CVSkillItem,
+  CVProjectItem,
+  CVEducationItem,
+  CVExperienceItem,
+  CVContactContent,
+} from "@/models/CVSection";
 import portfolioData from "@/data/portfolio.json";
 
 export interface CVData {
-  profile: typeof portfolioData.profile;
-  socials: typeof portfolioData.socials;
-  skills: typeof portfolioData.skills;
-  projects: typeof portfolioData.projects;
-  education: typeof portfolioData.education;
-  experience: typeof portfolioData.experience;
-  contact: typeof portfolioData.contact;
+  profile: CVProfileContent;
+  socials: CVSocialItem[];
+  skills: CVSkillItem[];
+  projects: CVProjectItem[];
+  education: CVEducationItem[];
+  experience: CVExperienceItem[];
+  contact: CVContactContent;
   customSections: Array<{
     _id: string;
     key: string;
@@ -28,13 +38,13 @@ export interface CVData {
 }
 
 const FALLBACK: CVData = {
-  profile: portfolioData.profile,
-  socials: portfolioData.socials,
-  skills: portfolioData.skills,
-  projects: portfolioData.projects,
-  education: portfolioData.education,
-  experience: portfolioData.experience,
-  contact: portfolioData.contact,
+  profile: portfolioData.profile as CVProfileContent,
+  socials: portfolioData.socials as CVSocialItem[],
+  skills: portfolioData.skills as CVSkillItem[],
+  projects: portfolioData.projects as CVProjectItem[],
+  education: portfolioData.education as CVEducationItem[],
+  experience: portfolioData.experience as CVExperienceItem[],
+  contact: portfolioData.contact as CVContactContent,
   customSections: [],
   sections: [
     { _id: "fallback-profile", key: "profile", type: "profile", title: "Profile", order: 0, isVisible: true },

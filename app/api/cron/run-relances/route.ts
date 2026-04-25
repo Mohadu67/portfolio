@@ -3,16 +3,12 @@ import { connectDB } from "@/lib/mongodb";
 import { Candidature, ICandidature, IRelanceLog } from "@/models/Candidature";
 import { sendRelance } from "@/lib/email";
 
-/**
- * Cron endpoint: runs all due relances.
- *
- * Auth: Authorization: Bearer $CRON_SECRET (separate from API_SECRET)
- *
- * Schedule on VPS via crontab:
- *   */15 * * * * curl -fsS -X POST \
- *     -H "Authorization: Bearer $CRON_SECRET" \
- *     https://your-domain/api/cron/run-relances >/dev/null
- */
+// Cron endpoint: runs all due relances.
+//
+// Auth: Authorization: Bearer $CRON_SECRET (separate from API_SECRET)
+//
+// Schedule on VPS via crontab (every 15 min):
+//   *‍/15 * * * * curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/run-relances >/dev/null
 export async function POST(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {

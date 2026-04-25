@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature, ICandidature, IRelanceLog } from "@/models/Candidature";
 import { sendRelance } from "@/lib/email";
+import { sendNotification } from "@/lib/notifications";
 
 // Cron endpoint: runs all due relances.
 //
@@ -73,6 +74,18 @@ export async function POST(request: NextRequest) {
               error: null,
             },
           ];
+
+          sendNotification({
+            type: "relance",
+            candidature: {
+              _id: String(candidature._id),
+              entreprise: candidature.entreprise,
+              poste: candidature.poste,
+              email: candidature.email,
+            },
+            emailSubject: `${entry.templateTitle ?? "Relance"} - ${candidature.poste}`,
+          }).catch(() => {});
+
           succeeded++;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);

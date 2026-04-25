@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import { Candidature } from "@/models/Candidature";
 import { sendRelance } from "@/lib/email";
 import { verifyAuth } from "@/lib/auth";
+import { sendNotification } from "@/lib/notifications";
 
 export async function POST(request: NextRequest) {
   if (!verifyAuth(request)) {
@@ -98,6 +99,17 @@ export async function POST(request: NextRequest) {
     if (sendError) {
       throw new Error(sendError);
     }
+
+    sendNotification({
+      type: "relance",
+      candidature: {
+        _id: String(candidature._id),
+        entreprise: candidature.entreprise,
+        poste: candidature.poste,
+        email: candidature.email,
+      },
+      emailSubject: `${templateTitle || "Relance"} - ${candidature.poste}`,
+    }).catch(() => {});
 
     return NextResponse.json({
       message: "Relance sent successfully",

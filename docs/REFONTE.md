@@ -115,3 +115,22 @@ Légende : ⏳ pending · 🟡 en cours · ✅ livré · ⚠️ bloqué
 - **Tool use IA** : `lib/ai/tools.ts` (5 tools : `schedule_relance`, `cancel_relance`, `update_candidature_status`, `update_candidature_notes`, `send_relance_now`). Endpoint `/api/chat/tool-exec` qui exécute les tools côté serveur. Streaming `/api/chat` enrichi pour intercepter `tool_use` et les renvoyer via SSE. UI `ChatPanel` refondue : carte de confirmation pour chaque tool call, exécution séquentielle, renvoi des résultats à l'IA pour suite. Persistence sessionStorage v2 (avec tool_calls).
 - **Vue 360 candidature** : `app/dashboard/candidatures/[id]/page.tsx` plein écran : header (entreprise, poste, statut, badges, switcher de statut), 2 colonnes (lettre versionnée, description, notes inline éditables, historique emails | actions, relances avec actions per-relance + composer slide-in).
 - **Déploiement VPS** : VPS mis à jour (commits 0→5 + tool use). `docker-compose.yml` working preservé (volumes existants), Dockerfile du repo (Node 22 + lazy env) accepté. Nouveau workflow GitHub Actions qui fait `git pull` proprement avec stash/restore du compose VPS-spécifique.
+
+### 2026-04-25 — Notifications + Gmail IMAP sync
+
+**Notifications (envoi mail à soi-même)**
+- `lib/notifications.ts` : `sendNotification({ type, candidature, ... })` envoie un email HTML stylé à `GMAIL_USER` (= soi-même) à chaque action. Vérifie les préférences dans Settings avant d'envoyer.
+- Branché sur : `/api/send-email` (candidature), `/api/send-relance` (manuelle), `/api/cron/run-relances` (cron), et le sync IMAP (réponse reçue).
+- Toggle ON/OFF par type dans `/dashboard/settings`.
+
+**Gmail IMAP — détection des réponses**
+- Deps : `imapflow` + `mailparser`.
+- `lib/gmail-imap.ts` : `syncGmailInbox()` se connecte à `imap.gmail.com:993` avec `GMAIL_APP_PASSWORD`, scanne les messages non lus des 30 derniers jours, matche par `From:` avec `candidature.email` (exact, case-insensitive).
+- Pour chaque match : ajoute à `candidature.emailsReceived[]` (date, from, subject, snippet, messageId, archived), passe le statut à `réponse reçue` si actuellement `postulée`, dédoublonne par `messageId`.
+- Si `gmail.autoArchiveResponses=true` : déplace l'email vers le label Gmail `Cockpit/Réponses candidatures` (le crée si absent).
+- Endpoint `POST /api/cron/check-inbox` (auth Bearer CRON_SECRET) : à brancher sur crontab toutes les 30 min. Skip si `gmail.inboxSyncEnabled=false`.
+- Endpoint `POST /api/inbox/sync` (auth API key) : déclenchement manuel depuis l'UI, avec mode `?dryRun=1`.
+- Modèle `Settings` créé : `notifications.{onCandidatureSent,onRelanceSent,onInboxResponse}` + `gmail.{inboxSyncEnabled,autoArchiveResponses,lastSyncAt,lastSyncSummary}`.
+- API `/api/settings` GET/PATCH.
+- UI `/dashboard/settings` refondue : toggles propres pour chaque option, bouton « Synchroniser maintenant » + dry-run, dernière sync affichée, résumé des matchs.
+- Schéma `Candidature` : `emailsReceived[]` ajouté + index sur `email` et `emailsReceived.messageId`.

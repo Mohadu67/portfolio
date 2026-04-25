@@ -5,6 +5,7 @@ import { sendCandidature } from "@/lib/email";
 import { generateLettrePDF } from "@/lib/pdf-generator";
 import { verifyAuth } from "@/lib/auth";
 import { resolveCVForSend } from "@/lib/cvFile";
+import { sendNotification } from "@/lib/notifications";
 import fs from "fs";
 import path from "path";
 
@@ -107,6 +108,19 @@ export async function POST(request: NextRequest) {
     candidature.email = email_destinataire;
     candidature.type = type || "stage";
     await candidature.save();
+
+    // Fire-and-forget notification
+    sendNotification({
+      type: "candidature",
+      candidature: {
+        _id: String(candidature._id),
+        entreprise: candidature.entreprise,
+        poste: candidature.poste,
+        email: email_destinataire,
+        statut: "postulée",
+      },
+      emailSubject,
+    }).catch(() => {});
 
     return NextResponse.json({
       message: "Email sent successfully",

@@ -54,6 +54,17 @@ export interface IEmailLog {
   error?: string | null;
 }
 
+export interface IEmailReceived {
+  date: Date;
+  from: string;
+  fromName?: string;
+  subject: string;
+  snippet: string;
+  messageId?: string;
+  uid?: number;
+  archived: boolean;
+}
+
 export interface ICandidature {
   _id?: string;
   entreprise: string;
@@ -72,6 +83,7 @@ export interface ICandidature {
   relance: IRelance | null;
   letters: ILetterVersion[];
   emailsSent: IEmailLog[];
+  emailsReceived: IEmailReceived[];
   relanceHistory: IRelanceLog[];
   date: string;
   created_at: Date;
@@ -119,6 +131,20 @@ const emailLogSchema = new Schema<IEmailLog>(
   { _id: false }
 );
 
+const emailReceivedSchema = new Schema<IEmailReceived>(
+  {
+    date: { type: Date, required: true },
+    from: { type: String, required: true },
+    fromName: { type: String },
+    subject: { type: String, required: true },
+    snippet: { type: String, default: "" },
+    messageId: { type: String },
+    uid: { type: Number },
+    archived: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
 const candidatureSchema = new Schema<ICandidature>(
   {
     entreprise: { type: String, required: true },
@@ -153,6 +179,7 @@ const candidatureSchema = new Schema<ICandidature>(
     },
     letters: { type: [letterVersionSchema], default: [] },
     emailsSent: { type: [emailLogSchema], default: [] },
+    emailsReceived: { type: [emailReceivedSchema], default: [] },
     relanceHistory: { type: [relanceLogSchema], default: [] },
     date: { type: String },
   },
@@ -161,6 +188,8 @@ const candidatureSchema = new Schema<ICandidature>(
 
 candidatureSchema.index({ statut: 1, created_at: -1 });
 candidatureSchema.index({ entreprise: 1 });
+candidatureSchema.index({ email: 1 });
 candidatureSchema.index({ "relanceHistory.scheduledFor": 1, "relanceHistory.status": 1 });
+candidatureSchema.index({ "emailsReceived.messageId": 1 });
 
 export const Candidature = models.Candidature || model<ICandidature>("Candidature", candidatureSchema);

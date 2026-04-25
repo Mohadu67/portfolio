@@ -55,7 +55,10 @@ export function ProjectsSection({ projects, title = "Projets" }: ProjectsSection
 
       {/* Credentials Modal */}
       <AnimatePresence>
-        {selectedProject && currentProject && "credentials" in currentProject && currentProject.credentials && (
+        {(() => {
+          const credentials = currentProject?.credentials;
+          if (!selectedProject || !currentProject || !credentials) return null;
+          return (
           <motion.div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
             initial={{ opacity: 0 }}
@@ -92,10 +95,10 @@ export function ProjectsSection({ projects, title = "Projets" }: ProjectsSection
                   <p className="text-sm text-[var(--text-secondary)] mb-2">Email :</p>
                   <div className="flex items-center justify-between">
                     <code className="text-[var(--text-primary)] font-mono font-semibold">
-                      {currentProject.credentials.email}
+                      {credentials.email}
                     </code>
                     <button
-                      onClick={() => handleCopy(currentProject.credentials.email, "email")}
+                      onClick={() => handleCopy(credentials.email, "email")}
                       className="p-2 hover:bg-[var(--bg-card)] rounded-lg transition-colors"
                       title="Copier l'email"
                     >
@@ -113,10 +116,10 @@ export function ProjectsSection({ projects, title = "Projets" }: ProjectsSection
                   <p className="text-sm text-[var(--text-secondary)] mb-2">Mot de passe :</p>
                   <div className="flex items-center justify-between">
                     <code className="text-[var(--text-primary)] font-mono font-semibold">
-                      {currentProject.credentials.password}
+                      {credentials.password}
                     </code>
                     <button
-                      onClick={() => handleCopy(currentProject.credentials.password, "password")}
+                      onClick={() => handleCopy(credentials.password, "password")}
                       className="p-2 hover:bg-[var(--bg-card)] rounded-lg transition-colors"
                       title="Copier le mot de passe"
                     >
@@ -141,7 +144,8 @@ export function ProjectsSection({ projects, title = "Projets" }: ProjectsSection
               </a>
             </motion.div>
           </motion.div>
-        )}
+          );
+        })()}
       </AnimatePresence>
     </>
   );

@@ -1,10 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Copy, Check, Send, Wand2 } from "lucide-react";
+import { X, Copy, Check, Send, Wand2, FileText, Star, Eye } from "lucide-react";
 import { toast } from "sonner";
 import type { ICandidature } from "@/models/Candidature";
+
+interface CVFileOption {
+  _id: string;
+  name: string;
+  filename: string;
+  scope: "default" | "stage" | "alternance" | "cdi";
+  isDefault: boolean;
+  size: number;
+}
 
 interface GenerateLetterModalProps {
   candidature: ICandidature | null;
@@ -31,8 +41,62 @@ export function GenerateLetterModal({
   const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState(candidature?.email || "");
   const [generatingProposal, setGeneratingProposal] = useState(false);
+  const [cvFiles, setCvFiles] = useState<CVFileOption[]>([]);
+  const [selectedCvFileId, setSelectedCvFileId] = useState<string>("auto");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewName, setPreviewName] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let aborted = false;
+    fetch("/api/cv-files", { headers: { "x-api-key": apiKey } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("CVs unavailable"))))
+      .then((data) => {
+        if (!aborted) setCvFiles(data.files ?? []);
+      })
+      .catch(() => {
+        if (!aborted) setCvFiles([]);
+      });
+    return () => {
+      aborted = true;
+    };
+  }, [isOpen, apiKey]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   if (!isOpen || !candidature) return null;
+
+  const autoMatchCV =
+    cvFiles.find((f) => f.scope === type) ?? cvFiles.find((f) => f.isDefault) ?? null;
+
+  const previewSelectedCV = async () => {
+    const id = selectedCvFileId === "auto" ? autoMatchCV?._id : selectedCvFileId;
+    if (!id) {
+      toast.error("Aucun CV à prévisualiser");
+      return;
+    }
+    const cv = cvFiles.find((f) => f._id === id);
+    try {
+      const res = await fetch(`/api/cv-files/${id}/download`, { headers: { "x-api-key": apiKey } });
+      if (!res.ok) throw new Error("Échec");
+      const blob = await res.blob();
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(blob));
+      setPreviewName(cv?.name ?? "Aperçu CV");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    }
+  };
+
+  const closePreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setPreviewName("");
+  };
 
   const handleGenerateProposal = async () => {
     setGeneratingProposal(true);
@@ -121,6 +185,7 @@ export function GenerateLetterModal({
           candidature_id: candidature._id,
           email_destinataire: email,
           type,
+          ...(selectedCvFileId !== "auto" ? { cv_file_id: selectedCvFileId } : {}),
         }),
       });
 
@@ -330,6 +395,61 @@ export function GenerateLetterModal({
                   />
                 </motion.div>
 
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}>
+                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+                    <FileText size={16} className="text-[var(--accent-orange)]" />
+                    CV à joindre
+                  </label>
+                  {cvFiles.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-[var(--border-color)]/60 px-4 py-3 text-sm text-[var(--text-secondary)]">
+                      Aucun CV importé.{" "}
+                      <Link
+                        href="/dashboard/cv-files"
+                        target="_blank"
+                        className="text-[var(--accent-orange)] underline"
+                      >
+                        Importer un CV
+                      </Link>
+                      <span className="text-xs block mt-1 text-[var(--text-tertiary)]">
+                        À défaut, le fichier <code>candidatureModel/cv-mohammed.pdf</code> sera utilisé.
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        <select
+                          value={selectedCvFileId}
+                          onChange={(e) => setSelectedCvFileId(e.target.value)}
+                          className="flex-1 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-secondary)]/50 border border-[var(--border-color)]/50 rounded-lg px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)]/80 focus:shadow-lg focus:shadow-[var(--accent-orange)]/20 transition-all"
+                        >
+                          <option value="auto">
+                            🤖 Auto — {autoMatchCV ? `${autoMatchCV.name} (${autoMatchCV.scope})` : "fichier statique fallback"}
+                          </option>
+                          {cvFiles.map((f) => (
+                            <option key={f._id} value={f._id}>
+                              {f.isDefault ? "★ " : ""}
+                              {f.name} · {f.scope}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={previewSelectedCV}
+                          disabled={selectedCvFileId === "auto" && !autoMatchCV}
+                          className="px-3 rounded-lg border border-[var(--border-color)]/50 text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/10 disabled:opacity-40 transition-all flex items-center gap-1.5 text-sm font-medium"
+                          title="Aperçu du CV"
+                        >
+                          <Eye size={16} />
+                          Aperçu
+                        </button>
+                      </div>
+                      <p className="text-xs text-[var(--text-tertiary)] mt-2 flex items-center gap-1">
+                        <Star size={11} /> = défaut · Auto choisit le CV correspondant au type ({type}), sinon le défaut.
+                      </p>
+                    </>
+                  )}
+                </motion.div>
+
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
                   <label className="block text-sm font-semibold text-[var(--text-primary)] mb-3">
                     Lettre de motivation
@@ -411,6 +531,32 @@ export function GenerateLetterModal({
           )}
         </motion.div>
       </motion.div>
+
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={closePreview}
+        >
+          <div
+            className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText size={18} className="text-[var(--accent-orange)] flex-shrink-0" />
+                <h2 className="font-semibold truncate text-[var(--text-primary)]">{previewName}</h2>
+              </div>
+              <button
+                onClick={closePreview}
+                className="p-2 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <iframe src={previewUrl} title={previewName} className="flex-1 w-full bg-[var(--bg-primary)]" />
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }

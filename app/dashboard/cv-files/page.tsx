@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import Link from "next/link";
 import {
-  ArrowLeft,
-  Lock,
   Upload,
   FileText,
   Trash2,
@@ -13,8 +10,10 @@ import {
   Pencil,
   Check,
   X,
+  Eye,
 } from "lucide-react";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
+import { useApiKey } from "@/lib/contexts/AuthContext";
 
 type CVScope = "default" | "stage" | "alternance" | "cdi";
 
@@ -43,31 +42,21 @@ function formatBytes(bytes: number) {
 }
 
 export default function CVFilesPage() {
-  const [apiKey, setApiKey] = useState("");
-  const [authed, setAuthed] = useState(false);
-  const [bootLoading, setBootLoading] = useState(true);
-
+  const apiKey = useApiKey();
   const [files, setFiles] = useState<CVFileMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewName, setPreviewName] = useState("");
 
   const [uploadName, setUploadName] = useState("");
   const [uploadScope, setUploadScope] = useState<CVScope>("default");
   const [uploadIsDefault, setUploadIsDefault] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const k = sessionStorage.getItem("api-key");
-    if (k) {
-      setApiKey(k);
-      setAuthed(true);
-    }
-    setBootLoading(false);
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,15 +73,8 @@ export default function CVFilesPage() {
   }, [apiKey]);
 
   useEffect(() => {
-    if (authed) load();
-  }, [authed, load]);
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!apiKey.trim()) return;
-    sessionStorage.setItem("api-key", apiKey);
-    setAuthed(true);
-  };
+    load();
+  }, [load]);
 
   const handleFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -173,68 +155,36 @@ export default function CVFilesPage() {
     }
   };
 
-  if (bootLoading) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)] text-[var(--text-secondary)]">
-        Chargement…
-      </main>
-    );
-  }
+  const handlePreview = async (id: string, name: string) => {
+    try {
+      const res = await fetch(`/api/cv-files/${id}/download`, { headers: { "x-api-key": apiKey } });
+      if (!res.ok) throw new Error("Échec");
+      const blob = await res.blob();
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(blob));
+      setPreviewName(name);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    }
+  };
 
-  if (!authed) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)] p-4">
-        <form
-          onSubmit={handleLogin}
-          className="w-full max-w-sm bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl p-6 space-y-4"
-        >
-          <div className="flex items-center gap-2 text-[var(--accent-orange)]">
-            <Lock size={20} />
-            <h1 className="text-lg font-bold text-[var(--text-primary)]">Accès dashboard</h1>
-          </div>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Clé API"
-            className="w-full px-3 py-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border-color)] text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-orange)]"
-            autoFocus
-          />
-          <button type="submit" className="w-full py-2 rounded-md bg-[var(--accent-orange)] text-[var(--bg-primary)] font-semibold">
-            Entrer
-          </button>
-        </form>
-      </main>
-    );
-  }
+  const closePreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setPreviewName("");
+  };
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   return (
-    <main className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
-      <Toaster richColors position="top-right" />
-
-      <header className="border-b border-[var(--border-color)] bg-[var(--bg-card)]/40 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="p-2 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
-            >
-              <ArrowLeft size={18} />
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold flex items-center gap-2">
-                <FileText size={20} className="text-[var(--accent-orange)]" />
-                Mes CVs
-              </h1>
-              <p className="text-xs text-[var(--text-tertiary)]">
-                Importe plusieurs CVs et choisis lequel attacher selon le type de candidature
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
+      <p className="text-sm text-[var(--text-secondary)]">
+        Importe plusieurs CVs et choisis lequel attacher selon le type de candidature.
+      </p>
         {/* Upload zone */}
         <div
           onDragOver={(e) => {
@@ -417,6 +367,14 @@ export default function CVFilesPage() {
                     )}
 
                     <button
+                      onClick={() => handlePreview(f._id, f.name)}
+                      className="p-2 rounded hover:bg-[var(--bg-secondary)] text-[var(--accent-blue)]"
+                      title="Aperçu"
+                    >
+                      <Eye size={16} />
+                    </button>
+
+                    <button
                       onClick={() => handleDownload(f._id, f.filename)}
                       className="p-2 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
                       title="Télécharger"
@@ -439,10 +397,39 @@ export default function CVFilesPage() {
         )}
 
         <p className="text-xs text-[var(--text-tertiary)] mt-4">
-          💡 La résolution se fait dans cet ordre : CV explicite à l'envoi → CV par type de candidature →
+          💡 La résolution se fait dans cet ordre : CV explicite à l&apos;envoi → CV par type de candidature →
           CV par défaut → fichier statique <code>candidatureModel/cv-mohammed.pdf</code>.
-        </p>
-      </section>
-    </main>
+      </p>
+
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={closePreview}
+        >
+          <div
+            className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-color)]">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText size={18} className="text-[var(--accent-orange)] flex-shrink-0" />
+                <h2 className="font-semibold truncate">{previewName}</h2>
+              </div>
+              <button
+                onClick={closePreview}
+                className="p-2 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <iframe
+              src={previewUrl}
+              title={previewName}
+              className="flex-1 w-full bg-[var(--bg-primary)]"
+            />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

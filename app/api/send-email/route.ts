@@ -4,6 +4,7 @@ import { Candidature } from "@/models/Candidature";
 import { sendCandidature } from "@/lib/email";
 import { generateLettrePDF } from "@/lib/pdf-generator";
 import { verifyAuth } from "@/lib/auth";
+import { resolveCVForSend } from "@/lib/cvFile";
 import fs from "fs";
 import path from "path";
 
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { candidature_id, email_destinataire, type } = body;
+    const { candidature_id, email_destinataire, type, cv_file_id } = body;
 
     if (!candidature_id || !email_destinataire) {
       return NextResponse.json(
@@ -64,6 +65,9 @@ export async function POST(request: NextRequest) {
       console.warn("Could not save LM PDF locally:", writeError);
     }
 
+    // Resolve which CV to attach: explicit cv_file_id > scope match > default in DB > FS fallback
+    const resolvedCV = await resolveCVForSend({ cvFileId: cv_file_id ?? null, type: type || candidature.type || "stage" });
+
     // Send email with PDF attachments
     const emailSubject = `Candidature - ${candidature.poste} - ${process.env.PROFIL_NOM || "Mohammed Hamiani"}`;
     let sendError: string | null = null;
@@ -74,7 +78,8 @@ export async function POST(request: NextRequest) {
         email_destinataire,
         letterPdfBuffer,
         process.env.PROFIL_NOM || "Mohammed Hamiani",
-        type || "stage"
+        type || "stage",
+        { buffer: resolvedCV.buffer, filename: resolvedCV.filename }
       );
     } catch (err) {
       sendError = err instanceof Error ? err.message : String(err);

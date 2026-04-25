@@ -43,7 +43,8 @@ export async function sendCandidature(
   email: string,
   letterPdfBuffer: Buffer,
   candidatName: string = "Mohammed Hamiani",
-  type: "stage" | "alternance" | "cdi" = "stage"
+  type: "stage" | "alternance" | "cdi" = "stage",
+  cvOverride?: { buffer: Buffer; filename: string }
 ): Promise<void> {
   const isSpontanee = poste.toLowerCase().includes("spontanée") || poste.toLowerCase().includes("spontanee");
 
@@ -96,11 +97,18 @@ export async function sendCandidature(
 
   const html = emailBody;
 
-  const cvPath = path.join(process.cwd(), "candidatureModel", "cv-mohammed.pdf");
-  if (!fs.existsSync(cvPath)) {
-    throw new Error(`CV file not found at ${cvPath}. Make sure candidatureModel/cv-mohammed.pdf exists.`);
+  let cvBuffer: Buffer;
+  let cvFilename = `CV_${candidatName.replace(/\s+/g, "_")}.pdf`;
+  if (cvOverride) {
+    cvBuffer = cvOverride.buffer;
+    if (cvOverride.filename) cvFilename = cvOverride.filename;
+  } else {
+    const cvPath = path.join(process.cwd(), "candidatureModel", "cv-mohammed.pdf");
+    if (!fs.existsSync(cvPath)) {
+      throw new Error(`Aucun CV disponible : importe un CV depuis /dashboard/cv-files ou place candidatureModel/cv-mohammed.pdf.`);
+    }
+    cvBuffer = fs.readFileSync(cvPath);
   }
-  const cvBuffer = fs.readFileSync(cvPath);
 
   const transporter = getTransporter();
   await withRetry(
@@ -112,7 +120,7 @@ export async function sendCandidature(
         html,
         attachments: [
           {
-            filename: `CV_${candidatName.replace(/\s+/g, "_")}.pdf`,
+            filename: cvFilename,
             content: cvBuffer,
             contentType: "application/pdf",
           },

@@ -117,6 +117,12 @@ export default function Dashboard() {
               <FileText size={16} /> Éditer le CV
             </Link>
             <Link
+              href="/dashboard/cv-files"
+              className="flex items-center gap-1.5 text-[var(--text-secondary)] hover:text-[var(--accent-orange)] transition-colors text-sm font-medium"
+            >
+              <FileText size={16} /> Mes CVs
+            </Link>
+            <Link
               href="/dashboard/relances"
               className="flex items-center gap-1.5 text-[var(--text-secondary)] hover:text-[var(--accent-orange)] transition-colors text-sm font-medium"
             >

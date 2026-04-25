@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import fs from "fs";
 import path from "path";
+import { withRetry } from "./retry";
 
 let transporter: nodemailer.Transporter | null = null;
 
@@ -24,12 +25,16 @@ export async function sendEmail(
 ): Promise<void> {
   const transporter = getTransporter();
 
-  await transporter.sendMail({
-    from: process.env.GMAIL_USER,
-    to,
-    subject,
-    html,
-  });
+  await withRetry(
+    () =>
+      transporter.sendMail({
+        from: process.env.GMAIL_USER,
+        to,
+        subject,
+        html,
+      }),
+    { retries: 2, baseDelayMs: 1000 }
+  );
 }
 
 export async function sendCandidature(
@@ -98,24 +103,33 @@ export async function sendCandidature(
   const cvBuffer = fs.readFileSync(cvPath);
 
   const transporter = getTransporter();
-  await transporter.sendMail({
-    from: process.env.GMAIL_USER,
-    to: email,
-    subject,
-    html,
-    attachments: [
-      {
-        filename: `CV_${candidatName.replace(/\s+/g, "_")}.pdf`,
-        content: cvBuffer,
-        contentType: "application/pdf",
-      },
-      {
-        filename: `Lettre_Motivation_${entreprise.replace(/\s+/g, "_")}.pdf`,
-        content: letterPdfBuffer,
-        contentType: "application/pdf",
-      },
-    ],
-  });
+  await withRetry(
+    () =>
+      transporter.sendMail({
+        from: process.env.GMAIL_USER,
+        to: email,
+        subject,
+        html,
+        attachments: [
+          {
+            filename: `CV_${candidatName.replace(/\s+/g, "_")}.pdf`,
+            content: cvBuffer,
+            contentType: "application/pdf",
+          },
+          {
+            filename: `Lettre_Motivation_${entreprise.replace(/\s+/g, "_")}.pdf`,
+            content: letterPdfBuffer,
+            contentType: "application/pdf",
+          },
+        ],
+      }),
+    {
+      retries: 2,
+      baseDelayMs: 1000,
+      onRetry: (err, attempt) =>
+        console.warn(`[sendCandidature] retry ${attempt + 1}: ${err instanceof Error ? err.message : err}`),
+    }
+  );
 }
 
 export async function sendRelance(
@@ -144,10 +158,19 @@ export async function sendRelance(
   `;
 
   const transporter = getTransporter();
-  await transporter.sendMail({
-    from: process.env.GMAIL_USER,
-    to: email,
-    subject,
-    html,
-  });
+  await withRetry(
+    () =>
+      transporter.sendMail({
+        from: process.env.GMAIL_USER,
+        to: email,
+        subject,
+        html,
+      }),
+    {
+      retries: 2,
+      baseDelayMs: 1000,
+      onRetry: (err, attempt) =>
+        console.warn(`[sendRelance] retry ${attempt + 1}: ${err instanceof Error ? err.message : err}`),
+    }
+  );
 }

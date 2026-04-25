@@ -4,11 +4,15 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Section, ProjectCard } from "@/components/molecules";
 import { staggerContainer, staggerItem } from "@/lib/animations";
-import portfolioData from "@/data/portfolio.json";
+import type { CVProjectItem } from "@/models/CVSection";
 import { X, Copy, Check } from "lucide-react";
 
-export function ProjectsSection() {
-  const { projects } = portfolioData;
+interface ProjectsSectionProps {
+  projects: CVProjectItem[];
+  title?: string;
+}
+
+export function ProjectsSection({ projects, title = "Projets" }: ProjectsSectionProps) {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -24,7 +28,7 @@ export function ProjectsSection() {
     <>
       <Section
         id="projects"
-        title="Projets"
+        title={title}
         description="Découvrez mes projets fullstack présentant mes compétences en développement web moderne"
         className="bg-gradient-to-b from-[var(--bg-primary)] to-[var(--bg-card)]/50"
       >

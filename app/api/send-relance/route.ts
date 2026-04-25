@@ -41,28 +41,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await sendRelance(
-      candidature.entreprise,
-      candidature.poste,
-      candidature.email,
-      message,
-      templateTitle || "Relance",
-      candidature.type || "stage",
-      process.env.PROFIL_NOM || "Mohammed Hamiani"
-    );
+    let sendError: string | null = null;
+    try {
+      await sendRelance(
+        candidature.entreprise,
+        candidature.poste,
+        candidature.email,
+        message,
+        templateTitle || "Relance",
+        candidature.type || "stage",
+        process.env.PROFIL_NOM || "Mohammed Hamiani"
+      );
+    } catch (err) {
+      sendError = err instanceof Error ? err.message : String(err);
+    }
 
-    // Update relance status to "envoyée"
+    const now = new Date();
+    candidature.emailsSent = [
+      ...(candidature.emailsSent ?? []),
+      {
+        date: now,
+        to: candidature.email,
+        subject: `${templateTitle || "Relance"} - ${candidature.poste}`,
+        type: "relance",
+        status: sendError ? "failed" : "sent",
+        error: sendError,
+      },
+    ];
+
+    candidature.relanceHistory = [
+      ...(candidature.relanceHistory ?? []),
+      {
+        scheduledFor: now,
+        template: "custom",
+        templateTitle: templateTitle || "Relance",
+        message,
+        status: sendError ? "échouée" : "envoyée",
+        sentAt: sendError ? null : now,
+        error: sendError,
+      },
+    ];
+
     if (candidature.relance) {
-      candidature.relance.status = "envoyée";
-    } else {
+      candidature.relance.status = sendError ? "échouée" : "envoyée";
+    } else if (!sendError) {
       candidature.relance = {
-        date: new Date().toISOString().split("T")[0],
+        date: now.toISOString().split("T")[0],
         template: "initial",
         message,
         status: "envoyée",
       };
     }
+
     await candidature.save();
+
+    if (sendError) {
+      throw new Error(sendError);
+    }
 
     return NextResponse.json({
       message: "Relance sent successfully",

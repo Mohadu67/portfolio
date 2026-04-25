@@ -4,10 +4,13 @@ import { motion } from "framer-motion";
 import { SocialLink } from "@/components/molecules";
 import { Container } from "@/components/atoms";
 import { slideUpContainer, slideUpItem } from "@/lib/animations";
-import portfolioData from "@/data/portfolio.json";
+import type { CVSocialItem } from "@/models/CVSection";
 
-export function FooterSection() {
-  const { socials } = portfolioData;
+interface FooterSectionProps {
+  socials: CVSocialItem[];
+}
+
+export function FooterSection({ socials }: FooterSectionProps) {
 
   return (
     <section className="relative bg-gradient-to-t from-[var(--bg-card)]/50 to-transparent py-16 px-4 sm:px-6 lg:px-8 border-t border-[var(--border-color)]">

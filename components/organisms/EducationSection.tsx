@@ -5,11 +5,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Section } from "@/components/molecules";
 import { Card, Text, Icon } from "@/components/atoms";
 import { staggerContainer, staggerItem } from "@/lib/animations";
-import portfolioData from "@/data/portfolio.json";
+import type { CVEducationItem } from "@/models/CVSection";
 import { X, Lightbulb } from "lucide-react";
 
-export function EducationSection() {
-  const { education } = portfolioData;
+interface EducationSectionProps {
+  education: CVEducationItem[];
+  title?: string;
+}
+
+export function EducationSection({ education, title = "Formation" }: EducationSectionProps) {
   const [selectedEdu, setSelectedEdu] = useState<string | null>(null);
 
   const currentEdu = education.find((e) => e.id === selectedEdu);
@@ -18,7 +22,7 @@ export function EducationSection() {
     <>
       <Section
         id="education"
-        title="Formation"
+        title={title}
         description="Parcours académique et certifications"
         className="bg-gradient-to-b from-[var(--bg-primary)] to-[var(--bg-card)]/50"
       >

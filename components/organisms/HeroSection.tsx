@@ -7,10 +7,13 @@ import { motion } from "framer-motion";
 import { ArrowRight, Code2, Zap } from "lucide-react";
 import { Container, Button, Text } from "@/components/atoms";
 import { slideUpItem } from "@/lib/animations";
-import portfolioData from "@/data/portfolio.json";
+import type { CVProfileContent } from "@/models/CVSection";
 
-export function HeroSection() {
-  const { profile } = portfolioData;
+interface HeroSectionProps {
+  profile: CVProfileContent;
+}
+
+export function HeroSection({ profile }: HeroSectionProps) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -122,9 +125,9 @@ export function HeroSection() {
             >
               <div className="relative">
                 <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-[var(--text-primary)] leading-tight">
-                  Mohammed
+                  {profile.name.split(" ")[0]}
                   <span className="block mt-2 bg-gradient-to-r from-[var(--accent-orange)] via-[var(--accent-blue)] to-[var(--accent-orange)] bg-clip-text text-transparent animate-gradient-shift">
-                    Hamiani
+                    {profile.name.split(" ").slice(1).join(" ")}
                   </span>
                 </h1>
               </div>
@@ -147,10 +150,10 @@ export function HeroSection() {
               className="space-y-3"
             >
               <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[var(--accent-orange)]">
-                Concepteur Développeur Fullstack
+                {profile.title}
               </p>
               <p className="text-base md:text-lg text-[var(--text-secondary)] max-w-md">
-                Dev by Day • Creator by Night
+                {profile.tagline}
               </p>
             </motion.div>
 
@@ -167,7 +170,7 @@ export function HeroSection() {
               </div>
               <div>
                 <p className="text-[var(--text-secondary)]">Disponibilité</p>
-                <p className="font-semibold text-[var(--text-primary)]">Stage Mars 2026</p>
+                <p className="font-semibold text-[var(--text-primary)]">{profile.availability}</p>
               </div>
             </motion.div>
 

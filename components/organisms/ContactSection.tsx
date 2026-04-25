@@ -5,10 +5,14 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Container, Card, Button, Text, Icon } from "@/components/atoms";
 import { staggerContainer, staggerItem } from "@/lib/animations";
-import portfolioData from "@/data/portfolio.json";
+import type { CVContactContent } from "@/models/CVSection";
 
-export function ContactSection() {
-  const { contact } = portfolioData;
+interface ContactSectionProps {
+  contact: CVContactContent;
+  title?: string;
+}
+
+export function ContactSection({ contact, title = "Me contacter" }: ContactSectionProps) {
 
   const contactMethods = [
     {
@@ -44,7 +48,7 @@ export function ContactSection() {
         >
           <motion.div variants={staggerItem}>
             <Text as="h2" variant="h2" className="mb-4">
-              Me contacter
+              {title}
             </Text>
           </motion.div>
           <motion.div variants={staggerItem}>

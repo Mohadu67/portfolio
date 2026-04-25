@@ -5,11 +5,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Section } from "@/components/molecules";
 import { Card, Text, Icon } from "@/components/atoms";
 import { staggerContainer, staggerItem } from "@/lib/animations";
-import portfolioData from "@/data/portfolio.json";
+import type { CVExperienceItem } from "@/models/CVSection";
 import { X, Briefcase } from "lucide-react";
 
-export function ExperienceSection() {
-  const { experience } = portfolioData;
+interface ExperienceSectionProps {
+  experience: CVExperienceItem[];
+  title?: string;
+}
+
+export function ExperienceSection({ experience, title = "Expérience Professionnelle" }: ExperienceSectionProps) {
   const [selectedExp, setSelectedExp] = useState<string | null>(null);
 
   const currentExp = experience.find((e) => e.id === selectedExp);
@@ -38,7 +42,7 @@ export function ExperienceSection() {
     <>
       <Section
         id="experience"
-        title="Expérience Professionnelle"
+        title={title}
         description="Parcours professionnel et projets réalisés"
         className="bg-gradient-to-b from-[var(--bg-primary)] to-[var(--bg-card)]/50"
       >

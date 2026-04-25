@@ -47,6 +47,17 @@ export async function POST(request: NextRequest) {
     // Update candidature with letter and status
     candidature.lettre = improvedLetter;
     candidature.statut = "lettre générée";
+    const nextVersion = (candidature.letters?.length ?? 0) + 1;
+    candidature.letters = [
+      ...(candidature.letters ?? []),
+      {
+        version: nextVersion,
+        model: "grok",
+        content: improvedLetter,
+        generatedAt: new Date(),
+        type,
+      },
+    ];
     await candidature.save();
 
     return NextResponse.json({

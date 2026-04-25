@@ -4,10 +4,14 @@ import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Section, SkillCard } from "@/components/molecules";
 import { staggerContainer, staggerItem } from "@/lib/animations";
-import portfolioData from "@/data/portfolio.json";
+import type { CVSkillItem } from "@/models/CVSection";
 
-export function SkillsSection() {
-  const { skills } = portfolioData;
+interface SkillsSectionProps {
+  skills: CVSkillItem[];
+  title?: string;
+}
+
+export function SkillsSection({ skills, title = "Compétences Techniques" }: SkillsSectionProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Group skills by category
@@ -29,7 +33,7 @@ export function SkillsSection() {
   return (
     <Section
       id="skills"
-      title="Compétences Techniques"
+      title={title}
       description="Technologies maîtrisées et perfectionnées au fil des années"
       className="bg-gradient-to-b from-[var(--bg-primary)] to-[var(--bg-card)]/50"
     >
@@ -75,7 +79,7 @@ export function SkillsSection() {
               level={skill.level as "Expert" | "Avancé" | "Intermédiaire"}
               years={skill.years}
               category={skill.category}
-              bugStory={(skill as any).bugStory}
+              bugStory={skill.bugStory}
             />
           </motion.div>
         ))}

@@ -11,13 +11,47 @@ export type CandidatureStatut =
 
 export type CandidatureType = "stage" | "alternance" | "cdi";
 
-export type RelanceStatus = "programmée" | "envoyée" | "annulée";
+export type RelanceStatus = "programmée" | "envoyée" | "annulée" | "échouée";
+
+export type EmailLogType = "candidature" | "relance";
+
+export type EmailLogStatus = "sent" | "failed";
+
+export type LetterModel = "grok" | "claude" | "manual";
 
 export interface IRelance {
-  date: string; // YYYY-MM-DD
+  date: string;
   template: "initial" | "second" | "final";
   message: string;
   status: RelanceStatus;
+}
+
+export interface IRelanceLog {
+  scheduledFor: Date;
+  template: "initial" | "second" | "final" | "custom";
+  templateTitle?: string;
+  message: string;
+  status: RelanceStatus;
+  sentAt?: Date | null;
+  error?: string | null;
+  created_at?: Date;
+}
+
+export interface ILetterVersion {
+  version: number;
+  model: LetterModel;
+  content: string;
+  generatedAt: Date;
+  type?: CandidatureType;
+}
+
+export interface IEmailLog {
+  date: Date;
+  to: string;
+  subject: string;
+  type: EmailLogType;
+  status: EmailLogStatus;
+  error?: string | null;
 }
 
 export interface ICandidature {
@@ -36,10 +70,54 @@ export interface ICandidature {
   cv: string | null;
   notes: string;
   relance: IRelance | null;
+  letters: ILetterVersion[];
+  emailsSent: IEmailLog[];
+  relanceHistory: IRelanceLog[];
   date: string;
   created_at: Date;
   updated_at: Date;
 }
+
+const relanceLogSchema = new Schema<IRelanceLog>(
+  {
+    scheduledFor: { type: Date, required: true },
+    template: { type: String, enum: ["initial", "second", "final", "custom"], default: "initial" },
+    templateTitle: { type: String },
+    message: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ["programmée", "envoyée", "annulée", "échouée"],
+      default: "programmée",
+      index: true,
+    },
+    sentAt: { type: Date, default: null },
+    error: { type: String, default: null },
+  },
+  { timestamps: { createdAt: "created_at", updatedAt: false } }
+);
+
+const letterVersionSchema = new Schema<ILetterVersion>(
+  {
+    version: { type: Number, required: true },
+    model: { type: String, enum: ["grok", "claude", "manual"], default: "grok" },
+    content: { type: String, required: true },
+    generatedAt: { type: Date, default: () => new Date() },
+    type: { type: String, enum: ["stage", "alternance", "cdi"] },
+  },
+  { _id: false }
+);
+
+const emailLogSchema = new Schema<IEmailLog>(
+  {
+    date: { type: Date, default: () => new Date() },
+    to: { type: String, required: true },
+    subject: { type: String, required: true },
+    type: { type: String, enum: ["candidature", "relance"], required: true },
+    status: { type: String, enum: ["sent", "failed"], required: true },
+    error: { type: String, default: null },
+  },
+  { _id: false }
+);
 
 const candidatureSchema = new Schema<ICandidature>(
   {
@@ -69,13 +147,20 @@ const candidatureSchema = new Schema<ICandidature>(
         date: { type: String, required: true },
         template: { type: String, enum: ["initial", "second", "final"], required: true },
         message: { type: String, required: true },
-        status: { type: String, enum: ["programmée", "envoyée", "annulée"], default: "programmée" },
+        status: { type: String, enum: ["programmée", "envoyée", "annulée", "échouée"], default: "programmée" },
       },
       default: null,
     },
-    date: { type: String }, // YYYY-MM-DD
+    letters: { type: [letterVersionSchema], default: [] },
+    emailsSent: { type: [emailLogSchema], default: [] },
+    relanceHistory: { type: [relanceLogSchema], default: [] },
+    date: { type: String },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } }
 );
+
+candidatureSchema.index({ statut: 1, created_at: -1 });
+candidatureSchema.index({ entreprise: 1 });
+candidatureSchema.index({ "relanceHistory.scheduledFor": 1, "relanceHistory.status": 1 });
 
 export const Candidature = models.Candidature || model<ICandidature>("Candidature", candidatureSchema);

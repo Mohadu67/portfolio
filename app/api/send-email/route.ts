@@ -65,14 +65,37 @@ export async function POST(request: NextRequest) {
     }
 
     // Send email with PDF attachments
-    await sendCandidature(
-      candidature.entreprise,
-      candidature.poste,
-      email_destinataire,
-      letterPdfBuffer,
-      process.env.PROFIL_NOM || "Mohammed Hamiani",
-      type || "stage"
-    );
+    const emailSubject = `Candidature - ${candidature.poste} - ${process.env.PROFIL_NOM || "Mohammed Hamiani"}`;
+    let sendError: string | null = null;
+    try {
+      await sendCandidature(
+        candidature.entreprise,
+        candidature.poste,
+        email_destinataire,
+        letterPdfBuffer,
+        process.env.PROFIL_NOM || "Mohammed Hamiani",
+        type || "stage"
+      );
+    } catch (err) {
+      sendError = err instanceof Error ? err.message : String(err);
+    }
+
+    candidature.emailsSent = [
+      ...(candidature.emailsSent ?? []),
+      {
+        date: new Date(),
+        to: email_destinataire,
+        subject: emailSubject,
+        type: "candidature",
+        status: sendError ? "failed" : "sent",
+        error: sendError,
+      },
+    ];
+
+    if (sendError) {
+      await candidature.save();
+      throw new Error(sendError);
+    }
 
     // Update status to "postulée" and save type
     candidature.statut = "postulée";

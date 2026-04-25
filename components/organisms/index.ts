@@ -5,3 +5,4 @@ export { ExperienceSection } from "./ExperienceSection";
 export { ProjectsSection } from "./ProjectsSection";
 export { ContactSection } from "./ContactSection";
 export { FooterSection } from "./FooterSection";
+export { CustomSection } from "./CustomSection";

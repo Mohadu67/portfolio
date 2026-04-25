@@ -68,19 +68,27 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 62326
           script: |
+            set -e
             cd /home/moha/srv-docker/projects/portfolio
 
-            # Login GHCR
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u mohadu67 --password-stdin
+            # Preserve VPS-specific docker-compose.yml (different volumes/network names)
+            # We pull the rest of the repo and rebuild locally with the VPS compose.
+            cp docker-compose.yml docker-compose.yml.vps-working || true
 
-            # Pull l'image
-            docker pull ghcr.io/mohadu67/curriculum-app:latest
+            # Stash any local modifications before pulling
+            git stash push -u -m "ci-deploy-$(date +%s)" docker-compose.yml Dockerfile 2>/dev/null || true
 
-            # Relance la prod
-            docker compose -f docker-compose.prod.yml up -d
+            git fetch origin main
+            git reset --hard origin/main
 
-            # Logout
-            docker logout ghcr.io
+            # Restore the working compose; trust the Dockerfile from repo
+            if [ -f docker-compose.yml.vps-working ]; then
+              cp docker-compose.yml.vps-working docker-compose.yml
+            fi
+
+            # Build & restart only the app (mongodb stays up)
+            docker compose build portfolio
+            docker compose up -d portfolio
 
             echo "Deploiement termine"
 

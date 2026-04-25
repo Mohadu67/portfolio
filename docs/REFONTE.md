@@ -109,3 +109,9 @@ Légende : ⏳ pending · 🟡 en cours · ✅ livré · ⚠️ bloqué
 - Automations (auto-discover email, daily digest, auto-brouillon) reportées — le shell est en place pour les ajouter facilement.
 
 **Validation :** `docker build` OK. Build complet, type-check passé.
+
+### 2026-04-25 — Tool use IA + Vue 360 + déploiement VPS
+
+- **Tool use IA** : `lib/ai/tools.ts` (5 tools : `schedule_relance`, `cancel_relance`, `update_candidature_status`, `update_candidature_notes`, `send_relance_now`). Endpoint `/api/chat/tool-exec` qui exécute les tools côté serveur. Streaming `/api/chat` enrichi pour intercepter `tool_use` et les renvoyer via SSE. UI `ChatPanel` refondue : carte de confirmation pour chaque tool call, exécution séquentielle, renvoi des résultats à l'IA pour suite. Persistence sessionStorage v2 (avec tool_calls).
+- **Vue 360 candidature** : `app/dashboard/candidatures/[id]/page.tsx` plein écran : header (entreprise, poste, statut, badges, switcher de statut), 2 colonnes (lettre versionnée, description, notes inline éditables, historique emails | actions, relances avec actions per-relance + composer slide-in).
+- **Déploiement VPS** : VPS mis à jour (commits 0→5 + tool use). `docker-compose.yml` working preservé (volumes existants), Dockerfile du repo (Node 22 + lazy env) accepté. Nouveau workflow GitHub Actions qui fait `git pull` proprement avec stash/restore du compose VPS-spécifique.

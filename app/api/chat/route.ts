@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { verifyAuth } from "@/lib/auth";
 import { buildAIContext, contextSummary } from "@/lib/ai/context";
+import { toolsForAnthropic } from "@/lib/ai/tools";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -11,6 +12,16 @@ const MODEL = process.env.CHAT_MODEL ?? "claude-opus-4-5-20251101";
 interface ClientMessage {
   role: "user" | "assistant";
   content: string;
+  tool_calls?: Array<{
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+  }>;
+  tool_results?: Array<{
+    tool_use_id: string;
+    content: string;
+    is_error?: boolean;
+  }>;
 }
 
 export async function POST(request: NextRequest) {
@@ -66,6 +77,32 @@ Utilise ce JSON pour répondre. Ne le re-cite pas en entier dans ta réponse.`,
 
   const client = new Anthropic({ apiKey });
 
+  // Convert frontend messages to Anthropic content blocks (handles tool_use/tool_result)
+  const anthropicMessages: Anthropic.MessageParam[] = messages.map((m) => {
+    if (m.role === "user" && m.tool_results && m.tool_results.length > 0) {
+      return {
+        role: "user",
+        content: m.tool_results.map((tr) => ({
+          type: "tool_result" as const,
+          tool_use_id: tr.tool_use_id,
+          content: tr.content,
+          is_error: tr.is_error,
+        })),
+      };
+    }
+    if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+      const blocks: Array<Anthropic.TextBlockParam | Anthropic.ToolUseBlockParam> = [];
+      if (m.content) {
+        blocks.push({ type: "text", text: m.content });
+      }
+      for (const tc of m.tool_calls) {
+        blocks.push({ type: "tool_use", id: tc.id, name: tc.name, input: tc.input });
+      }
+      return { role: "assistant", content: blocks };
+    }
+    return { role: m.role, content: m.content };
+  });
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -78,7 +115,8 @@ Utilise ce JSON pour répondre. Ne le re-cite pas en entier dans ta réponse.`,
           model: MODEL,
           max_tokens: 2048,
           system: systemBlocks,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          tools: toolsForAnthropic(),
+          messages: anthropicMessages,
         });
 
         response.on("text", (textDelta: string) => {
@@ -86,9 +124,20 @@ Utilise ce JSON pour répondre. Ne le re-cite pas en entier dans ta réponse.`,
         });
 
         const final = await response.finalMessage();
+
+        // Detect tool calls
+        const toolCalls = final.content
+          .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
+          .map((b) => ({ id: b.id, name: b.name, input: b.input as Record<string, unknown> }));
+
+        if (toolCalls.length > 0) {
+          send("tool_calls", { tool_calls: toolCalls });
+        }
+
         send("done", {
           model: final.model,
           usage: final.usage,
+          stop_reason: final.stop_reason,
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

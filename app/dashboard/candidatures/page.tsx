@@ -11,7 +11,7 @@ import { CandidatureList } from "@/components/dashboard/CandidatureList";
 import { LetterModal } from "@/components/dashboard/LetterModal";
 import { SearchLoadingModal } from "@/components/dashboard/SearchLoadingModal";
 import { GenerateLetterModal } from "@/components/dashboard/GenerateLetterModal";
-import { FollowUpModal } from "@/components/dashboard/FollowUpModal";
+import { RelanceComposer } from "@/components/dashboard/relances/RelanceComposer";
 import type { ICandidature, CandidatureStatut } from "@/models/Candidature";
 
 const STATUS_LABELS: Record<CandidatureStatut, string> = {
@@ -178,14 +178,12 @@ export default function CandidaturesPage() {
             onSend={data.sendCandidature}
             onUpdate={data.update}
           />
-          <FollowUpModal
-            candidature={selected}
-            isOpen={showFollowUp}
-            onClose={closeAll}
-            onSchedule={data.scheduleFollowUp}
-            onSendNow={data.sendRelanceNow}
-            onCancel={data.cancelRelance}
+          <RelanceComposer
+            open={showFollowUp}
+            mode={selected ? { kind: "create", candidature: selected } : null}
             apiKey={apiKey}
+            onClose={closeAll}
+            onSaved={data.load}
           />
           <LetterModal
             candidature={selected}

@@ -45,12 +45,12 @@ Un cockpit unique où :
 
 | Lot | Contenu | Statut | Commit |
 |---|---|---|---|
-| **0** | Shell : sidebar/topbar/dock, AuthGuard, useAuth, tokens CSS étendus | ✅ Livré | (push à venir) |
-| **1** | Refonte relances : composer libre, tabs Cal/Timeline, actions per-relance, RelanceTemplate | ⏳ Pending | – |
-| **2** | War Room : home refondue, endpoint summary, agenda actif, kanban mini, alertes | ⏳ Pending | – |
-| **3** | Vue 360 candidature + Media Manager (photo + CVs unifiés) | ⏳ Pending | – |
-| **4** | Chat IA agentique : streaming SSE, tool use, conversations persistées, dock + full | ⏳ Pending | – |
-| **5** | Automations + Settings + polish (auto-discover email, daily digest, raccourcis clavier, onboarding) | ⏳ Pending | – |
+| **0** | Shell : sidebar/topbar/dock, AuthGuard, useAuth, tokens CSS étendus | ✅ Livré | `3eb33b6` |
+| **1** | Refonte relances : composer libre, tabs Timeline/Par candidature, actions per-relance, RelanceTemplate | ✅ Livré | (en cours) |
+| **2** | War Room : home refondue, endpoint summary, agenda actif, alertes calculées | ✅ Livré | (en cours) |
+| **3** | Media Manager (photo portfolio uploadable + CVs unifiés). Vue 360 candidature reportée. | ✅ Livré | (en cours) |
+| **4** | Chat IA streaming (Anthropic Opus 4.5, prompt cache, contexte complet). Tool use reporté. | ✅ Livré (MVP) | (en cours) |
+| **5** | Settings : templates relances éditables, état config. Automations reportées. | ✅ Livré (partiel) | (en cours) |
 
 Légende : ⏳ pending · 🟡 en cours · ✅ livré · ⚠️ bloqué
 
@@ -76,3 +76,36 @@ Légende : ⏳ pending · 🟡 en cours · ✅ livré · ⚠️ bloqué
 - Stubs pour les nouvelles routes : `/dashboard/recherche`, `/media`, `/chat`, `/settings` (placeholders informatifs).
 
 **Validation :** `docker build` OK localement, push à venir → CI/CD.
+
+### 2026-04-25 — Lots 1 → 5 livrés en burst
+
+**Lot 1 — Refonte relances**
+- `RelanceComposer` : panneau slide-in 560px, édition libre + variables `{entreprise} {poste} {type} {prenom}`, datepicker natif + presets J+7/14/21/+1mois, templates en raccourci 1-clic (insertion, pas contrainte), preview avec substitution.
+- `app/dashboard/relances/page.tsx` refonte complète : tabs Timeline / Par candidature, actions per-relance (Envoyer maintenant, Modifier, Dupliquer +7j, Annuler), bouton "Nouvelle relance" avec picker de candidature.
+- Modèle `RelanceTemplate` + endpoints `/api/relance-templates` (CRUD) + 3 templates built-in seedés au premier appel.
+- `PATCH /api/candidatures/[id]/relances` étendu avec `action: "duplicate"` et édition de `templateTitle`.
+- Suppression de `FollowUpModal` côté usage (remplacé par `RelanceComposer` dans la page candidatures).
+
+**Lot 2 — War Room**
+- `GET /api/dashboard/summary` : alertes (relances en retard / aujourd'hui, candidatures stagnantes >7j, entretiens), agenda du jour, à venir 7j, métriques 7j (candidatures, emails, taux réponse), recent activity.
+- `app/dashboard/page.tsx` : bandeau alertes coloré, agenda cliquable (en retard + aujourd'hui), métriques, mini-pipeline 7 statuts cliquables, stagnantes, dernière activité, quick actions.
+
+**Lot 3 — Media Manager**
+- Modèle `MediaAsset` (Buffer + kind = photo|project|asset, isActive flag).
+- API `/api/media` (GET/POST), `/api/media/[id]` (GET public, PATCH, DELETE), `/api/media/[id]/use-as-photo` (set as portfolio photo + update `CVSection.profile.photo` à `/api/media/[id]`).
+- `app/dashboard/media/page.tsx` : grille de photos, drag-and-drop, badge "Active", actions hover (preview, set as photo, delete), liste courte des CVs avec lien vers `/dashboard/cv-files`.
+- Photo de profil : sélection d'un click → met à jour la section `profile` de la DB → portfolio public refléchit (cache ISR 60s).
+
+**Lot 4 — Chat IA (MVP)**
+- `lib/ai/context.ts` : assemble contexte complet (profil + sections CV + candidatures + relances + emails) en JSON compact.
+- `app/api/chat/route.ts` : streaming SSE, Anthropic SDK, modèle Opus 4.5 (configurable via `CHAT_MODEL`), prompt caching ephemeral sur le bloc contexte, system prompt français exigeant et factuel.
+- `components/dashboard/chat/ChatPanel.tsx` : UI partagée (dock + page), messages persistés en sessionStorage, suggestions de prompts au démarrage, streaming live avec curseur, raccourci Enter (Shift+Enter pour nouvelle ligne), bouton effacer.
+- `ChatDock` activé (avant placeholder).
+- `/dashboard/chat` plein écran utilise le même panel.
+- Tool use reporté (le user peut demander conseil mais l'IA ne peut pas encore agir).
+
+**Lot 5 — Settings (partiel)**
+- `app/dashboard/settings/page.tsx` : éditeur de templates de relance complet (créer / modifier / supprimer, avec garde-fou builtin), état de la config serveur (sans révéler les secrets), liens vers CV/Médias.
+- Automations (auto-discover email, daily digest, auto-brouillon) reportées — le shell est en place pour les ajouter facilement.
+
+**Validation :** `docker build` OK. Build complet, type-check passé.

@@ -4,9 +4,8 @@ import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Code2, Zap } from "lucide-react";
-import { Container, Button, Text } from "@/components/atoms";
-import { slideUpItem } from "@/lib/animations";
+import { ArrowRight, Zap } from "lucide-react";
+import { Container } from "@/components/atoms";
 import type { CVProfileContent } from "@/models/CVSection";
 
 interface HeroSectionProps {
@@ -29,8 +28,8 @@ export function HeroSection({ profile }: HeroSectionProps) {
     return Math.round((x - Math.floor(x)) * 1000) / 1000;
   };
 
-  // Floating particles
-  const particles = Array.from({ length: 20 }).map((_, i) => ({
+  // Floating particles — capped count to lighten CPU usage
+  const particles = Array.from({ length: 12 }).map((_, i) => ({
     id: i,
     delay: Math.round(seededRandom(i * 2) * 0.5 * 1000) / 1000,
     duration: Math.round((3 + seededRandom(i * 2 + 1) * 2) * 1000) / 1000,
@@ -39,7 +38,7 @@ export function HeroSection({ profile }: HeroSectionProps) {
   }));
 
   return (
-    <section id="hero" className="relative h-screen flex items-center justify-center overflow-hidden px-4 sm:px-6 lg:px-8">
+    <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden px-4 sm:px-6 lg:px-8 pt-20 pb-12 md:pt-0 md:pb-0">
       {/* Dynamic background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-[var(--bg-primary)] via-[var(--bg-card)]/50 to-[var(--bg-primary)]" />
 
@@ -68,12 +67,12 @@ export function HeroSection({ profile }: HeroSectionProps) {
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      {/* Floating particles */}
-      <div className="absolute inset-0 pointer-events-none">
+      {/* Floating particles (decorative, lightweight) */}
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
         {particles.map((particle) => (
           <motion.div
             key={particle.id}
-            className="absolute w-1 h-1 bg-[var(--accent-orange)]/30 rounded-full"
+            className="absolute w-1 h-1 bg-[var(--accent-orange)]/30 rounded-full will-change-transform"
             initial={{
               x: particle.x,
               y: particle.y,
@@ -86,6 +85,7 @@ export function HeroSection({ profile }: HeroSectionProps) {
               duration: particle.duration,
               delay: particle.delay,
               repeat: Infinity,
+              ease: "easeInOut",
             }}
           />
         ))}
@@ -111,9 +111,9 @@ export function HeroSection({ profile }: HeroSectionProps) {
                 animate={{ scale: [1, 1.2, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
-                <Zap size={24} className="text-[var(--accent-orange)]" />
+                <Zap size={24} className="text-[var(--accent-orange)]" aria-hidden="true" />
               </motion.div>
-              <span className="text-[var(--accent-orange)] font-semibold text-lg">Fullstack Developer</span>
+              <span className="text-[var(--accent-orange)] font-semibold text-base sm:text-lg">{profile.title}</span>
             </motion.div>
 
             {/* Main heading */}
@@ -124,7 +124,7 @@ export function HeroSection({ profile }: HeroSectionProps) {
               className="space-y-4"
             >
               <div className="relative">
-                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-[var(--text-primary)] leading-tight">
+                <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-black text-[var(--text-primary)] leading-tight">
                   {profile.name.split(" ")[0]}
                   <span className="block mt-2 bg-gradient-to-r from-[var(--accent-orange)] via-[var(--accent-blue)] to-[var(--accent-orange)] bg-clip-text text-transparent animate-gradient-shift">
                     {profile.name.split(" ").slice(1).join(" ")}
@@ -149,10 +149,10 @@ export function HeroSection({ profile }: HeroSectionProps) {
               transition={{ duration: 0.8, delay: 0.4 }}
               className="space-y-3"
             >
-              <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[var(--accent-orange)]">
+              <p className="text-lg sm:text-xl md:text-3xl font-bold text-[var(--accent-orange)]">
                 {profile.title}
               </p>
-              <p className="text-base md:text-lg text-[var(--text-secondary)] max-w-md">
+              <p className="text-sm sm:text-base md:text-lg text-[var(--text-secondary)] max-w-md">
                 {profile.tagline}
               </p>
             </motion.div>
@@ -241,7 +241,7 @@ export function HeroSection({ profile }: HeroSectionProps) {
               <div className="absolute inset-3 rounded-2xl overflow-hidden bg-[var(--bg-card)] border border-[var(--border-color)]">
                 <Image
                   src={profile.photo}
-                  alt={profile.name}
+                  alt={`Portrait de ${profile.name}, ${profile.title}`}
                   fill
                   sizes="(max-width: 768px) 224px, 300px"
                   className="object-cover group-hover:scale-110 transition-transform duration-500"

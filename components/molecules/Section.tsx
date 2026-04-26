@@ -17,12 +17,12 @@ export function Section({
   id,
 }: SectionProps) {
   return (
-    <section id={id} className={`py-20 px-4 sm:px-6 lg:px-8 ${className}`}>
+    <section id={id} className={`py-16 md:py-20 lg:py-24 px-4 sm:px-6 lg:px-8 ${className}`}>
       <Container>
         {/* Header */}
         {title && (
-          <div className="mb-12 text-center">
-            <Text as="h2" variant="h2" color="primary" className="mb-4">
+          <div className="mb-10 md:mb-12 text-center">
+            <Text as="h2" variant="h2" color="primary" className="mb-3 md:mb-4">
               {title}
             </Text>
             {description && (

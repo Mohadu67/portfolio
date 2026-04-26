@@ -33,13 +33,11 @@ export function EducationSection({ education, title = "Formation" }: EducationSe
           whileInView="animate"
           viewport={{ once: true }}
         >
-          {education.map((edu, i) => (
+          {education.map((edu) => (
             <motion.div
               key={edu.id}
               variants={staggerItem}
-              className={`relative max-w-xl mx-auto md:max-w-none ${
-                i % 2 === 0 ? "md:ml-0" : "md:ml-auto md:mr-0"
-              }`}
+              className="relative w-full"
             >
               {/* Timeline dot */}
               <motion.div
@@ -48,53 +46,49 @@ export function EducationSection({ education, title = "Formation" }: EducationSe
                 whileInView={{ scale: 1 }}
                 viewport={{ once: true }}
                 transition={{ type: "spring", stiffness: 200 }}
+                aria-hidden="true"
               />
 
-              <motion.div
+              <button
+                type="button"
                 onClick={() => setSelectedEdu(edu.id)}
-                className="cursor-pointer group relative"
+                className="block w-full text-left rounded-lg border-2 border-transparent hover:border-[var(--accent-orange)] focus-visible:border-[var(--accent-orange)] focus-visible:outline-none transition-all duration-300 cursor-pointer group"
+                aria-label={`Voir le détail de la formation ${edu.degree}`}
               >
-                <motion.div
-                  className="group relative rounded-lg border-2 border-transparent hover:border-[var(--accent-orange)] transition-all duration-300"
-                  onClick={() => setSelectedEdu(edu.id)}
-                >
-                  <div className="relative rounded-lg bg-[var(--bg-card)]">
-                    <Card
-                      elevated
-                      className="border-l-4 border-l-[var(--accent-orange)] overflow-hidden relative"
-                    >
-                  <div className="relative">
-                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 md:gap-0 mb-3">
-                    <div className="flex-1">
-                      <Text as="h4" variant="h4" className="mb-1">
-                        {edu.degree}
-                      </Text>
-                      <Text color="secondary" variant="body" className="mb-2">
-                        {edu.school}
-                      </Text>
-                      <Text color="tertiary" variant="caption">
-                        {edu.field}
-                      </Text>
+                <div className="rounded-lg bg-[var(--bg-card)]">
+                  <Card
+                    elevated
+                    className="border-l-4 border-l-[var(--accent-orange)] overflow-hidden relative"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 md:gap-0 mb-3">
+                      <div className="flex-1 min-w-0">
+                        <Text as="h4" variant="h4" className="mb-1">
+                          {edu.degree}
+                        </Text>
+                        <Text color="secondary" variant="body" className="mb-2">
+                          {edu.school}
+                        </Text>
+                        <Text color="tertiary" variant="caption">
+                          {edu.field}
+                        </Text>
+                      </div>
+                      <div className="flex items-center gap-2 bg-[var(--bg-secondary)] px-2 sm:px-3 py-1 rounded-lg text-xs sm:text-sm flex-shrink-0 self-start">
+                        <Icon
+                          name="calendar"
+                          size={16}
+                          className="text-[var(--accent-orange)]"
+                        />
+                        <Text variant="caption" color="secondary">
+                          {edu.period}
+                        </Text>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-[var(--bg-secondary)] px-2 sm:px-3 py-1 rounded-lg text-xs sm:text-sm flex-shrink-0">
-                      <Icon
-                        name="calendar"
-                        size={16}
-                        className="text-[var(--accent-orange)]"
-                      />
-                      <Text variant="caption" color="secondary">
-                        {edu.period}
-                      </Text>
-                    </div>
-                  </div>
-                  <Text color="secondary" className="text-sm">
-                    Cliquez pour voir ce que vous avez appris →
-                  </Text>
-                  </div>
-                </Card>
-                  </div>
-                </motion.div>
-              </motion.div>
+                    <Text color="secondary" className="text-sm">
+                      Cliquez pour voir ce que vous avez appris →
+                    </Text>
+                  </Card>
+                </div>
+              </button>
             </motion.div>
           ))}
         </motion.div>
@@ -111,7 +105,7 @@ export function EducationSection({ education, title = "Formation" }: EducationSe
             onClick={() => setSelectedEdu(null)}
           >
             <motion.div
-              className="relative w-full max-w-2xl h-96"
+              className="relative w-full max-w-2xl min-h-[20rem] max-h-[85vh]"
               initial={{ rotateY: -90, opacity: 0 }}
               animate={{ rotateY: 0, opacity: 1 }}
               exit={{ rotateY: 90, opacity: 0 }}
@@ -120,7 +114,7 @@ export function EducationSection({ education, title = "Formation" }: EducationSe
               style={{ perspective: "1200px" }}
             >
               <motion.div
-                className="w-full h-full bg-gradient-to-br from-[var(--accent-orange)]/20 to-[var(--accent-blue)]/20 border border-[var(--border-color)] rounded-2xl p-8 flex flex-col justify-between relative overflow-hidden"
+                className="w-full bg-gradient-to-br from-[var(--accent-orange)]/20 to-[var(--accent-blue)]/20 border border-[var(--border-color)] rounded-2xl p-6 sm:p-8 flex flex-col gap-6 relative overflow-hidden max-h-[85vh]"
                 layout
               >
                 {/* Background decoration */}
@@ -130,27 +124,25 @@ export function EducationSection({ education, title = "Formation" }: EducationSe
 
                 {/* Close button */}
                 <button
+                  type="button"
+                  aria-label="Fermer le détail de la formation"
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedEdu(null);
                   }}
-                  className="absolute top-4 right-4 p-2 hover:bg-[var(--bg-secondary)] rounded-lg transition-colors z-50 pointer-events-auto cursor-pointer"
+                  className="absolute top-3 right-3 p-2 hover:bg-[var(--bg-secondary)] rounded-lg transition-colors z-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--accent-orange)] focus-visible:outline-none"
                 >
-                  <X size={24} className="text-[var(--text-secondary)]" />
+                  <X size={22} className="text-[var(--text-secondary)]" />
                 </button>
 
                 {/* Content - Scrollable */}
-                <div className="relative z-10 overflow-y-auto max-h-64 pr-4">
+                <div className="relative z-10 overflow-y-auto pr-2 flex-1">
                   <div className="flex items-center gap-3 mb-6">
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 3, repeat: Infinity }}
-                    >
-                      <Lightbulb
-                        size={32}
-                        className="text-[var(--accent-orange)]"
-                      />
-                    </motion.div>
+                    <Lightbulb
+                      size={32}
+                      className="text-[var(--accent-orange)] flex-shrink-0"
+                      aria-hidden="true"
+                    />
                     <div>
                       <Text as="h3" variant="h3" className="text-white mb-1">
                         {currentEdu.degree}
@@ -176,8 +168,9 @@ export function EducationSection({ education, title = "Formation" }: EducationSe
 
                 {/* Bottom action */}
                 <button
+                  type="button"
                   onClick={() => setSelectedEdu(null)}
-                  className="w-full px-6 py-3 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] text-white rounded-lg font-semibold hover:shadow-lg transition-shadow relative z-10"
+                  className="w-full px-6 py-3 bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-blue)] text-white rounded-lg font-semibold hover:shadow-lg transition-shadow relative z-10 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
                 >
                   Retour à la liste
                 </button>

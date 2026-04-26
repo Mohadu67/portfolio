@@ -50,7 +50,7 @@ export function FooterSection({ socials }: FooterSectionProps) {
             className="pt-8 border-t border-[var(--border-color)]/50"
           >
             <p className="text-xs text-[var(--text-tertiary)]">
-              © 2026 Mohammed Hamiani • Tous droits réservés
+              © {new Date().getFullYear()} Mohammed Hamiani • Tous droits réservés
             </p>
           </motion.div>
         </motion.div>

@@ -87,13 +87,9 @@ export function SkillCard({
           <Card className="h-full flex flex-col items-center justify-center bg-gradient-to-br from-red-500/5 to-orange-500/5 border-l-4 border-l-[var(--accent-orange)] p-4">
             <div className="text-center w-full h-full flex flex-col items-center justify-center">
               {/* Bug emoji/icon */}
-              <motion.div
-                className="mb-3 text-3xl"
-                animate={{ rotate: [0, 5, -5, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
+              <div className="mb-3 text-3xl" aria-hidden="true">
                 🐛
-              </motion.div>
+              </div>
 
               {/* Story text */}
               {bugStory ? (

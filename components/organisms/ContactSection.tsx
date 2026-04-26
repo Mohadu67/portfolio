@@ -36,23 +36,26 @@ export function ContactSection({ contact, title = "Me contacter" }: ContactSecti
   ];
 
   return (
-    <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[var(--bg-primary)] to-[var(--bg-card)]/50">
+    <section
+      id="contact"
+      className="py-16 md:py-20 lg:py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[var(--bg-primary)] to-[var(--bg-card)]/50"
+    >
       <Container size="md">
         {/* Header */}
         <motion.div
-          className="text-center mb-12"
+          className="text-center mb-10 md:mb-12"
           variants={staggerContainer}
           initial="initial"
           whileInView="animate"
           viewport={{ once: true }}
         >
           <motion.div variants={staggerItem}>
-            <Text as="h2" variant="h2" className="mb-4">
+            <Text as="h2" variant="h2" className="mb-3 md:mb-4">
               {title}
             </Text>
           </motion.div>
           <motion.div variants={staggerItem}>
-            <Text color="secondary" className="text-lg">
+            <Text color="secondary" className="text-base md:text-lg max-w-2xl mx-auto">
               {contact.cta}
             </Text>
           </motion.div>

@@ -76,13 +76,14 @@ export function ProjectCard({
           <motion.div
             animate={{ scale: isHovered ? 1.1 : 1 }}
             transition={{ duration: 0.5 }}
+            className="flex items-center justify-center"
           >
             <Image
               src={image}
-              alt={name}
-              width={200}
-              height={200}
-              className="scale-50"
+              alt={`Aperçu du projet ${name}`}
+              width={120}
+              height={120}
+              className="object-contain"
             />
           </motion.div>
         </motion.div>

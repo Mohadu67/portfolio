@@ -116,7 +116,29 @@ Légende : ⏳ pending · 🟡 en cours · ✅ livré · ⚠️ bloqué
 - **Vue 360 candidature** : `app/dashboard/candidatures/[id]/page.tsx` plein écran : header (entreprise, poste, statut, badges, switcher de statut), 2 colonnes (lettre versionnée, description, notes inline éditables, historique emails | actions, relances avec actions per-relance + composer slide-in).
 - **Déploiement VPS** : VPS mis à jour (commits 0→5 + tool use). `docker-compose.yml` working preservé (volumes existants), Dockerfile du repo (Node 22 + lazy env) accepté. Nouveau workflow GitHub Actions qui fait `git pull` proprement avec stash/restore du compose VPS-spécifique.
 
-### 2026-04-25 — Notifications + Gmail IMAP sync
+### 2026-04-26 — Audit qualité portfolio public
+
+Audit exhaustif du portfolio public (page d'accueil + 7 sections + atoms/molecules/NavBar). 27 défauts catalogués, fixés par sévérité.
+
+**🔴 Critiques**
+- `app/layout.tsx` : metadata étendu avec OpenGraph + Twitter card + robots, `metadataBase`, `title.template` pour SEO. Photo `/photoCV.png` exposée comme image OG.
+- `FooterSection` : année hardcodée → `new Date().getFullYear()`.
+- `HeroSection` : retrait du doublon "Fullstack Developer" hardcodé (utilise `profile.title`), particles 20 → 12, `h-screen` → `min-h-screen` + paddings mobiles, alt enrichi `Portrait de ${name}, ${title}`, headings adoucis sur mobile (`text-3xl sm:text-4xl md:text-6xl lg:text-7xl`).
+- `EducationSection` / `ExperienceSection` : modals figés à `h-96` → `min-h-[20rem] max-h-[85vh]` avec scroll interne propre. Animation `Lightbulb`/`Briefcase` infinie supprimée. Double `onClick` retiré (un seul wrapper `<button>` accessible). Suppression de la timeline `md:ml-auto md:mr-0` alternée qui cassait la symétrie.
+- `SkillCard` : animation infinie `🐛 rotate` retirée (CPU + distrayante).
+
+**🟠 Important**
+- `Section` molecule : padding harmonisé `py-16 md:py-20 lg:py-24` (au lieu de `py-20` figé qui jurait avec le hero `min-h-screen`).
+- `ContactSection` : padding aligné sur Section, gap header normalisé.
+- `ProjectsSection` : IIFE `(() => {...})()` confuse → conditional render simple `{selectedProject && currentProject?.credentials && (...)}`. Modal a maintenant `role="dialog" aria-modal="true" aria-labelledby` propre.
+- `ProjectCard` : `width=200 + scale-50` (anti-pattern qui force le browser à scaler) → `width=120 height=120 object-contain`. Alt enrichi.
+- `NavBar` : `aria-label` partout, `aria-current="page"` sur le bouton actif, `aria-expanded` sur le menu radial, `focus-visible:ring` sur tous les boutons. Type `MenuItem` corrigé pour inclure `label`.
+
+**🟡 Polish**
+- `globals.css` : 7 keyframes inutilisées supprimées (gardé seulement `gradient-shift` qui sert dans le hero), ajout du media query `prefers-reduced-motion: reduce` pour respecter les préférences système.
+- `HeroSection` imports nettoyés (`Code2`, `Button`, `slideUpItem` retirés).
+
+Validations : `docker build` OK, lint TypeScript clean.
 
 **Notifications (envoi mail à soi-même)**
 - `lib/notifications.ts` : `sendNotification({ type, candidature, ... })` envoie un email HTML stylé à `GMAIL_USER` (= soi-même) à chaque action. Vérifie les préférences dans Settings avant d'envoyer.

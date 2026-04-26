@@ -58,7 +58,10 @@ export function NavBar() {
   };
 
   // Calculate positions for radial menu
-  const menuItems = [...sections, { id: "dashboard", icon: LayoutDashboard }];
+  const menuItems: Array<{ id: string; icon: typeof LayoutDashboard; label: string }> = [
+    ...sections,
+    { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  ];
   const totalItems = menuItems.length;
   const radius = 100;
 
@@ -96,13 +99,15 @@ export function NavBar() {
             {sections.map((section) => (
               <motion.button
                 key={section.id}
+                type="button"
                 onClick={() => handleScroll(section.id)}
-                className={`text-sm font-medium transition-colors ${
+                className={`text-sm font-medium transition-colors rounded px-1 focus-visible:ring-2 focus-visible:ring-[var(--accent-orange)] focus-visible:outline-none ${
                   activeSection === section.id
                     ? "text-[var(--accent-orange)]"
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
                 whileHover={{ scale: 1.05 }}
+                aria-current={activeSection === section.id ? "page" : undefined}
               >
                 {section.label}
               </motion.button>
@@ -145,7 +150,9 @@ export function NavBar() {
                 return (
                   <motion.button
                     key={item.id}
-                    className="absolute w-14 h-14 rounded-full bg-gradient-to-br from-[var(--accent-orange)] to-[var(--accent-orange)]/80 flex items-center justify-center text-white shadow-lg"
+                    type="button"
+                    aria-label={item.label}
+                    className="absolute w-14 h-14 rounded-full bg-gradient-to-br from-[var(--accent-orange)] to-[var(--accent-orange)]/80 flex items-center justify-center text-white shadow-lg focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
                     style={{
                       left: "50%",
                       top: "50%",
@@ -179,7 +186,7 @@ export function NavBar() {
                       }
                     }}
                   >
-                    <Icon size={24} className="drop-shadow-lg" />
+                    <Icon size={24} className="drop-shadow-lg" aria-hidden="true" />
                   </motion.button>
                 );
               })}
@@ -187,7 +194,10 @@ export function NavBar() {
 
             {/* Center Button */}
             <motion.button
-              className="absolute w-16 h-16 rounded-full bg-gradient-to-br from-[var(--accent-blue)] to-[var(--accent-blue)]/80 flex items-center justify-center text-white shadow-2xl"
+              type="button"
+              aria-label={isOpen ? "Fermer le menu" : "Ouvrir le menu"}
+              aria-expanded={isOpen}
+              className="absolute w-16 h-16 rounded-full bg-gradient-to-br from-[var(--accent-blue)] to-[var(--accent-blue)]/80 flex items-center justify-center text-white shadow-2xl focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
               style={{
                 right: "0",
                 bottom: "0",
@@ -229,7 +239,9 @@ export function NavBar() {
         {!isOpen && (
           <motion.button
             key="navbar-button"
-            className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full bg-gradient-to-br from-[var(--accent-blue)] to-[var(--accent-blue)]/80 flex items-center justify-center text-white shadow-2xl md:hidden"
+            type="button"
+            aria-label="Ouvrir le menu de navigation"
+            className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full bg-gradient-to-br from-[var(--accent-blue)] to-[var(--accent-blue)]/80 flex items-center justify-center text-white shadow-2xl md:hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             exit={{ scale: 0 }}
@@ -237,7 +249,7 @@ export function NavBar() {
             whileTap={{ scale: 0.95 }}
             onClick={() => setIsOpen(!isOpen)}
           >
-            <Plus size={28} />
+            <Plus size={28} aria-hidden="true" />
           </motion.button>
         )}
       </AnimatePresence>

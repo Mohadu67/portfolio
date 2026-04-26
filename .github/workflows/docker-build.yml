@@ -67,30 +67,45 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 62326
+          command_timeout: 15m
           script: |
-            set -e
+            set -euo pipefail
             cd /home/moha/srv-docker/projects/portfolio
 
-            # Preserve VPS-specific docker-compose.yml (different volumes/network names)
-            # We pull the rest of the repo and rebuild locally with the VPS compose.
-            cp docker-compose.yml docker-compose.yml.vps-working || true
+            echo "::group::Backup VPS compose"
+            cp docker-compose.yml docker-compose.yml.vps-working
+            ls -la docker-compose.yml.vps-working
+            echo "::endgroup::"
 
-            # Stash any local modifications before pulling
+            echo "::group::Reset to origin/main"
             git stash push -u -m "ci-deploy-$(date +%s)" docker-compose.yml Dockerfile 2>/dev/null || true
-
             git fetch origin main
             git reset --hard origin/main
+            echo "HEAD = $(git rev-parse --short HEAD)"
+            echo "::endgroup::"
 
-            # Restore the working compose; trust the Dockerfile from repo
-            if [ -f docker-compose.yml.vps-working ]; then
-              cp docker-compose.yml.vps-working docker-compose.yml
-            fi
+            echo "::group::Restore working compose"
+            cp docker-compose.yml.vps-working docker-compose.yml
+            echo "::endgroup::"
 
-            # Build & restart only the app (mongodb stays up)
-            docker compose build portfolio
-            docker compose up -d portfolio
+            echo "::group::Build + restart portfolio (force recreate)"
+            docker compose build --pull portfolio
+            docker compose up -d --force-recreate --no-deps portfolio
+            echo "::endgroup::"
 
-            echo "Deploiement termine"
+            echo "::group::Wait for healthy"
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              status=$(docker inspect --format='{{.State.Health.Status}}' portfolio 2>/dev/null || echo "unknown")
+              echo "Attempt $i: status=$status"
+              if [ "$status" = "healthy" ]; then
+                echo "Container is healthy."
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "Container did not become healthy in time."
+            docker compose logs --tail 50 portfolio
+            exit 1
 
   notify-deployment:
     runs-on: ubuntu-latest

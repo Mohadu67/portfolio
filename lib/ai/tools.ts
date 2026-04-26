@@ -1,9 +1,13 @@
-import Anthropic from "@anthropic-ai/sdk";
+type JSONSchema = {
+  type: "object";
+  properties: Record<string, unknown>;
+  required?: string[];
+};
 
 export interface ToolDefinition {
   name: string;
   description: string;
-  input_schema: Anthropic.Tool["input_schema"];
+  input_schema: JSONSchema;
   /** If true, requires user confirmation in the UI before execution. */
   requiresConfirmation: boolean;
 }
@@ -97,8 +101,14 @@ export const TOOLS: ToolDefinition[] = [
   },
 ];
 
-export function toolsForAnthropic(): Anthropic.Tool[] {
-  return TOOLS.map(({ name, description, input_schema }) => ({ name, description, input_schema }));
+/**
+ * Convert tool definitions to OpenAI-compatible format (used by Groq Cloud).
+ */
+export function toolsForOpenAI() {
+  return TOOLS.map(({ name, description, input_schema }) => ({
+    type: "function" as const,
+    function: { name, description, parameters: input_schema },
+  }));
 }
 
 export function getTool(name: string): ToolDefinition | undefined {

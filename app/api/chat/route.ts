@@ -1,37 +1,50 @@
 import { NextRequest } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { verifyAuth } from "@/lib/auth";
 import { buildAIContext, contextSummary } from "@/lib/ai/context";
-import { toolsForAnthropic } from "@/lib/ai/tools";
+import { toolsForOpenAI } from "@/lib/ai/tools";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MODEL = process.env.CHAT_MODEL ?? "claude-opus-4-5-20251101";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL = process.env.CHAT_MODEL ?? "llama-3.3-70b-versatile";
+
+interface ToolCallSnapshot {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
+interface ToolResultPayload {
+  tool_use_id: string;
+  content: string;
+  is_error?: boolean;
+}
 
 interface ClientMessage {
   role: "user" | "assistant";
   content: string;
-  tool_calls?: Array<{
-    id: string;
-    name: string;
-    input: Record<string, unknown>;
-  }>;
-  tool_results?: Array<{
-    tool_use_id: string;
-    content: string;
-    is_error?: boolean;
-  }>;
+  tool_calls?: ToolCallSnapshot[];
+  tool_results?: ToolResultPayload[];
 }
+
+type OpenAIMessage =
+  | { role: "system"; content: string }
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string | null; tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> }
+  | { role: "tool"; tool_call_id: string; content: string };
 
 export async function POST(request: NextRequest) {
   if (!verifyAuth(request)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GROK_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: "GROK_API_KEY (Groq Cloud) non configuré côté serveur" }),
+      { status: 500 }
+    );
   }
 
   let messages: ClientMessage[] = [];
@@ -42,66 +55,65 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400 });
   }
 
-  if (messages.length === 0 || messages[messages.length - 1].role !== "user") {
-    return new Response(JSON.stringify({ error: "Last message must be user" }), { status: 400 });
+  if (messages.length === 0) {
+    return new Response(JSON.stringify({ error: "Messages array empty" }), { status: 400 });
   }
 
   const ctx = await buildAIContext();
-
   const profileName =
     (ctx.profile?.name as string | undefined) ?? process.env.PROFIL_NOM ?? "Mohammed Hamiani";
 
-  // Anthropic SDK v0.30 doesn't expose cache_control in TextBlockParam types yet,
-  // so we cast through unknown when adding ephemeral caching.
-  const systemBlocks = [
-    {
-      type: "text" as const,
-      text: `Tu es l'assistant personnel de ${profileName}, un développeur fullstack en recherche de stage/alternance/CDI. Tu communiques en français, tu es direct, factuel, et opinionated. Tu donnes des conseils pratiques et exécutables. Quand tu fais des recommandations, tu cites les candidatures concernées par leur entreprise + poste.
+  const systemPrompt = `Tu es l'assistant personnel de ${profileName}, un développeur fullstack en recherche de stage/alternance/CDI. Tu communiques en français, tu es direct, factuel et opinionated. Phrases courtes, listes à puces, pas de blabla.
 
-Quand on te demande "quoi faire aujourd'hui", priorise les relances en retard et les candidatures stagnantes. Sois concis : phrases courtes, listes à puces, pas de blabla.
+Tu as accès en JSON à : son profil, ses sections de CV, toutes ses candidatures (avec leur _id MongoDB, statut, relances et emails), et tu peux exécuter des actions via des "tools" (programmer une relance, changer un statut, etc.) — l'utilisateur les confirmera avant exécution.
+
+Quand on te demande "quoi faire aujourd'hui", priorise les relances en retard et les candidatures stagnantes.
 
 Date du jour : ${new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
+Résumé : ${contextSummary(ctx)}.
 
-Résumé : ${contextSummary(ctx)}.`,
-    },
-    {
-      type: "text" as const,
-      text: `<context>
-${JSON.stringify(ctx, null, 2)}
-</context>
+CONTEXTE COMPLET (JSON) :
+${JSON.stringify(ctx)}
 
-Utilise ce JSON pour répondre. Ne le re-cite pas en entier dans ta réponse.`,
-      cache_control: { type: "ephemeral" as const },
-    },
-  ] as unknown as Anthropic.TextBlockParam[];
+Ne re-cite pas ce JSON dans tes réponses, exploite-le pour répondre.`;
 
-  const client = new Anthropic({ apiKey });
-
-  // Convert frontend messages to Anthropic content blocks (handles tool_use/tool_result)
-  const anthropicMessages: Anthropic.MessageParam[] = messages.map((m) => {
+  // Convert client messages to OpenAI format (tool_calls/tool_results expansion)
+  const openaiMessages: OpenAIMessage[] = [{ role: "system", content: systemPrompt }];
+  for (const m of messages) {
     if (m.role === "user" && m.tool_results && m.tool_results.length > 0) {
-      return {
-        role: "user",
-        content: m.tool_results.map((tr) => ({
-          type: "tool_result" as const,
-          tool_use_id: tr.tool_use_id,
-          content: tr.content,
-          is_error: tr.is_error,
+      // Each tool_result becomes a separate "tool" role message
+      for (const tr of m.tool_results) {
+        openaiMessages.push({
+          role: "tool",
+          tool_call_id: tr.tool_use_id,
+          content: tr.is_error ? `Erreur: ${tr.content}` : tr.content,
+        });
+      }
+    } else if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+      openaiMessages.push({
+        role: "assistant",
+        content: m.content || null,
+        tool_calls: m.tool_calls.map((tc) => ({
+          id: tc.id,
+          type: "function" as const,
+          function: { name: tc.name, arguments: JSON.stringify(tc.input) },
         })),
-      };
+      });
+    } else if (m.role === "user") {
+      openaiMessages.push({ role: "user", content: m.content });
+    } else if (m.role === "assistant" && m.content) {
+      openaiMessages.push({ role: "assistant", content: m.content });
     }
-    if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
-      const blocks: Array<Anthropic.TextBlockParam | Anthropic.ToolUseBlockParam> = [];
-      if (m.content) {
-        blocks.push({ type: "text", text: m.content });
-      }
-      for (const tc of m.tool_calls) {
-        blocks.push({ type: "tool_use", id: tc.id, name: tc.name, input: tc.input });
-      }
-      return { role: "assistant", content: blocks };
-    }
-    return { role: m.role, content: m.content };
-  });
+  }
+
+  // Validate last message can drive a response
+  const lastUseful = openaiMessages[openaiMessages.length - 1];
+  if (!lastUseful || (lastUseful.role !== "user" && lastUseful.role !== "tool")) {
+    return new Response(
+      JSON.stringify({ error: "Last message must be user or tool" }),
+      { status: 400 }
+    );
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -111,34 +123,111 @@ Utilise ce JSON pour répondre. Ne le re-cite pas en entier dans ta réponse.`,
       };
 
       try {
-        const response = await client.messages.stream({
-          model: MODEL,
-          max_tokens: 2048,
-          system: systemBlocks,
-          tools: toolsForAnthropic(),
-          messages: anthropicMessages,
+        const upstream = await fetch(GROQ_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            messages: openaiMessages,
+            tools: toolsForOpenAI(),
+            tool_choice: "auto",
+            stream: true,
+            temperature: 0.6,
+            max_tokens: 2048,
+          }),
         });
 
-        response.on("text", (textDelta: string) => {
-          send("delta", { text: textDelta });
-        });
-
-        const final = await response.finalMessage();
-
-        // Detect tool calls
-        const toolCalls = final.content
-          .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
-          .map((b) => ({ id: b.id, name: b.name, input: b.input as Record<string, unknown> }));
-
-        if (toolCalls.length > 0) {
-          send("tool_calls", { tool_calls: toolCalls });
+        if (!upstream.ok || !upstream.body) {
+          const errText = await upstream.text();
+          send("error", { error: `Groq API ${upstream.status}: ${errText.slice(0, 300)}` });
+          controller.close();
+          return;
         }
 
-        send("done", {
-          model: final.model,
-          usage: final.usage,
-          stop_reason: final.stop_reason,
-        });
+        const reader = upstream.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        // Tool call accumulator (Groq streams tool_calls progressively)
+        const toolCallsAcc: Map<number, { id: string; name: string; argsBuffer: string }> = new Map();
+        let finishReason: string | null = null;
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data: ")) continue;
+            const payload = trimmed.slice(6);
+            if (payload === "[DONE]") continue;
+
+            let chunk: {
+              choices?: Array<{
+                delta?: {
+                  content?: string;
+                  tool_calls?: Array<{
+                    index: number;
+                    id?: string;
+                    function?: { name?: string; arguments?: string };
+                  }>;
+                };
+                finish_reason?: string;
+              }>;
+            };
+            try {
+              chunk = JSON.parse(payload);
+            } catch {
+              continue;
+            }
+
+            const choice = chunk.choices?.[0];
+            if (!choice) continue;
+            const delta = choice.delta;
+
+            if (delta?.content) {
+              send("delta", { text: delta.content });
+            }
+
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index;
+                const cur = toolCallsAcc.get(idx) ?? { id: "", name: "", argsBuffer: "" };
+                if (tc.id) cur.id = tc.id;
+                if (tc.function?.name) cur.name = tc.function.name;
+                if (tc.function?.arguments) cur.argsBuffer += tc.function.arguments;
+                toolCallsAcc.set(idx, cur);
+              }
+            }
+
+            if (choice.finish_reason) {
+              finishReason = choice.finish_reason;
+            }
+          }
+        }
+
+        // Emit accumulated tool calls if any
+        if (toolCallsAcc.size > 0) {
+          const tool_calls = Array.from(toolCallsAcc.values()).map((tc) => {
+            let input: Record<string, unknown> = {};
+            try {
+              input = tc.argsBuffer ? JSON.parse(tc.argsBuffer) : {};
+            } catch {
+              input = { _rawArguments: tc.argsBuffer };
+            }
+            return { id: tc.id, name: tc.name, input };
+          });
+          send("tool_calls", { tool_calls });
+        }
+
+        send("done", { model: MODEL, finish_reason: finishReason });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[chat]", msg);
@@ -153,7 +242,7 @@ Utilise ce JSON pour répondre. Ne le re-cite pas en entier dans ta réponse.`,
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
+      Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     },
   });

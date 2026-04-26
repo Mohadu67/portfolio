@@ -80,12 +80,21 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
     let acc = "";
     let receivedToolCalls: ToolCall[] = [];
 
+    // Strip the trailing empty assistant placeholder that the UI adds for streaming.
+    // Anthropic requires the last message to be a user message.
+    const sendable = msgs.filter((m, i) => {
+      if (i !== msgs.length - 1) return true;
+      // last message — keep only if user, or assistant with actual content/tool_calls
+      if (m.role === "user") return true;
+      return Boolean(m.content || (m.tool_calls && m.tool_calls.length > 0));
+    });
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: msgs.map((m) => ({
+          messages: sendable.map((m) => ({
             role: m.role,
             content: m.content,
             tool_calls: m.tool_calls,

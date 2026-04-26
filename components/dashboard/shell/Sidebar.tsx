@@ -16,6 +16,7 @@ import {
   ChevronsRight,
   LogOut,
   ExternalLink,
+  StickyNote,
 } from "lucide-react";
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -34,6 +35,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard/relances", label: "Relances", icon: Calendar },
   { href: "/dashboard/cv", label: "CV Builder", icon: FileText },
   { href: "/dashboard/media", label: "Médias", icon: ImageIcon },
+  { href: "/dashboard/notes", label: "Notes", icon: StickyNote },
   { href: "/dashboard/chat", label: "Chat IA", icon: Sparkles },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

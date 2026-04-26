@@ -14,6 +14,7 @@ import {
   X,
   LogOut,
   ExternalLink,
+  StickyNote,
 } from "lucide-react";
 
 const NAV = [
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/dashboard/relances", label: "Relances", icon: Calendar },
   { href: "/dashboard/cv", label: "CV Builder", icon: FileText },
   { href: "/dashboard/media", label: "Médias", icon: ImageIcon },
+  { href: "/dashboard/notes", label: "Notes", icon: StickyNote },
   { href: "/dashboard/chat", label: "Chat IA", icon: Sparkles },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

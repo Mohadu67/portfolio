@@ -33,16 +33,23 @@ export function FooterSection({ socials }: FooterSectionProps) {
             className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-2xl mx-auto"
             variants={slideUpContainer}
           >
-            {socials.map((social) => (
-              <motion.div key={social.id} variants={slideUpItem}>
-                <SocialLink
-                  name={social.name}
-                  handle={social.handle}
-                  url={social.url}
-                  iconName={social.icon}
-                />
-              </motion.div>
-            ))}
+            {socials
+              .filter(
+                (s) =>
+                  s.icon !== "calendar" &&
+                  s.id !== "calendar" &&
+                  !s.url?.includes("calendly")
+              )
+              .map((social) => (
+                <motion.div key={social.id} variants={slideUpItem}>
+                  <SocialLink
+                    name={social.name}
+                    handle={social.handle}
+                    url={social.url}
+                    iconName={social.icon}
+                  />
+                </motion.div>
+              ))}
           </motion.div>
 
           <motion.div

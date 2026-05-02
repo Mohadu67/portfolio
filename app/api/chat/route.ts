@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyAuth } from "@/lib/auth";
-import { buildAIContext, contextSummary } from "@/lib/ai/context";
-import { toolsForOpenAI } from "@/lib/ai/tools";
+import { buildContextLite } from "@/lib/ai/context";
+import { toolsForOpenAI, getTool } from "@/lib/ai/tools";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -59,23 +59,27 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: "Messages array empty" }), { status: 400 });
   }
 
-  const ctx = await buildAIContext();
-  const profileName =
-    (ctx.profile?.name as string | undefined) ?? process.env.PROFIL_NOM ?? "Mohammed Hamiani";
+  const lite = await buildContextLite();
+  const profileName = lite.profileName ?? process.env.PROFIL_NOM ?? "Mohammed Hamiani";
 
-  const systemPrompt = `Tu es l'assistant personnel de ${profileName}, un développeur fullstack en recherche de stage/alternance/CDI. Tu communiques en français, tu es direct, factuel et opinionated. Phrases courtes, listes à puces, pas de blabla.
-
-Tu as accès en JSON à : son profil, ses sections de CV, toutes ses candidatures (avec leur _id MongoDB, statut, relances et emails), et tu peux exécuter des actions via des "tools" (programmer une relance, changer un statut, etc.) — l'utilisateur les confirmera avant exécution.
-
-Quand on te demande "quoi faire aujourd'hui", priorise les relances en retard et les candidatures stagnantes.
+  const systemPrompt = `Tu es l'assistant personnel de ${profileName}, développeur fullstack en recherche de stage/alternance/CDI. Tu communiques en français, direct, factuel, opinionated. Phrases courtes, listes à puces, pas de blabla.
 
 Date du jour : ${new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
-Résumé : ${contextSummary(ctx)}.
 
-CONTEXTE COMPLET (JSON) :
-${JSON.stringify(ctx)}
+Résumé du contexte : ${lite.summary}.
 
-Ne re-cite pas ce JSON dans tes réponses, exploite-le pour répondre.`;
+Tu N'AS PAS le détail des candidatures/CV dans ce prompt. Pour répondre, utilise les tools de lecture :
+- list_candidatures(statut?, search?) → trouve les candidatures pertinentes
+- get_candidature(id) → détail complet d'une candidature
+- list_relances_due() → relances programmées (priorité pour "quoi faire aujourd'hui")
+- list_cv_sections() / get_cv_section(key) → infos CV
+
+Tools d'action (nécessitent confirmation user) : schedule_relance, cancel_relance, update_candidature_status, update_candidature_notes, send_relance_now.
+
+Stratégie :
+1. Si la question implique des candidatures, COMMENCE par appeler list_candidatures ou list_relances_due pour trouver l'info.
+2. Récupère le détail uniquement si nécessaire.
+3. Réponds de manière concise en exploitant le résultat des tools.`;
 
   // Convert client messages to OpenAI format (tool_calls/tool_results expansion)
   const openaiMessages: OpenAIMessage[] = [{ role: "system", content: systemPrompt }];
@@ -222,7 +226,13 @@ Ne re-cite pas ce JSON dans tes réponses, exploite-le pour répondre.`;
             } catch {
               input = { _rawArguments: tc.argsBuffer };
             }
-            return { id: tc.id, name: tc.name, input };
+            const def = getTool(tc.name);
+            return {
+              id: tc.id,
+              name: tc.name,
+              input,
+              requires_confirmation: def?.requiresConfirmation ?? true,
+            };
           });
           send("tool_calls", { tool_calls });
         }

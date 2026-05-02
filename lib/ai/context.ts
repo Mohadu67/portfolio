@@ -77,6 +77,55 @@ export async function buildAIContext(): Promise<AIContext> {
   };
 }
 
+export interface AIContextLite {
+  profileName: string | null;
+  summary: string;
+}
+
+/**
+ * Lightweight context for the system prompt — only aggregate counts, no candidate/CV detail.
+ * Detail is fetched on-demand by the model via tools (list_candidatures, get_candidature, etc.).
+ */
+export async function buildContextLite(): Promise<AIContextLite> {
+  await connectDB();
+
+  const [candidatures, profileSection] = await Promise.all([
+    Candidature.find({}, { statut: 1, relanceHistory: 1, created_at: 1 }).lean<
+      Array<Pick<ICandidature, "statut" | "relanceHistory" | "created_at">>
+    >(),
+    CVSection.findOne({ type: "profile" }).lean<ICVSection | null>(),
+  ]);
+
+  const total = candidatures.length;
+  const byStatus = candidatures.reduce<Record<string, number>>((acc, c) => {
+    acc[c.statut] = (acc[c.statut] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const now = Date.now();
+  let upcoming = 0;
+  let overdue = 0;
+  for (const c of candidatures) {
+    for (const r of c.relanceHistory ?? []) {
+      if (r.status !== "programmée") continue;
+      const t = r.scheduledFor instanceof Date ? r.scheduledFor.getTime() : Date.parse(String(r.scheduledFor));
+      if (Number.isNaN(t)) continue;
+      if (t < now) overdue++;
+      else upcoming++;
+    }
+  }
+
+  const statusStr = Object.entries(byStatus)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(", ") || "aucune";
+  const summary = `${total} candidatures (${statusStr}) · ${overdue} relances en retard · ${upcoming} relances à venir`;
+
+  const profileContent = profileSection?.content as Record<string, unknown> | undefined;
+  const profileName = (profileContent?.name as string | undefined) ?? null;
+
+  return { profileName, summary };
+}
+
 export function contextSummary(ctx: AIContext): string {
   const total = ctx.candidatures.length;
   const byStatus = ctx.candidatures.reduce(

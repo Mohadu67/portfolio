@@ -8,6 +8,7 @@ interface ToolCall {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  requires_confirmation?: boolean;
 }
 
 interface ToolResult {
@@ -45,6 +46,11 @@ const TOOL_LABELS: Record<string, string> = {
   update_candidature_status: "🔖 Changer le statut",
   update_candidature_notes: "📝 Mettre à jour les notes",
   send_relance_now: "✉️ Envoyer une relance immédiatement",
+  list_candidatures: "🔍 Lister les candidatures",
+  get_candidature: "📄 Lire une candidature",
+  list_relances_due: "📋 Lister les relances dues",
+  list_cv_sections: "📚 Lister les sections du CV",
+  get_cv_section: "📖 Lire une section du CV",
 };
 
 interface ChatPanelProps {
@@ -154,6 +160,15 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
           };
           return copy;
         });
+
+        // Auto-execute read-only tools (no confirmation needed) and re-stream.
+        const allReadOnly = receivedToolCalls.every((tc) => tc.requires_confirmation === false);
+        if (allReadOnly) {
+          setStreaming(false);
+          await autoExecuteTools(receivedToolCalls);
+          return;
+        }
+
         setPendingTools(receivedToolCalls.map((tc) => ({ call: tc, status: "pending" })));
       }
     } catch (err) {
@@ -212,6 +227,25 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
         is_error: true,
       };
     }
+  };
+
+  const autoExecuteTools = async (calls: ToolCall[]) => {
+    const results: ToolResult[] = [];
+    for (const call of calls) {
+      const res = await executeTool({ call, status: "executing" });
+      results.push(res);
+    }
+    let snapshot: Message[] = [];
+    setMessages((prev) => {
+      snapshot = [
+        ...prev,
+        { role: "user", content: "", tool_results: results },
+        { role: "assistant", content: "" },
+      ];
+      return snapshot;
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await streamFromMessages(snapshot);
   };
 
   const approveAll = async () => {

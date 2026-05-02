@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import { Candidature, CandidatureStatut } from "@/models/Candidature";
+import { Candidature, CandidatureStatut, ICandidature } from "@/models/Candidature";
+import { CVSection, ICVSection } from "@/models/CVSection";
 import { sendRelance } from "@/lib/email";
 import { verifyAuth } from "@/lib/auth";
 import { getTool } from "@/lib/ai/tools";
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 const STATUTS: CandidatureStatut[] = [
   "identifiée",
@@ -50,6 +55,142 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (body.tool) {
+      case "list_candidatures": {
+        const statut = input.statut ? String(input.statut) : null;
+        const search = input.search ? String(input.search).trim() : "";
+        const limit = Math.min(Math.max(Number(input.limit) || 50, 1), 200);
+        const query: Record<string, unknown> = {};
+        if (statut) query.statut = statut;
+        if (search) {
+          const rx = new RegExp(escapeRegex(search), "i");
+          query.$or = [{ entreprise: rx }, { poste: rx }];
+        }
+        const docs = await Candidature.find(query, {
+          entreprise: 1,
+          poste: 1,
+          statut: 1,
+          type: 1,
+          plateforme: 1,
+          localisation: 1,
+          created_at: 1,
+        })
+          .sort({ created_at: -1 })
+          .limit(limit)
+          .lean<ICandidature[]>();
+        const items = docs.map((c) => ({
+          _id: String(c._id),
+          entreprise: c.entreprise,
+          poste: c.poste,
+          statut: c.statut,
+          type: c.type,
+          plateforme: c.plateforme,
+          localisation: c.localisation ?? "",
+          created_at:
+            c.created_at instanceof Date ? c.created_at.toISOString() : String(c.created_at ?? ""),
+        }));
+        return NextResponse.json({
+          ok: true,
+          summary: JSON.stringify({ count: items.length, items }),
+        });
+      }
+
+      case "get_candidature": {
+        const id = String(input.candidature_id);
+        const c = await Candidature.findById(id).lean<ICandidature | null>();
+        if (!c) return NextResponse.json({ error: "Candidature not found" }, { status: 404 });
+        const detail = {
+          _id: String(c._id),
+          entreprise: c.entreprise,
+          poste: c.poste,
+          statut: c.statut,
+          type: c.type,
+          plateforme: c.plateforme,
+          localisation: c.localisation ?? "",
+          email: c.email ?? "",
+          url: c.url ?? "",
+          description: (c.description ?? "").slice(0, 800),
+          notes: c.notes ?? "",
+          hasLetter: !!c.lettre,
+          created_at:
+            c.created_at instanceof Date ? c.created_at.toISOString() : String(c.created_at ?? ""),
+          relances: (c.relanceHistory ?? []).map((r, idx) => ({
+            index: idx,
+            scheduledFor:
+              r.scheduledFor instanceof Date
+                ? r.scheduledFor.toISOString()
+                : String(r.scheduledFor),
+            status: r.status,
+            templateTitle: r.templateTitle,
+            message: (r.message ?? "").slice(0, 300),
+            sentAt: r.sentAt ? new Date(r.sentAt).toISOString() : null,
+          })),
+          emailsSent: (c.emailsSent ?? []).map((e) => ({
+            date: e.date instanceof Date ? e.date.toISOString() : String(e.date),
+            subject: e.subject,
+            type: e.type,
+            status: e.status,
+          })),
+        };
+        return NextResponse.json({ ok: true, summary: JSON.stringify(detail) });
+      }
+
+      case "list_relances_due": {
+        const before = input.before_date
+          ? new Date(String(input.before_date))
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        const docs = await Candidature.find(
+          { "relanceHistory.status": "programmée" },
+          { entreprise: 1, poste: 1, statut: 1, relanceHistory: 1, email: 1 }
+        ).lean<ICandidature[]>();
+        const items: Array<Record<string, unknown>> = [];
+        for (const c of docs) {
+          (c.relanceHistory ?? []).forEach((r, idx) => {
+            if (r.status !== "programmée") return;
+            const t =
+              r.scheduledFor instanceof Date ? r.scheduledFor : new Date(String(r.scheduledFor));
+            if (Number.isNaN(t.getTime()) || t > before) return;
+            items.push({
+              candidature_id: String(c._id),
+              entreprise: c.entreprise,
+              poste: c.poste,
+              statut: c.statut,
+              has_email: !!c.email,
+              relance_index: idx,
+              scheduledFor: t.toISOString(),
+              templateTitle: r.templateTitle,
+              overdue: t.getTime() < Date.now(),
+            });
+          });
+        }
+        items.sort((a, b) => String(a.scheduledFor).localeCompare(String(b.scheduledFor)));
+        return NextResponse.json({
+          ok: true,
+          summary: JSON.stringify({ count: items.length, items }),
+        });
+      }
+
+      case "list_cv_sections": {
+        const sections = await CVSection.find({}, { key: 1, type: 1, title: 1, order: 1 })
+          .sort({ order: 1 })
+          .lean<ICVSection[]>();
+        return NextResponse.json({
+          ok: true,
+          summary: JSON.stringify(
+            sections.map((s) => ({ key: s.key, type: s.type, title: s.title }))
+          ),
+        });
+      }
+
+      case "get_cv_section": {
+        const key = String(input.key);
+        const s = await CVSection.findOne({ key }).lean<ICVSection | null>();
+        if (!s) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+        return NextResponse.json({
+          ok: true,
+          summary: JSON.stringify({ key: s.key, type: s.type, title: s.title, content: s.content }),
+        });
+      }
+
       case "schedule_relance": {
         const { candidature_id, scheduled_for, title, message } = input as Record<string, string>;
         const c = await Candidature.findById(candidature_id);

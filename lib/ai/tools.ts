@@ -14,6 +14,76 @@ export interface ToolDefinition {
 
 export const TOOLS: ToolDefinition[] = [
   {
+    name: "list_candidatures",
+    description:
+      "Liste les candidatures (résumé léger : _id, entreprise, poste, statut, type, date). Utiliser pour trouver des candidatures avant d'utiliser get_candidature ou les tools d'action. Filtrer par statut ou par recherche textuelle (entreprise/poste).",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        statut: {
+          type: "string",
+          description: "Filtrer par statut exact (optionnel)",
+          enum: ["identifiée", "lettre générée", "postulée", "réponse reçue", "entretien", "refus", "acceptée"],
+        },
+        search: {
+          type: "string",
+          description: "Recherche insensible à la casse sur entreprise et poste (optionnel)",
+        },
+        limit: {
+          type: "number",
+          description: "Nombre max de résultats (défaut 50, max 200)",
+        },
+      },
+    },
+  },
+  {
+    name: "get_candidature",
+    description:
+      "Détail complet d'une candidature : description offre, notes, lettre, historique des relances, emails envoyés. À appeler quand l'utilisateur pose une question précise sur UNE candidature identifiée.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: { type: "string", description: "ID MongoDB de la candidature" },
+      },
+      required: ["candidature_id"],
+    },
+  },
+  {
+    name: "list_relances_due",
+    description:
+      "Liste les relances programmées (status='programmée'), triées par date. Utile pour répondre 'que dois-je faire aujourd'hui' ou 'quelles relances cette semaine'.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        before_date: {
+          type: "string",
+          description: "Filtrer relances dont scheduledFor <= cette date ISO (optionnel, défaut +30 jours)",
+        },
+      },
+    },
+  },
+  {
+    name: "list_cv_sections",
+    description: "Liste les sections du CV (key, type, title) sans le contenu. Pour découvrir ce qui est disponible.",
+    requiresConfirmation: false,
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_cv_section",
+    description: "Récupère le contenu complet d'une section du CV par sa key.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Key de la section (ex: 'profile', 'experiences', 'skills')" },
+      },
+      required: ["key"],
+    },
+  },
+  {
     name: "schedule_relance",
     description:
       "Programme une relance pour une candidature à une date donnée. À utiliser quand l'utilisateur demande de programmer/planifier/relancer.",

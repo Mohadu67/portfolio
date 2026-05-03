@@ -88,14 +88,14 @@ jobs:
             cp docker-compose.yml.vps-working docker-compose.yml
             echo "::endgroup::"
 
-            echo "::group::Build + restart portfolio (force recreate)"
-            docker compose build --pull app
+            echo "::group::Pull + restart portfolio (force recreate)"
+            docker compose pull app
             docker compose up -d --force-recreate --no-deps app
             echo "::endgroup::"
 
             echo "::group::Wait for healthy"
             for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-              status=$(docker inspect --format='{{.State.Health.Status}}' portfolio-dev 2>/dev/null || echo "unknown")
+              status=$(docker inspect --format='{{.State.Health.Status}}' portfolio 2>/dev/null || echo "unknown")
               echo "Attempt $i: status=$status"
               if [ "$status" = "healthy" ]; then
                 echo "Container is healthy."

@@ -72,6 +72,20 @@ Tu ne commences JAMAIS par "Madame, Monsieur," (c'est ajouté automatiquement da
 Tu ne termines JAMAIS par "Bien cordialement" ou une signature (c'est ajouté automatiquement dans le PDF).
 Tu écris directement le corps de la lettre, rien d'autre.`;
 
+const LEGAL_BOILERPLATE_KEYWORDS = [
+  "droit d'auteur", "propriété intellectuelle", "reproduction",
+  "mentions légales", "conditions générales", "politique de confidentialité",
+  "rgpd", "gdpr", "cookies", "cookieconsent", "ce site relève",
+  "droits réservés", "représentation iconographique",
+];
+
+function isLegalBoilerplate(text: string): boolean {
+  if (!text || text.length < 50) return false;
+  const lower = text.toLowerCase();
+  const matches = LEGAL_BOILERPLATE_KEYWORDS.filter((kw) => lower.includes(kw));
+  return matches.length >= 2;
+}
+
 export async function generateLetterProposal(
   entreprise: string,
   aboutText: string,
@@ -79,6 +93,9 @@ export async function generateLetterProposal(
 ): Promise<string> {
   const systemPrompt = `Tu es un expert en lettres de motivation. Tu génères UNIQUEMENT un court paragraphe de transition qui fait le lien entre le profil du candidat et l'entreprise ciblée. Rien d'autre.
 Ton style: direct, concis, professionnel. Pas de blabla, pas de formules creuses.`;
+
+  // Strip out legal boilerplate — it would poison the generated paragraph
+  const cleanAboutText = isLegalBoilerplate(aboutText) ? "" : aboutText;
 
   const prompt = `Je rédige une lettre de motivation pour ${entreprise}.
 
@@ -99,12 +116,12 @@ Je reste disponible pour un échange.
 ---
 
 À PROPOS DE L'ENTREPRISE:
-${aboutText.substring(0, 1000)}
+${cleanAboutText ? cleanAboutText.substring(0, 1000) : "(information non disponible — génère le paragraphe à partir du nom de l'entreprise et du poste uniquement)"}
 
 INSTRUCTIONS:
 - Génère UNIQUEMENT le paragraphe manquant [PARAGRAPHE À GÉNÉRER ICI]
 - Ce paragraphe doit faire le lien entre mes compétences et ce que fait ${entreprise}
-- Mentionne 1-2 éléments concrets de l'entreprise (activité, techno, produit) tirés du texte "à propos"
+${cleanAboutText ? "- Mentionne 1-2 éléments concrets de l'entreprise (activité, techno, produit) tirés du texte \"à propos\"" : "- Reste général mais pertinent, base-toi uniquement sur le nom de l'entreprise et le poste visé"}
 - Explique pourquoi ${entreprise} m'intéresse et ce que je peux apporter
 - 2-3 phrases max, ton direct et professionnel
 - Ne mets PAS de guillemets autour du paragraphe

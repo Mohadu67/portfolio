@@ -128,9 +128,16 @@ async function fetchPage(url: string): Promise<string | null> {
     const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; CurriculumBot/1.0)",
-        "Accept": "text/html,application/xhtml+xml",
-        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Cookie": "cookieconsent_status=allow; CookieConsent=true; gdpr=1; rgpd=1",
+        "DNT": "1",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
       },
       signal: controller.signal,
       redirect: "follow",
@@ -164,33 +171,35 @@ export async function scrapeCompanyWebsite(url: string): Promise<ScrapedCompanyD
   result.emails = extractEmails(homeHtml);
   result.phones = extractPhones($home.text());
 
-  // 2. Find about/contact and legal links (prioritize legal pages - emails are often there)
-  const aboutLinks = findAboutLinks($home, url);
-  const legalLinks = findLegalLinks($home, url);
+  // 2. Find about/contact and legal links separately
+  const aboutLinks = findAboutLinks($home, url).slice(0, 3);
+  const legalLinks = findLegalLinks($home, url).slice(0, 3);
 
-  // Combine and prioritize: legal pages first (more likely to have emails), then about/contact
-  const allLinks = [...new Set([...legalLinks, ...aboutLinks])];
-
-  // 3. Scrape multiple pages (legal + about/contact, max 6)
-  const pagesToScrape = allLinks.slice(0, 6);
-  const pageResults = await Promise.all(pagesToScrape.map(fetchPage));
-
-  for (const pageHtml of pageResults) {
-    if (!pageHtml) continue;
-    const $page = cheerio.load(pageHtml);
-
-    // Collect emails & phones
-    result.emails.push(...extractEmails(pageHtml));
-    result.phones.push(...extractPhones($page.text()));
-
-    // Get about text from the first about-like page
-    if (!result.aboutText) {
-      const text = extractAboutText($page);
-      if (text.length > 100) result.aboutText = text;
+  // 3. Scrape about/contact pages → aboutText + emails
+  if (aboutLinks.length > 0) {
+    const aboutResults = await Promise.all(aboutLinks.map(fetchPage));
+    for (const pageHtml of aboutResults) {
+      if (!pageHtml) continue;
+      const $page = cheerio.load(pageHtml);
+      result.emails.push(...extractEmails(pageHtml));
+      result.phones.push(...extractPhones($page.text()));
+      if (!result.aboutText) {
+        const text = extractAboutText($page);
+        if (text.length > 100) result.aboutText = text;
+      }
     }
   }
 
-  // 4. Fallback: get about text from homepage
+  // 4. Scrape legal pages → emails only (never use for aboutText)
+  if (legalLinks.length > 0) {
+    const legalResults = await Promise.all(legalLinks.map(fetchPage));
+    for (const pageHtml of legalResults) {
+      if (!pageHtml) continue;
+      result.emails.push(...extractEmails(pageHtml));
+    }
+  }
+
+  // 5. Fallback: get about text from homepage
   if (!result.aboutText) {
     result.aboutText = extractAboutText($home);
   }

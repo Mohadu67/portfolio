@@ -48,41 +48,41 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Save mode: insert new candidatures (avoid duplicates by URL)
-    let newCount = 0;
-    let duplicateCount = 0;
+    // Save mode: batch check existing URLs, then insertMany the new ones
+    const urls = allResults.map((r) => r.url);
+    const existing = await Candidature.find({ url: { $in: urls } }, { url: 1 }).lean<{ url: string }[]>();
+    const existingUrls = new Set(existing.map((e) => e.url));
+    const today = new Date().toISOString().split("T")[0];
+    const toInsert = allResults
+      .filter((r) => !existingUrls.has(r.url))
+      .map((r) => ({
+        entreprise: r.entreprise,
+        poste: r.poste,
+        plateforme: r.plateforme,
+        localisation: r.localisation,
+        url: r.url,
+        description: r.description,
+        email: r.email || "",
+        statut: "identifiée",
+        lettre: null,
+        notes: "",
+        date: today,
+      }));
 
-    for (const result of allResults) {
-      const existing = await Candidature.findOne({ url: result.url });
-      if (!existing) {
-        try {
-          await Candidature.create({
-            entreprise: result.entreprise,
-            poste: result.poste,
-            plateforme: result.plateforme,
-            localisation: result.localisation,
-            url: result.url,
-            description: result.description,
-            email: result.email || "",
-            statut: "identifiée",
-            lettre: null,
-            notes: "",
-            date: new Date().toISOString().split("T")[0],
-          });
-          newCount++;
-        } catch (error) {
-          console.warn("Error creating candidature:", error);
-        }
-      } else {
-        duplicateCount++;
-      }
+    let newCount = 0;
+    if (toInsert.length > 0) {
+      const inserted = await Candidature.insertMany(toInsert, { ordered: false }).catch((err) => {
+        console.warn("insertMany partial error:", err?.message);
+        return err?.insertedDocs ?? [];
+      });
+      newCount = Array.isArray(inserted) ? inserted.length : 0;
     }
 
     return NextResponse.json({
       message: `${newCount} nouvelles offres sauvegardées`,
       total_trouvees: allResults.length,
       nouvelles: newCount,
-      duplicates: duplicateCount,
+      duplicates: existingUrls.size,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

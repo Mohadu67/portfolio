@@ -55,17 +55,19 @@ interface SavedQuery {
 
 const SAVED_QUERIES_KEY = "recherche-saved-queries";
 
-const PLATFORM_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  JSearch:       { bg: "bg-[var(--accent-blue)]/15",   text: "text-[var(--accent-blue)]",   label: "JSearch" },
-  Adzuna:        { bg: "bg-[var(--accent-orange)]/15",  text: "text-[var(--accent-orange)]", label: "Adzuna" },
-  "France Travail": { bg: "bg-[var(--accent-violet)]/15", text: "text-[var(--accent-violet)]", label: "France Travail" },
-  Indeed:        { bg: "bg-[var(--accent-success)]/15", text: "text-[var(--accent-success)]", label: "Indeed" },
+type Platform = OffreResult["plateforme"];
+
+const PLATFORM_STYLES: Record<Platform, { bg: string; text: string; label: string }> = {
+  JSearch:          { bg: "bg-[var(--accent-blue)]/15",    text: "text-[var(--accent-blue)]",    label: "JSearch" },
+  Adzuna:           { bg: "bg-[var(--accent-orange)]/15",  text: "text-[var(--accent-orange)]",  label: "Adzuna" },
+  "France Travail": { bg: "bg-[var(--accent-violet)]/15",  text: "text-[var(--accent-violet)]",  label: "France Travail" },
+  Indeed:           { bg: "bg-[var(--accent-success)]/15", text: "text-[var(--accent-success)]", label: "Indeed" },
 };
 
 // ─── Composants locaux ───────────────────────────────────
 
-function PlatformBadge({ platform }: { platform: string }) {
-  const s = PLATFORM_STYLES[platform] ?? { bg: "bg-[var(--bg-hover)]", text: "text-[var(--text-tertiary)]", label: platform };
+function PlatformBadge({ platform }: { platform: Platform }) {
+  const s = PLATFORM_STYLES[platform];
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${s.bg} ${s.text}`}>
       {s.label}
@@ -113,11 +115,12 @@ export default function RecherchePage() {
 
   // Load saved companies from DB
   useEffect(() => {
-    if (tab !== "entreprises") return;
+    if (tab !== "entreprises" || !apiKey) return;
     fetchSavedCompanies();
-  }, [tab]);
+  }, [tab, apiKey]);
 
   async function fetchSavedCompanies() {
+    if (!apiKey) return;
     try {
       const res = await fetch("/api/saved-searches", {
         headers: { "x-api-key": apiKey },
@@ -131,14 +134,15 @@ export default function RecherchePage() {
 
   // ── Offres actions ──
 
-  async function searchOffres(e?: React.FormEvent) {
+  async function searchOffres(e?: React.FormEvent, kwArg?: string, locArg?: string) {
     e?.preventDefault();
-    const kw = keywords.trim();
-    const loc = location.trim();
+    const kw = (kwArg ?? keywords).trim();
+    const loc = (locArg ?? location).trim();
     if (!kw || !loc) {
       setOffresError("Mots-clés et localisation requis.");
       return;
     }
+    if (!apiKey) return;
     setOffresLoading(true);
     setOffresError("");
     setHasSearched(true);
@@ -163,6 +167,7 @@ export default function RecherchePage() {
   }
 
   async function addOffre(offre: OffreResult) {
+    if (!apiKey) return;
     setAddingUrls((prev) => new Set(prev).add(offre.url));
     try {
       const res = await fetch("/api/candidatures", {
@@ -202,12 +207,11 @@ export default function RecherchePage() {
 
   async function importAll() {
     const toAdd = offresResults.filter((r) => !r.already_saved);
-    if (toAdd.length === 0) return;
+    if (toAdd.length === 0 || !apiKey) return;
     setImportingAll(true);
-    let added = 0;
-    for (const offre of toAdd) {
-      try {
-        const res = await fetch("/api/candidatures", {
+    const results = await Promise.all(
+      toAdd.map((offre) =>
+        fetch("/api/candidatures", {
           method: "POST",
           headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -219,10 +223,12 @@ export default function RecherchePage() {
             description: offre.description,
             statut: "identifiée",
           }),
-        });
-        if (res.ok || res.status === 409) added++;
-      } catch {}
-    }
+        })
+          .then((r) => r.ok || r.status === 409)
+          .catch(() => false)
+      )
+    );
+    const added = results.filter(Boolean).length;
     setOffresResults((prev) => prev.map((r) => ({ ...r, already_saved: true })));
     toast.success(`${added} offres importées`);
     setImportingAll(false);
@@ -249,10 +255,7 @@ export default function RecherchePage() {
   function rerunQuery(q: SavedQuery) {
     setKeywords(q.keywords);
     setLocation(q.location);
-    // Trigger search after state update
-    setTimeout(() => {
-      searchOffres();
-    }, 0);
+    searchOffres(undefined, q.keywords, q.location);
   }
 
   // ── Entreprises actions ──
@@ -264,6 +267,7 @@ export default function RecherchePage() {
       setCompanyError("Requête requise.");
       return;
     }
+    if (!apiKey) return;
     setCompanyLoading(true);
     setCompanyError("");
     try {
@@ -287,6 +291,7 @@ export default function RecherchePage() {
   }
 
   async function saveCompany(result: CompanyResult) {
+    if (!apiKey) return;
     setSavingUrls((prev) => new Set(prev).add(result.url));
     try {
       const res = await fetch("/api/saved-searches", {
@@ -309,6 +314,7 @@ export default function RecherchePage() {
   }
 
   async function deleteCompany(id: string) {
+    if (!apiKey) return;
     try {
       await fetch(`/api/saved-searches?id=${id}`, {
         method: "DELETE",

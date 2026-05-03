@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { keywords, location, nb_results = 10 } = body;
+    const { keywords, location, nb_results = 10, preview = false } = body;
 
     if (!keywords || !location) {
       return NextResponse.json(
@@ -36,18 +36,23 @@ export async function POST(request: NextRequest) {
       ...adzunaResults,
       ...franceTravailResults,
       ...indeedResults,
-    ];
+    ].filter((r) => r.url && r.url.trim() !== "");
 
+    // Preview mode: return results with already_saved flag, don't insert
+    if (preview) {
+      const urls = allResults.map((r) => r.url);
+      const existing = await Candidature.find({ url: { $in: urls } }, { url: 1 }).lean<{ url: string }[]>();
+      const existingUrls = new Set(existing.map((e) => e.url));
+      return NextResponse.json({
+        results: allResults.map((r) => ({ ...r, already_saved: existingUrls.has(r.url) })),
+      });
+    }
+
+    // Save mode: insert new candidatures (avoid duplicates by URL)
     let newCount = 0;
     let duplicateCount = 0;
 
-    // Insert new candidatures (avoid duplicates by URL)
     for (const result of allResults) {
-      // Skip empty URLs
-      if (!result.url || result.url.trim() === "") {
-        continue;
-      }
-
       const existing = await Candidature.findOne({ url: result.url });
       if (!existing) {
         try {
@@ -66,7 +71,6 @@ export async function POST(request: NextRequest) {
           });
           newCount++;
         } catch (error) {
-          // Skip duplicates or validation errors
           console.warn("Error creating candidature:", error);
         }
       } else {

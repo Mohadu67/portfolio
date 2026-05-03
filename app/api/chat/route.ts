@@ -110,8 +110,13 @@ Stratégie :
     }
   }
 
+  // Sliding window: keep system prompt + last 8 messages to stay within TPM limits.
+  // Groq free tier = 12k TPM; tool results can be large (50+ items).
+  const [systemMsg, ...rest] = openaiMessages;
+  const windowed: OpenAIMessage[] = [systemMsg, ...rest.slice(-8)];
+
   // Validate last message can drive a response
-  const lastUseful = openaiMessages[openaiMessages.length - 1];
+  const lastUseful = windowed[windowed.length - 1];
   if (!lastUseful || (lastUseful.role !== "user" && lastUseful.role !== "tool")) {
     return new Response(
       JSON.stringify({ error: "Last message must be user or tool" }),
@@ -135,7 +140,7 @@ Stratégie :
           },
           body: JSON.stringify({
             model: MODEL,
-            messages: openaiMessages,
+            messages: windowed,
             tools: toolsForOpenAI(),
             tool_choice: "auto",
             stream: true,

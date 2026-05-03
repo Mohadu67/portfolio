@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       case "list_candidatures": {
         const statut = input.statut ? String(input.statut) : null;
         const search = input.search ? String(input.search).trim() : "";
-        const limit = Math.min(Math.max(Number(input.limit) || 50, 1), 200);
+        const limit = Math.min(Math.max(Number(input.limit) || 15, 1), 50);
         const query: Record<string, unknown> = {};
         if (statut) query.statut = statut;
         if (search) {
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
           localisation: c.localisation ?? "",
           email: c.email ?? "",
           url: c.url ?? "",
-          description: (c.description ?? "").slice(0, 800),
+          description: (c.description ?? "").slice(0, 400),
           notes: c.notes ?? "",
           hasLetter: !!c.lettre,
           created_at:
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
                 : String(r.scheduledFor),
             status: r.status,
             templateTitle: r.templateTitle,
-            message: (r.message ?? "").slice(0, 300),
+            message: (r.message ?? "").slice(0, 150),
             sentAt: r.sentAt ? new Date(r.sentAt).toISOString() : null,
           })),
           emailsSent: (c.emailsSent ?? []).map((e) => ({

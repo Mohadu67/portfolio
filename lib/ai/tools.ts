@@ -32,7 +32,7 @@ export const TOOLS: ToolDefinition[] = [
         },
         limit: {
           type: "number",
-          description: "Nombre max de résultats (défaut 50, max 200)",
+          description: "Nombre max de résultats (défaut 15, max 50). Utilise un filtre statut ou search pour cibler.",
         },
       },
     },

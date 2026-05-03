@@ -152,20 +152,20 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
 
       // Attach tool_calls to the assistant message if any
       if (receivedToolCalls.length > 0) {
-        setMessages((prev) => {
-          const copy = [...prev];
-          copy[copy.length - 1] = {
-            ...copy[copy.length - 1],
-            tool_calls: receivedToolCalls,
-          };
-          return copy;
-        });
+        // Build the updated messages array locally (don't rely on setMessages updater side-effect
+        // which can be deferred in React 18 concurrent mode, leaving snapshot as []).
+        const msgsWithToolCalls = msgs.map((m, i) =>
+          i === msgs.length - 1
+            ? { ...m, content: acc, tool_calls: receivedToolCalls }
+            : m
+        );
+        setMessages(msgsWithToolCalls);
 
         // Auto-execute read-only tools (no confirmation needed) and re-stream.
         const allReadOnly = receivedToolCalls.every((tc) => tc.requires_confirmation === false);
         if (allReadOnly) {
           setStreaming(false);
-          await autoExecuteTools(receivedToolCalls);
+          await autoExecuteTools(receivedToolCalls, msgsWithToolCalls);
           return;
         }
 
@@ -229,22 +229,18 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
     }
   };
 
-  const autoExecuteTools = async (calls: ToolCall[]) => {
+  const autoExecuteTools = async (calls: ToolCall[], baseMsgs: Message[]) => {
     const results: ToolResult[] = [];
     for (const call of calls) {
       const res = await executeTool({ call, status: "executing" });
       results.push(res);
     }
-    let snapshot: Message[] = [];
-    setMessages((prev) => {
-      snapshot = [
-        ...prev,
-        { role: "user", content: "", tool_results: results },
-        { role: "assistant", content: "" },
-      ];
-      return snapshot;
-    });
-    await new Promise((r) => setTimeout(r, 0));
+    const snapshot: Message[] = [
+      ...baseMsgs,
+      { role: "user", content: "", tool_results: results },
+      { role: "assistant", content: "" },
+    ];
+    setMessages(snapshot);
     await streamFromMessages(snapshot);
   };
 

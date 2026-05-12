@@ -3,12 +3,12 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { STORY } from "@/data/story";
-import type { CVEducationItem, CVExperienceItem } from "@/models/CVSection";
+import type { CVEducationItem, CVExperienceItem, CVStoryContent } from "@/models/CVSection";
 
 type Props = {
   education: CVEducationItem[];
   experiences: CVExperienceItem[];
+  story: CVStoryContent["present"];
 };
 
 function findCDA(ed: CVEducationItem[]) {
@@ -25,7 +25,7 @@ function findRecent(exp: CVExperienceItem[]) {
   });
 }
 
-export function ChapterPresent({ education, experiences }: Props) {
+export function ChapterPresent({ education, experiences, story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
 
   const cda = findCDA(education);
@@ -90,13 +90,13 @@ export function ChapterPresent({ education, experiences }: Props) {
       <div className="mx-auto max-w-5xl px-6">
         <div className="present-header mb-20 text-center">
           <p className="mb-6 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-[#34D399]/80">
-            — {STORY.present.eyebrow}
+            — {story.eyebrow}
           </p>
           <h2 className="font-[var(--font-fraunces)] text-[clamp(2.5rem,6vw,5rem)] font-light leading-[1.05]">
-            {STORY.present.title}
+            {story.title}
           </h2>
           <p className="mx-auto mt-8 max-w-xl text-base leading-relaxed text-white/60 sm:text-lg">
-            {STORY.present.body}
+            {story.body}
           </p>
         </div>
 
@@ -136,25 +136,27 @@ export function ChapterPresent({ education, experiences }: Props) {
           )}
         </div>
 
-        {/* Dispo */}
-        <div className="present-card mt-12 overflow-hidden rounded-3xl border border-[#FF9E64]/20 bg-gradient-to-br from-[#FF9E64]/[0.08] to-transparent p-8 md:p-12">
-          <div className="flex items-center gap-3 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-[#FF9E64]">
-            <span className="present-dispo-dot h-2 w-2 rounded-full bg-[#FF9E64]" />
-            {STORY.present.seeking.title}
+        {/* Dispo — masquable via le CMS */}
+        {story.seekingEnabled && story.seekingItems.length > 0 && (
+          <div className="present-card mt-12 overflow-hidden rounded-3xl border border-[#FF9E64]/20 bg-gradient-to-br from-[#FF9E64]/[0.08] to-transparent p-8 md:p-12">
+            <div className="flex items-center gap-3 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-[#FF9E64]">
+              <span className="present-dispo-dot h-2 w-2 rounded-full bg-[#FF9E64]" />
+              {story.seekingTitle}
+            </div>
+            <div className="mt-8 grid gap-8 md:grid-cols-2">
+              {story.seekingItems.map((item, i) => (
+                <div key={`${item.label}-${i}`}>
+                  <p className="font-[var(--font-jetbrains)] text-xs uppercase tracking-[0.3em] text-white/40">
+                    {item.label}
+                  </p>
+                  <p className="mt-3 font-[var(--font-fraunces)] text-3xl font-light leading-tight md:text-4xl">
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="mt-8 grid gap-8 md:grid-cols-2">
-            {STORY.present.seeking.items.map((item) => (
-              <div key={item.label}>
-                <p className="font-[var(--font-jetbrains)] text-xs uppercase tracking-[0.3em] text-white/40">
-                  {item.label}
-                </p>
-                <p className="mt-3 font-[var(--font-fraunces)] text-3xl font-light leading-tight md:text-4xl">
-                  {item.value}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     </section>
   );

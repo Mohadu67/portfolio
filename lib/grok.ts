@@ -1,7 +1,7 @@
 function getGrokApiKey(): string {
-  const key = process.env.GROK_API_KEY;
+  const key = process.env.GROQ_API_KEY;
   if (!key) {
-    throw new Error("GROK_API_KEY environment variable is not set");
+    throw new Error("GROQ_API_KEY environment variable is not set");
   }
   return key;
 }

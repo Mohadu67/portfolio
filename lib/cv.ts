@@ -9,8 +9,11 @@ import {
   CVEducationItem,
   CVExperienceItem,
   CVContactContent,
+  CVQuizContent,
+  CVStoryContent,
 } from "@/models/CVSection";
 import portfolioData from "@/data/portfolio.json";
+import { DEFAULT_STORY } from "@/data/story";
 
 export interface CVData {
   profile: CVProfileContent;
@@ -20,6 +23,8 @@ export interface CVData {
   education: CVEducationItem[];
   experience: CVExperienceItem[];
   contact: CVContactContent;
+  quiz: CVQuizContent | null;
+  story: CVStoryContent;
   customSections: Array<{
     _id: string;
     key: string;
@@ -45,6 +50,8 @@ const FALLBACK: CVData = {
   education: portfolioData.education as CVEducationItem[],
   experience: portfolioData.experience as CVExperienceItem[],
   contact: portfolioData.contact as CVContactContent,
+  quiz: null,
+  story: DEFAULT_STORY,
   customSections: [],
   sections: [
     { _id: "fallback-profile", key: "profile", type: "profile", title: "Profile", order: 0, isVisible: true },
@@ -56,6 +63,23 @@ const FALLBACK: CVData = {
     { _id: "fallback-socials", key: "socials", type: "socials", title: "Connectez-vous", order: 6, isVisible: true },
   ],
 };
+
+// Merge profond : un champ absent du CMS retombe sur la valeur par défaut.
+function mergeStory(partial: Partial<CVStoryContent> | null): CVStoryContent {
+  if (!partial) return DEFAULT_STORY;
+  const merged = { ...DEFAULT_STORY };
+  (Object.keys(DEFAULT_STORY) as Array<keyof CVStoryContent>).forEach((key) => {
+    const value = partial[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      // @ts-expect-error structural deep merge
+      merged[key] = { ...DEFAULT_STORY[key], ...value };
+    } else if (value !== undefined) {
+      // @ts-expect-error structural deep merge
+      merged[key] = value;
+    }
+  });
+  return merged;
+}
 
 export async function getCVData(): Promise<CVData> {
   try {
@@ -84,6 +108,8 @@ export async function getCVData(): Promise<CVData> {
       education: findItems<CVData["education"][number]>("education") ?? FALLBACK.education,
       experience: findItems<CVData["experience"][number]>("experience") ?? FALLBACK.experience,
       contact: findContent<CVData["contact"]>("contact") ?? FALLBACK.contact,
+      quiz: findContent<CVQuizContent>("quiz"),
+      story: mergeStory(findContent<Partial<CVStoryContent>>("story")),
       customSections: docs
         .filter((d) => d.type === "custom" && d.isVisible)
         .map((d) => ({
@@ -118,6 +144,14 @@ export const SEED_SECTIONS: SeedSection[] = [
   { key: "education", type: "education", title: "Formation", order: 2, isVisible: true, content: { items: portfolioData.education as CVEducationItem[] } },
   { key: "experience", type: "experience", title: "Expérience Professionnelle", order: 3, isVisible: true, content: { items: portfolioData.experience as CVExperienceItem[] } },
   { key: "projects", type: "projects", title: "Projets", order: 4, isVisible: true, content: { items: portfolioData.projects as CVProjectItem[] } },
-  { key: "contact", type: "contact", title: "Me contacter", order: 5, isVisible: true, content: portfolioData.contact as CVContactContent },
-  { key: "socials", type: "socials", title: "Connectez-vous", order: 6, isVisible: true, content: { items: portfolioData.socials as CVSocialItem[] } },
+  { key: "story", type: "story", title: "Récit du portfolio", order: 5, isVisible: true, content: DEFAULT_STORY },
+  { key: "quiz", type: "quiz", title: "Quiz interactif", order: 6, isVisible: true, content: { intro: "Mini-jeu : devine la bonne réponse.", items: [] } },
+  { key: "contact", type: "contact", title: "Me contacter", order: 7, isVisible: true, content: portfolioData.contact as CVContactContent },
+  { key: "socials", type: "socials", title: "Connectez-vous", order: 8, isVisible: true, content: { items: portfolioData.socials as CVSocialItem[] } },
+];
+
+// Sections singleton qui doivent toujours exister — auto-création si absentes
+export const SINGLETON_SECTIONS: SeedSection[] = [
+  { key: "story", type: "story", title: "Récit du portfolio", order: 5, isVisible: true, content: DEFAULT_STORY },
+  { key: "quiz", type: "quiz", title: "Quiz interactif", order: 6, isVisible: true, content: { intro: "Mini-jeu : devine la bonne réponse.", items: [] } },
 ];

@@ -3,9 +3,11 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { STORY } from "@/data/story";
+import type { CVStoryContent } from "@/models/CVSection";
 
-export function ChapterDoubleLife() {
+type Props = { story: CVStoryContent["doubleLife"] };
+
+export function ChapterDoubleLife({ story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export function ChapterDoubleLife() {
       className="relative h-screen w-full overflow-hidden"
     >
       <p className="absolute left-1/2 top-10 z-30 -translate-x-1/2 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-white/50">
-        — {STORY.doubleLife.eyebrow}
+        — {story.eyebrow}
       </p>
 
       {/* JOUR — gauche, chaud */}
@@ -61,10 +63,10 @@ export function ChapterDoubleLife() {
           06:00 — 22:00
         </span>
         <h3 className="mt-4 font-[var(--font-fraunces)] text-[clamp(2rem,5vw,4rem)] font-light leading-[1.05] text-white">
-          {STORY.doubleLife.day.title}
+          {story.day.title}
         </h3>
         <p className="mt-6 max-w-md text-sm leading-relaxed text-white/60 md:text-base">
-          {STORY.doubleLife.day.body}
+          {story.day.body}
         </p>
         <div className="mt-10 flex gap-3 text-[10px] uppercase tracking-[0.3em] text-white/40">
           <span>plannings</span>
@@ -82,10 +84,10 @@ export function ChapterDoubleLife() {
             23:00 — 03:00
           </span>
           <h3 className="mt-4 font-[var(--font-fraunces)] text-[clamp(2rem,5vw,4rem)] font-light leading-[1.05] text-white">
-            {STORY.doubleLife.night.title}
+            {story.night.title}
           </h3>
           <p className="mt-6 max-w-md text-sm leading-relaxed text-white/60 md:text-base">
-            {STORY.doubleLife.night.body}
+            {story.night.body}
           </p>
           <div className="mt-10 flex flex-wrap gap-3 font-[var(--font-jetbrains)] text-[10px] uppercase tracking-[0.3em] text-white/40">
             <span>html</span>

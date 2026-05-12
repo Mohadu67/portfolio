@@ -10,7 +10,18 @@ interface AddCustomSectionModalProps {
   onCreated: () => void;
 }
 
+type SectionKind = "custom";
+
+const KIND_DEFAULTS: Record<SectionKind, { title: string; keyPrefix: string; content: unknown }> = {
+  custom: {
+    title: "Carte libre",
+    keyPrefix: "custom",
+    content: { subtitle: "", body: "", items: [] },
+  },
+};
+
 export function AddCustomSectionModal({ apiKey, onClose, onCreated }: AddCustomSectionModalProps) {
+  const kind: SectionKind = "custom";
   const [title, setTitle] = useState("");
   const [key, setKey] = useState("");
   const [creating, setCreating] = useState(false);
@@ -28,7 +39,8 @@ export function AddCustomSectionModal({ apiKey, onClose, onCreated }: AddCustomS
       toast.error("Titre requis");
       return;
     }
-    const finalKey = key.trim() || `custom-${slugify(title)}-${Date.now().toString(36)}`;
+    const defaults = KIND_DEFAULTS[kind];
+    const finalKey = key.trim() || `${defaults.keyPrefix}-${slugify(title)}-${Date.now().toString(36)}`;
     setCreating(true);
     try {
       const res = await fetch("/api/cv-sections", {
@@ -36,10 +48,10 @@ export function AddCustomSectionModal({ apiKey, onClose, onCreated }: AddCustomS
         headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
           key: finalKey,
-          type: "custom",
+          type: kind,
           title: title.trim(),
           isVisible: true,
-          content: { subtitle: "", body: "", items: [] },
+          content: defaults.content,
         }),
       });
       if (!res.ok) {
@@ -76,6 +88,11 @@ export function AddCustomSectionModal({ apiKey, onClose, onCreated }: AddCustomS
         </div>
 
         <div className="space-y-4">
+          <p className="text-xs text-[var(--text-tertiary)]">
+            Ajoute une carte libre avec sous-titre, texte et items optionnels.
+            Le récit et le quiz sont déjà disponibles dans la liste — clique directement sur ✏️.
+          </p>
+
           <div>
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
               Titre affiché

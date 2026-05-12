@@ -3,9 +3,11 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { STORY } from "@/data/story";
+import type { CVStoryContent } from "@/models/CVSection";
 
-export function ChapterRupture() {
+type Props = { story: CVStoryContent["rupture"] };
+
+export function ChapterRupture({ story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -82,16 +84,16 @@ export function ChapterRupture() {
         aria-hidden
         className="rupture-year pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none font-[var(--font-fraunces)] text-[clamp(12rem,42vw,32rem)] font-extralight leading-none text-white/10"
       >
-        {STORY.rupture.year}
+        {story.year}
       </span>
 
       <div className="relative z-10 flex flex-col items-center px-6 text-center">
         <p className="mb-12 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-[#FF9E64]/80">
-          — {STORY.rupture.eyebrow}
+          — {story.eyebrow}
         </p>
 
         <div className="flex max-w-3xl flex-col gap-6 font-[var(--font-fraunces)] text-[clamp(1.8rem,4.5vw,3.5rem)] font-light leading-[1.15]">
-          {STORY.rupture.lines.map((line, i) => (
+          {story.lines.map((line, i) => (
             <p key={i} className="rupture-line">
               {line.split(" ").map((word, j) => (
                 <span key={j} data-word className="mr-[0.25em] inline-block">
@@ -103,7 +105,7 @@ export function ChapterRupture() {
         </div>
 
         <p className="rupture-closing mt-20 max-w-xl text-base italic text-white/50 sm:text-lg">
-          {STORY.rupture.closing}
+          {story.closing}
         </p>
       </div>
     </section>

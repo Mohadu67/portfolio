@@ -39,10 +39,10 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  const apiKey = process.env.GROK_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "GROK_API_KEY (Groq Cloud) non configuré côté serveur" }),
+      JSON.stringify({ error: "GROQ_API_KEY (Groq Cloud) non configuré côté serveur" }),
       { status: 500 }
     );
   }

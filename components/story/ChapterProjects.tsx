@@ -3,10 +3,9 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { STORY } from "@/data/story";
-import type { CVProjectItem } from "@/models/CVSection";
+import type { CVProjectItem, CVStoryContent } from "@/models/CVSection";
 
-type Props = { projects: CVProjectItem[] };
+type Props = { projects: CVProjectItem[]; story: CVStoryContent["projects"] };
 
 const PROJECT_HUES = [
   "from-[#FF9E64]/20 to-[#FF9E64]/5",
@@ -23,7 +22,7 @@ function hostnameOf(url: string): string {
   }
 }
 
-export function ChapterProjects({ projects }: Props) {
+export function ChapterProjects({ projects, story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
 
@@ -95,13 +94,13 @@ export function ChapterProjects({ projects }: Props) {
     >
       <div className="projects-intro px-6 pt-28 pb-12 text-center">
         <p className="mb-6 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-[#2E9FD8]/80">
-          — {STORY.projects.eyebrow}
+          — {story.eyebrow}
         </p>
         <h2 className="mx-auto max-w-4xl font-[var(--font-fraunces)] text-[clamp(2.5rem,7vw,5.5rem)] font-light leading-[1.05]">
-          {STORY.projects.title}
+          {story.title}
         </h2>
         <p className="mx-auto mt-6 max-w-xl text-base italic text-white/50 sm:text-lg">
-          {STORY.projects.subtitle}
+          {story.subtitle}
         </p>
       </div>
 

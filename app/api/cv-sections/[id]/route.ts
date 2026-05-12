@@ -48,9 +48,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (!section) {
       return NextResponse.json({ error: "Section not found" }, { status: 404 });
     }
-    if (section.type !== "custom") {
+    if (section.type !== "custom" && section.type !== "quiz" && section.type !== "story") {
       return NextResponse.json(
-        { error: "Only custom sections can be deleted. Use isVisible=false to hide built-in sections." },
+        { error: "Only custom/quiz/story sections can be deleted. Use isVisible=false to hide built-in sections." },
         { status: 403 }
       );
     }

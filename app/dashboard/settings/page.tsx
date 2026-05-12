@@ -356,12 +356,12 @@ export default function SettingsPage() {
         </h2>
         <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 space-y-2 text-sm">
           <ConfigRow name="API_SECRET" detail="Auth dashboard" />
-          <ConfigRow name="ANTHROPIC_API_KEY" detail="Chat IA" />
-          <ConfigRow name="GROK_API_KEY" detail="Amélioration de lettres" />
+          <ConfigRow name="ANTHROPIC_API_KEY" detail="Génération de lettres (Claude)" />
+          <ConfigRow name="GROQ_API_KEY" detail="Chat dashboard + amélioration de lettres (Groq Cloud)" />
           <ConfigRow name="MONGO_URI" detail="Base MongoDB" />
           <ConfigRow name="GMAIL_USER + GMAIL_APP_PASSWORD" detail="Envoi emails + sync IMAP réponses" />
           <ConfigRow name="CRON_SECRET" detail="Schedulers (relances + inbox)" />
-          <ConfigRow name="CHAT_MODEL" detail="Override modèle Claude (défaut Opus 4.5)" />
+          <ConfigRow name="CHAT_MODEL" detail="Override modèle Groq (défaut llama-3.3-70b-versatile)" />
         </div>
         <p className="text-xs text-[var(--text-tertiary)]">
           Crontab à configurer côté VPS pour que les schedulers tournent (cf. routes /api/cron/run-relances et /api/cron/check-inbox).

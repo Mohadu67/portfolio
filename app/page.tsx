@@ -15,23 +15,29 @@ export const revalidate = 60;
 
 export default async function Home() {
   const data = await getCVData();
+  const s = data.story;
 
   return (
     <SmoothScroll>
       <ChapterNav />
       <main className="relative bg-[#0a0a0b]">
-        <ChapterHero profile={data.profile} />
-        <ChapterRupture />
-        <ChapterKitchens experiences={data.experience} />
-        <ChapterDoubleLife />
-        <ChapterLeap />
-        <ChapterSkills skills={data.skills} />
-        <ChapterProjects projects={data.projects} />
-        <ChapterPresent education={data.education} experiences={data.experience} />
+        <ChapterHero profile={data.profile} story={s.hero} />
+        <ChapterRupture story={s.rupture} />
+        <ChapterKitchens experiences={data.experience} story={s.kitchens} />
+        <ChapterDoubleLife story={s.doubleLife} />
+        <ChapterLeap story={s.leap} />
+        <ChapterSkills skills={data.skills} quiz={data.quiz} story={s.skills} />
+        <ChapterProjects projects={data.projects} story={s.projects} />
+        <ChapterPresent
+          education={data.education}
+          experiences={data.experience}
+          story={s.present}
+        />
         <ChapterContact
           profile={data.profile}
           contact={data.contact}
           socials={data.socials}
+          story={s.contact}
         />
       </main>
     </SmoothScroll>

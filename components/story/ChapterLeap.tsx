@@ -3,7 +3,9 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { STORY } from "@/data/story";
+import type { CVStoryContent } from "@/models/CVSection";
+
+type Props = { story: CVStoryContent["leap"] };
 
 const STACK_BUBBLES = [
   { label: "HTML", x: -260, y: -140, delay: 0 },
@@ -15,7 +17,7 @@ const STACK_BUBBLES = [
   { label: "Git", x: 0, y: -240, delay: 0.6 },
 ];
 
-export function ChapterLeap() {
+export function ChapterLeap({ story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -109,20 +111,20 @@ export function ChapterLeap() {
 
       <div className="relative z-10 flex max-w-3xl flex-col items-center px-6 text-center">
         <p className="mb-6 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-[#2E9FD8]/80">
-          — {STORY.leap.eyebrow}
+          — {story.eyebrow}
         </p>
         <span className="leap-year mb-6 inline-block font-[var(--font-fraunces)] text-[clamp(4rem,12vw,9rem)] font-extralight leading-none text-white">
-          {STORY.leap.year}
+          {story.year}
         </span>
         <h2 className="leap-title font-[var(--font-fraunces)] text-[clamp(2rem,5vw,4rem)] font-light leading-[1.1]">
-          {STORY.leap.title}
+          {story.title}
         </h2>
         <p className="leap-body mt-8 max-w-xl text-base leading-relaxed text-white/60 sm:text-lg">
-          {STORY.leap.body}
+          {story.body}
         </p>
         <div className="leap-badge mt-10 inline-flex items-center gap-3 rounded-full border border-[#2E9FD8]/30 bg-[#2E9FD8]/[0.08] px-5 py-2.5 font-[var(--font-jetbrains)] text-xs uppercase tracking-[0.2em] text-[#2E9FD8]">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#2E9FD8]" />
-          {STORY.leap.badge}
+          {story.badge}
         </div>
       </div>
     </section>

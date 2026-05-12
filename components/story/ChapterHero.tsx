@@ -3,12 +3,11 @@
 import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { gsap } from "gsap";
-import { STORY } from "@/data/story";
-import type { CVProfileContent } from "@/models/CVSection";
+import type { CVProfileContent, CVStoryContent } from "@/models/CVSection";
 
-type Props = { profile: CVProfileContent };
+type Props = { profile: CVProfileContent; story: CVStoryContent["hero"] };
 
-export function ChapterHero({ profile }: Props) {
+export function ChapterHero({ profile, story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const nameRef = useRef<HTMLHeadingElement | null>(null);
   const photoRef = useRef<HTMLDivElement | null>(null);
@@ -71,7 +70,7 @@ export function ChapterHero({ profile }: Props) {
     return () => ctx.revert();
   }, []);
 
-  const name = profile.name || STORY.hero.name;
+  const name = profile.name || story.name;
   const photo = profile.photo || "/photoCV.png";
 
   return (
@@ -123,12 +122,12 @@ export function ChapterHero({ profile }: Props) {
       </h1>
 
       <p className="hero-tagline mt-10 max-w-xl text-center font-[var(--font-fraunces)] text-lg italic text-white/60 sm:text-xl">
-        {profile.tagline || STORY.hero.tagline}
+        {profile.tagline || story.tagline}
       </p>
 
       <div className="hero-meta mt-6 flex items-center gap-3 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.3em] text-white/40">
         <span className="h-px w-8 bg-white/30" />
-        <span>{profile.location || STORY.hero.location}</span>
+        <span>{profile.location || story.location}</span>
         <span className="h-px w-8 bg-white/30" />
       </div>
     </section>

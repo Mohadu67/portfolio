@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -92,7 +92,7 @@ function SortableItem({
         <Pencil size={18} />
       </button>
 
-      {section.type === "custom" && (
+      {(section.type === "custom" || section.type === "quiz" || section.type === "story") && (
         <button
           onClick={() => {
             if (confirm(`Supprimer la section "${section.title}" ? Cette action est définitive.`)) {
@@ -120,10 +120,10 @@ interface CVSectionListProps {
 export function CVSectionList({ sections, onReorder, onEdit, onToggle, onDelete }: CVSectionListProps) {
   const [items, setItems] = useState(sections);
 
-  // Sync from props on each render (parent is source of truth)
-  if (items.map((i) => i._id).join(",") !== sections.map((s) => s._id).join(",")) {
+  // Parent reste la source de vérité — re-sync à chaque changement de props
+  useEffect(() => {
     setItems(sections);
-  }
+  }, [sections]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),

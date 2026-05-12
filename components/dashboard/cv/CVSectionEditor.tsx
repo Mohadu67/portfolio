@@ -6,6 +6,10 @@ import { toast } from "sonner";
 import type { ICVSection } from "@/models/CVSection";
 import { ListItemEditor, type FieldConfig } from "./editors/ListItemEditor";
 import { SimpleFieldsEditor } from "./editors/SimpleFieldsEditor";
+import { QuizEditor } from "./editors/QuizEditor";
+import { StoryEditor } from "./editors/StoryEditor";
+import type { CVQuizQuestion, CVStoryContent } from "@/models/CVSection";
+import { DEFAULT_STORY } from "@/data/story";
 
 const PROFILE_FIELDS: FieldConfig[] = [
   { name: "name", label: "Nom complet", type: "text" },
@@ -238,6 +242,39 @@ export function CVSectionEditor({ section, apiKey, onClose, onSaved }: CVSection
             })}
             onChange={(items) => setContent({ ...content, items })}
           />
+        );
+      case "story":
+        return (
+          <StoryEditor
+            story={{ ...DEFAULT_STORY, ...(content as Partial<CVStoryContent>) } as CVStoryContent}
+            onChange={(next) => setContent(next as unknown as Record<string, unknown>)}
+          />
+        );
+      case "quiz":
+        return (
+          <div className="space-y-4">
+            <SimpleFieldsEditor
+              data={{ intro: content.intro }}
+              fields={[
+                {
+                  name: "intro",
+                  label: "Sous-titre / intro (optionnel)",
+                  type: "text",
+                  placeholder: "Mini-jeu : devine la bonne réponse.",
+                },
+              ]}
+              onChange={(d) => setContent({ ...content, ...d })}
+            />
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">
+                Questions du quiz
+              </label>
+              <QuizEditor
+                questions={(content.items as CVQuizQuestion[]) ?? []}
+                onChange={(items) => setContent({ ...content, items })}
+              />
+            </div>
+          </div>
         );
       case "custom":
         return (

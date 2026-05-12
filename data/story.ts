@@ -1,29 +1,23 @@
-export const STORY = {
+import type { CVStoryContent } from "@/models/CVSection";
+
+export const DEFAULT_STORY: CVStoryContent = {
   hero: {
     name: "Mohammed Hamiani",
     tagline: "Dev by day, creator by night.",
     location: "Strasbourg — France",
   },
-
   rupture: {
     year: "2018",
     eyebrow: "Le départ",
-    lines: [
-      "À 19 ans, j'ai dû quitter l'école.",
-      "Pas par choix.",
-      "Par nécessité.",
-    ],
-    closing:
-      "Pas de plan B, pas de filet. Juste une certitude — il faut bosser, vite.",
+    lines: ["À 19 ans, j'ai dû quitter l'école.", "Pas par choix.", "Par nécessité."],
+    closing: "Pas de plan B, pas de filet. Juste une certitude — il faut bosser, vite.",
   },
-
   kitchens: {
     eyebrow: "2018 — 2023",
     title: "Cinq ans en cuisine.",
     intro:
       "Fallait grandir vite. Le terrain m'a appris ce que l'école n'aurait jamais pu : tenir un service, gérer une équipe, ne rien lâcher.",
     outro: "5 ans · 3 restaurants · une équipe formée.",
-    companies: ["KFC Homme de Fer", "Pizza Hut Sengewald", "KFC Porte de l'Hôpital"],
     transferTitle: "Ce que la cuisine m'a appris — et que j'utilise tous les jours en dev.",
     transferIntro:
       "Manager un coup de feu un samedi soir, c'est pas si loin de débugger une prod en flammes un vendredi à 23h. Ces réflexes-là, je les ai ramenés avec moi.",
@@ -60,7 +54,6 @@ export const STORY = {
       },
     ],
   },
-
   doubleLife: {
     eyebrow: "Le soir",
     day: {
@@ -72,7 +65,6 @@ export const STORY = {
       body: "HTML, CSS, JS. Tutos YouTube, MDN, Stack Overflow. Et un rêve qui ne me lâchait plus.",
     },
   },
-
   leap: {
     year: "2024",
     eyebrow: "Le saut",
@@ -81,34 +73,28 @@ export const STORY = {
       "Quitter une carrière stable pour repartir de zéro, c'est pas une décision — c'est un saut. J'ai signé chez CCI Campus en septembre 2024. Six mois plus tard, j'avais mon titre RNCP Développeur Web.",
     badge: "Développeur Web & Mobile — CCI Campus",
   },
-
   skills: {
     eyebrow: "Aujourd'hui",
     title: "Ce que je sais faire.",
-    subtitle:
-      "Chaque compétence a son histoire — souvent un bug, toujours une leçon.",
+    subtitle: "Chaque compétence a son histoire — souvent un bug, toujours une leçon.",
   },
-
   projects: {
     eyebrow: "En production",
     title: "Ce que j'ai construit.",
     subtitle: "Quatre projets en ligne, vrais utilisateurs, vrais bugs corrigés.",
   },
-
   present: {
     eyebrow: "Maintenant",
     title: "Je termine mon Bachelor.",
     body:
       "CDA — Concepteur Développeur d'Applications. Niveau 6. Architecture, design patterns, tests, sécurité. Je sors en juillet 2026.",
-    seeking: {
-      title: "Je cherche :",
-      items: [
-        { label: "Stage", value: "Mars 2026" },
-        { label: "Alternance", value: "Septembre 2026" },
-      ],
-    },
+    seekingEnabled: true,
+    seekingTitle: "Je cherche :",
+    seekingItems: [
+      { label: "Stage", value: "Mars 2026" },
+      { label: "Alternance", value: "Septembre 2026" },
+    ],
   },
-
   contact: {
     eyebrow: "On parle ?",
     title: "Construisons quelque chose.",
@@ -127,3 +113,6 @@ export const CHAPTERS = [
   { id: "present", label: "Présent" },
   { id: "contact", label: "Contact" },
 ] as const;
+
+// Compat : ancien export pour les imports existants
+export const STORY = DEFAULT_STORY;

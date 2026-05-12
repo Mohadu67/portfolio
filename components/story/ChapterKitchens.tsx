@@ -3,11 +3,11 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { STORY } from "@/data/story";
-import type { CVExperienceItem } from "@/models/CVSection";
+import type { CVExperienceItem, CVStoryContent } from "@/models/CVSection";
 
 type Props = {
   experiences: CVExperienceItem[];
+  story: CVStoryContent["kitchens"];
 };
 
 function isKitchen(exp: CVExperienceItem) {
@@ -66,7 +66,7 @@ function getTags(position: string): string[] {
   return [];
 }
 
-export function ChapterKitchens({ experiences }: Props) {
+export function ChapterKitchens({ experiences, story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
 
@@ -166,13 +166,13 @@ export function ChapterKitchens({ experiences }: Props) {
     >
       <div className="kitchens-intro px-6 pt-32 pb-20 text-center">
         <p className="mb-6 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-[#FF9E64]/80">
-          — {STORY.kitchens.eyebrow}
+          — {story.eyebrow}
         </p>
         <h2 className="mx-auto max-w-4xl font-[var(--font-fraunces)] text-[clamp(2.5rem,7vw,5.5rem)] font-light leading-[1.05]">
-          {STORY.kitchens.title}
+          {story.title}
         </h2>
         <p className="mx-auto mt-8 max-w-2xl text-base text-white/60 sm:text-lg">
-          {STORY.kitchens.intro}
+          {story.intro}
         </p>
       </div>
 
@@ -271,7 +271,7 @@ export function ChapterKitchens({ experiences }: Props) {
 
       <div className="px-6 py-24 text-center">
         <p className="mx-auto max-w-2xl font-[var(--font-fraunces)] text-[clamp(1.5rem,3vw,2.5rem)] font-light italic leading-tight text-white/70">
-          {STORY.kitchens.outro}
+          {story.outro}
         </p>
       </div>
 
@@ -283,15 +283,15 @@ export function ChapterKitchens({ experiences }: Props) {
               — Le pont
             </p>
             <h3 className="kitchens-transfer-title font-[var(--font-fraunces)] text-[clamp(1.8rem,4vw,3rem)] font-light leading-[1.15]">
-              {STORY.kitchens.transferTitle}
+              {story.transferTitle}
             </h3>
             <p className="kitchens-transfer-intro mt-6 text-base leading-relaxed text-white/55 sm:text-lg">
-              {STORY.kitchens.transferIntro}
+              {story.transferIntro}
             </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {STORY.kitchens.transferSkills.map((s, i) => (
+            {story.transferSkills.map((s, i) => (
               <div
                 key={s.title}
                 className="kitchens-transfer-card group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-6 transition-colors hover:border-[#FF9E64]/40 hover:bg-white/[0.04]"

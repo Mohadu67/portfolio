@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { STORY } from "@/data/story";
-import type { CVContactContent, CVSocialItem, CVProfileContent } from "@/models/CVSection";
+import type { CVContactContent, CVSocialItem, CVProfileContent, CVStoryContent } from "@/models/CVSection";
 
 type Props = {
   profile: CVProfileContent;
   contact: CVContactContent;
   socials: CVSocialItem[];
+  story: CVStoryContent["contact"];
 };
 
 type CalendlyWindow = Window & {
@@ -19,7 +19,7 @@ type CalendlyWindow = Window & {
   };
 };
 
-export function ChapterContact({ profile, contact, socials }: Props) {
+export function ChapterContact({ profile, contact, socials, story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const calendlyRef = useRef<HTMLDivElement | null>(null);
   const [calendlyOpen, setCalendlyOpen] = useState(false);
@@ -189,13 +189,13 @@ export function ChapterContact({ profile, contact, socials }: Props) {
 
       <div className="contact-header text-center">
         <p className="contact-eyebrow font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-[#FF9E64]/80">
-          — {STORY.contact.eyebrow}
+          — {story.eyebrow}
         </p>
         <h2 className="contact-title mt-6 font-[var(--font-fraunces)] text-[clamp(2.5rem,7vw,5.5rem)] font-light leading-[1.05]">
-          {STORY.contact.title}
+          {story.title}
         </h2>
         <p className="contact-body mt-6 max-w-md text-base italic text-white/50 sm:text-lg">
-          {STORY.contact.body}
+          {story.body}
         </p>
       </div>
 

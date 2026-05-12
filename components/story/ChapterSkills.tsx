@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { STORY } from "@/data/story";
-import type { CVSkillItem } from "@/models/CVSection";
+import type { CVSkillItem, CVQuizContent, CVStoryContent } from "@/models/CVSection";
 
-type Props = { skills: CVSkillItem[] };
+type Props = {
+  skills: CVSkillItem[];
+  quiz?: CVQuizContent | null;
+  story: CVStoryContent["skills"];
+};
 
 const LEVEL_DOT: Record<CVSkillItem["level"], string> = {
   Expert: "bg-[#FF9E64]",
@@ -15,9 +18,15 @@ const LEVEL_DOT: Record<CVSkillItem["level"], string> = {
   Débutant: "bg-white/60",
 };
 
+type Choice = { id: string; label: string; levelDot?: string };
+
 type Round = {
-  skill: CVSkillItem;
-  choices: CVSkillItem[];
+  id: string;
+  question: string;
+  hint?: string;
+  choices: Choice[];
+  correctChoiceId: string;
+  source: "quiz" | "skills";
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -29,16 +38,58 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function buildRounds(skills: CVSkillItem[]): Round[] {
+function buildRounds(skills: CVSkillItem[], quiz?: CVQuizContent | null): Round[] {
+  // Priorité au quiz CMS si présent et valide
+  const cmsQuestions = (quiz?.items ?? []).filter(
+    (q) =>
+      q.question?.trim() &&
+      Array.isArray(q.choices) &&
+      q.choices.length >= 2 &&
+      q.choices.every((c) => c?.trim()) &&
+      q.correctIndex >= 0 &&
+      q.correctIndex < q.choices.length
+  );
+
+  if (cmsQuestions.length > 0) {
+    return shuffle(cmsQuestions).map((q) => {
+      const choices: Choice[] = q.choices.map((c, i) => ({
+        id: `${q.id}-${i}`,
+        label: c,
+      }));
+      const correctChoiceId = choices[q.correctIndex].id;
+      return {
+        id: q.id,
+        question: q.question,
+        hint: q.hint,
+        choices: shuffle(choices),
+        correctChoiceId,
+        source: "quiz" as const,
+      };
+    });
+  }
+
+  // Fallback : devine la compétence à partir de la bug story
   const withBug = skills.filter((s) => s.bugStory && s.bugStory.trim().length > 0);
   return shuffle(withBug).map((skill) => {
     const distractors = shuffle(skills.filter((s) => s.id !== skill.id)).slice(0, 3);
-    const choices = shuffle([skill, ...distractors]);
-    return { skill, choices };
+    const all = shuffle([skill, ...distractors]);
+    const choices: Choice[] = all.map((s) => ({
+      id: s.id,
+      label: s.name,
+      levelDot: LEVEL_DOT[s.level],
+    }));
+    return {
+      id: skill.id,
+      question: skill.bugStory ?? "",
+      hint: `${skill.years} · ${skill.category}`,
+      choices,
+      correctChoiceId: skill.id,
+      source: "skills" as const,
+    };
   });
 }
 
-export function ChapterSkills({ skills }: Props) {
+export function ChapterSkills({ skills, quiz, story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
@@ -48,10 +99,9 @@ export function ChapterSkills({ skills }: Props) {
   const [picked, setPicked] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
 
-  // Shuffle uniquement côté client pour éviter le mismatch d'hydration
   useEffect(() => {
-    setRounds(buildRounds(skills));
-  }, [skills]);
+    setRounds(buildRounds(skills, quiz));
+  }, [skills, quiz]);
 
   const current = rounds[index];
   const total = rounds.length;
@@ -105,7 +155,6 @@ export function ChapterSkills({ skills }: Props) {
     return () => ctx.revert();
   }, []);
 
-  // Animation à chaque changement de round
   useEffect(() => {
     if (!cardRef.current || isDone) return;
     gsap.fromTo(
@@ -115,11 +164,11 @@ export function ChapterSkills({ skills }: Props) {
     );
   }, [index, isDone]);
 
-  const handlePick = (skillId: string) => {
-    if (revealed) return;
-    setPicked(skillId);
+  const handlePick = (choiceId: string) => {
+    if (revealed || !current) return;
+    setPicked(choiceId);
     setRevealed(true);
-    if (skillId === current.skill.id) setScore((s) => s + 1);
+    if (choiceId === current.correctChoiceId) setScore((s) => s + 1);
   };
 
   const handleNext = () => {
@@ -129,12 +178,15 @@ export function ChapterSkills({ skills }: Props) {
   };
 
   const handleRestart = () => {
-    setRounds(buildRounds(skills));
+    setRounds(buildRounds(skills, quiz));
     setIndex(0);
     setScore(0);
     setPicked(null);
     setRevealed(false);
   };
+
+  const eyebrowLabel = current?.source === "quiz" ? "Question" : "Bug story";
+  const introText = quiz?.intro?.trim() || story.subtitle;
 
   return (
     <section
@@ -145,18 +197,17 @@ export function ChapterSkills({ skills }: Props) {
       <div className="mx-auto max-w-5xl px-6">
         <div className="skills-header mb-16 text-center">
           <p className="mb-6 font-[var(--font-jetbrains)] text-[11px] uppercase tracking-[0.4em] text-[#FF9E64]/80">
-            — {STORY.skills.eyebrow}
+            — {story.eyebrow}
           </p>
           <h2 className="font-[var(--font-fraunces)] text-[clamp(2.5rem,6vw,5rem)] font-light leading-[1.05]">
-            {STORY.skills.title}
+            {story.title}
           </h2>
           <p className="mx-auto mt-6 max-w-xl text-base italic text-white/50 sm:text-lg">
-            Mini-jeu : devine quelle compétence a généré quel bug. Bonne chance.
+            {introText}
           </p>
         </div>
 
         <div className="skills-game">
-          {/* Progression + score */}
           <div className="mb-6 flex items-center justify-between font-[var(--font-jetbrains)] text-[10px] uppercase tracking-[0.3em] text-white/40">
             <span>
               Question {Math.min(index + 1, total)} / {total}
@@ -184,15 +235,15 @@ export function ChapterSkills({ skills }: Props) {
               className="rounded-3xl border border-white/10 bg-white/[0.02] p-8 md:p-12"
             >
               <p className="mb-4 font-[var(--font-jetbrains)] text-[10px] uppercase tracking-[0.3em] text-white/40">
-                — Bug story
+                — {eyebrowLabel}
               </p>
               <p className="font-[var(--font-fraunces)] text-[clamp(1.2rem,2.2vw,1.8rem)] font-light leading-snug text-white/90">
-                « {current.skill.bugStory} »
+                {current.source === "skills" ? `« ${current.question} »` : current.question}
               </p>
 
               <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {current.choices.map((choice) => {
-                  const isCorrect = choice.id === current.skill.id;
+                  const isCorrect = choice.id === current.correctChoiceId;
                   const isPicked = choice.id === picked;
                   let style =
                     "border-white/10 bg-white/[0.02] hover:border-white/30 hover:bg-white/[0.05]";
@@ -210,9 +261,11 @@ export function ChapterSkills({ skills }: Props) {
                       disabled={revealed}
                       className={`flex items-center gap-3 rounded-2xl border px-5 py-4 text-left transition-all ${style}`}
                     >
-                      <span className={`h-1.5 w-1.5 rounded-full ${LEVEL_DOT[choice.level]}`} />
+                      {choice.levelDot && (
+                        <span className={`h-1.5 w-1.5 rounded-full ${choice.levelDot}`} />
+                      )}
                       <span className="font-[var(--font-fraunces)] text-lg font-light">
-                        {choice.name}
+                        {choice.label}
                       </span>
                       {revealed && isCorrect && (
                         <span className="ml-auto font-[var(--font-jetbrains)] text-[10px] uppercase tracking-wider text-[#34D399]">
@@ -232,7 +285,7 @@ export function ChapterSkills({ skills }: Props) {
               {revealed && (
                 <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-6">
                   <span className="font-[var(--font-jetbrains)] text-[10px] uppercase tracking-[0.3em] text-white/40">
-                    {current.skill.years} · {current.skill.category}
+                    {current.hint || ""}
                   </span>
                   <button
                     onClick={handleNext}
@@ -272,7 +325,6 @@ export function ChapterSkills({ skills }: Props) {
           )}
         </div>
 
-        {/* Référence : toutes les compétences en discret */}
         <div className="mt-20 border-t border-white/5 pt-12">
           <p className="mb-6 text-center font-[var(--font-jetbrains)] text-[10px] uppercase tracking-[0.3em] text-white/30">
             — Stack complète

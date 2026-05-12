@@ -3,12 +3,22 @@ import { connectDB } from "@/lib/mongodb";
 import { CVSection } from "@/models/CVSection";
 import { verifyAuth } from "@/lib/auth";
 import { requireString, requireOneOf, ValidationError } from "@/lib/validate";
+import { SINGLETON_SECTIONS } from "@/lib/cv";
 
-const SECTION_TYPES = ["profile", "socials", "skills", "projects", "education", "experience", "contact", "custom"] as const;
+const SECTION_TYPES = ["profile", "socials", "skills", "projects", "education", "experience", "contact", "quiz", "story", "custom"] as const;
 
 export async function GET() {
   try {
     await connectDB();
+    // Auto-création des singletons manquants (quiz, story) si la DB est déjà seedée
+    const existing = await CVSection.find({}).select("key");
+    if (existing.length > 0) {
+      const keys = new Set(existing.map((s) => s.key));
+      const missing = SINGLETON_SECTIONS.filter((s) => !keys.has(s.key));
+      if (missing.length > 0) {
+        await CVSection.insertMany(missing);
+      }
+    }
     const sections = await CVSection.find({}).sort({ order: 1 });
     return NextResponse.json({ sections });
   } catch (error) {

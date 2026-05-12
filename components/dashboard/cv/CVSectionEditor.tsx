@@ -15,7 +15,7 @@ const PROFILE_FIELDS: FieldConfig[] = [
   { name: "availability", label: "Disponibilité", type: "text" },
   { name: "phone", label: "Téléphone", type: "text" },
   { name: "email", label: "Email", type: "email" },
-  { name: "photo", label: "Chemin de la photo", type: "text", placeholder: "/photoCV.png" },
+  { name: "photo", label: "Photo de profil", type: "image" },
 ];
 
 const CONTACT_FIELDS: FieldConfig[] = [
@@ -26,7 +26,6 @@ const CONTACT_FIELDS: FieldConfig[] = [
 ];
 
 const SOCIAL_FIELDS: FieldConfig[] = [
-  { name: "id", label: "ID (slug unique)", type: "text" },
   { name: "name", label: "Nom du réseau", type: "text" },
   { name: "handle", label: "Handle / pseudo affiché", type: "text" },
   { name: "url", label: "URL", type: "url" },
@@ -34,7 +33,6 @@ const SOCIAL_FIELDS: FieldConfig[] = [
 ];
 
 const SKILL_FIELDS: FieldConfig[] = [
-  { name: "id", label: "ID (slug unique)", type: "text" },
   { name: "name", label: "Nom", type: "text" },
   { name: "category", label: "Catégorie", type: "text", placeholder: "Frontend, Backend, ..." },
   { name: "level", label: "Niveau", type: "text", placeholder: "Expert | Avancé | Intermédiaire | Débutant" },
@@ -43,16 +41,16 @@ const SKILL_FIELDS: FieldConfig[] = [
 ];
 
 const PROJECT_FIELDS: FieldConfig[] = [
-  { name: "id", label: "ID (slug unique)", type: "text" },
   { name: "name", label: "Nom du projet", type: "text" },
   { name: "url", label: "URL", type: "url" },
-  { name: "image", label: "Chemin de l'image", type: "text" },
+  { name: "image", label: "Capture / image du projet", type: "image" },
   { name: "stack", label: "Stack (séparée par virgules)", type: "tags", placeholder: "React, Node.js, MongoDB" },
   { name: "description", label: "Description", type: "textarea", rows: 4 },
+  { name: "credentialsEmail", label: "Demo — Email (optionnel)", type: "text", placeholder: "invite@bienvenue.fr" },
+  { name: "credentialsPassword", label: "Demo — Mot de passe (optionnel)", type: "text", placeholder: "invite2025" },
 ];
 
 const EDUCATION_FIELDS: FieldConfig[] = [
-  { name: "id", label: "ID (slug unique)", type: "text" },
   { name: "school", label: "École / organisme", type: "text" },
   { name: "degree", label: "Diplôme / titre", type: "text" },
   { name: "field", label: "Niveau / domaine", type: "text" },
@@ -62,7 +60,6 @@ const EDUCATION_FIELDS: FieldConfig[] = [
 ];
 
 const EXPERIENCE_FIELDS: FieldConfig[] = [
-  { name: "id", label: "ID (slug unique)", type: "text" },
   { name: "company", label: "Entreprise", type: "text" },
   { name: "position", label: "Poste", type: "text" },
   { name: "startDate", label: "Date début (YYYY-MM)", type: "text", placeholder: "2024-09" },
@@ -72,7 +69,6 @@ const EXPERIENCE_FIELDS: FieldConfig[] = [
 ];
 
 const CUSTOM_ITEM_FIELDS: FieldConfig[] = [
-  { name: "id", label: "ID (slug unique)", type: "text" },
   { name: "title", label: "Titre", type: "text" },
   { name: "description", label: "Description", type: "textarea", rows: 4 },
 ];
@@ -84,25 +80,64 @@ interface CVSectionEditorProps {
   onSaved: () => void;
 }
 
+// Transforme la donnée stockée → forme éditable (flatten credentials pour projets)
+function toEditableContent(type: string, raw: Record<string, unknown>): Record<string, unknown> {
+  if (type !== "projects" || !Array.isArray(raw?.items)) return raw;
+  const items = (raw.items as Array<Record<string, unknown>>).map((p) => {
+    const creds = p.credentials as { email?: string; password?: string } | undefined;
+    return {
+      ...p,
+      credentialsEmail: creds?.email ?? "",
+      credentialsPassword: creds?.password ?? "",
+    };
+  });
+  return { ...raw, items };
+}
+
+// Forme éditable → forme stockée (reconstruit credentials, garantit un id)
+function toStoredContent(type: string, edit: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(edit?.items)) return edit;
+  const items = (edit.items as Array<Record<string, unknown>>).map((it) => {
+    const clone = { ...it };
+    if (!clone.id || typeof clone.id !== "string") {
+      clone.id = `${type.slice(0, 4)}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    }
+    if (type === "projects") {
+      const email = (clone.credentialsEmail as string | undefined)?.trim() || "";
+      const password = (clone.credentialsPassword as string | undefined)?.trim() || "";
+      delete clone.credentialsEmail;
+      delete clone.credentialsPassword;
+      if (email || password) {
+        clone.credentials = { email, password };
+      } else {
+        delete clone.credentials;
+      }
+    }
+    return clone;
+  });
+  return { ...edit, items };
+}
+
 export function CVSectionEditor({ section, apiKey, onClose, onSaved }: CVSectionEditorProps) {
   const [title, setTitle] = useState(section.title);
   const [content, setContent] = useState<Record<string, unknown>>(
-    (section.content as Record<string, unknown>) ?? {}
+    toEditableContent(section.type, (section.content as Record<string, unknown>) ?? {})
   );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setTitle(section.title);
-    setContent((section.content as Record<string, unknown>) ?? {});
+    setContent(toEditableContent(section.type, (section.content as Record<string, unknown>) ?? {}));
   }, [section]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const payload = toStoredContent(section.type, content);
       const res = await fetch(`/api/cv-sections/${section._id}`, {
         method: "PATCH",
         headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content }),
+        body: JSON.stringify({ title, content: payload }),
       });
       if (!res.ok) {
         const data = await res.json();

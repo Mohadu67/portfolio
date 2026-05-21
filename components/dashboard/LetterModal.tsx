@@ -9,6 +9,7 @@ interface LetterModalProps {
   onClose: () => void;
   apiKey: string;
   onUpdate?: (id: string, updates: Partial<ICandidature>) => Promise<void>;
+  onRequestGenerate?: () => void;
 }
 
 export function LetterModal({
@@ -17,53 +18,17 @@ export function LetterModal({
   onClose,
   apiKey,
   onUpdate,
+  onRequestGenerate,
 }: LetterModalProps) {
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [letter, setLetter] = useState(candidature.lettre || "");
+  const letter = candidature.lettre || "";
   const [email, setEmail] = useState(candidature.email || "");
   const [notes, setNotes] = useState(candidature.notes || "");
   const [status, setStatus] = useState<CandidatureStatut>(candidature.statut);
 
   if (!isOpen) return null;
-
-  const handleGenerateLetter = async () => {
-    setIsGenerating(true);
-    setError("");
-    try {
-      const res = await fetch("/api/generate-letter", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
-        body: JSON.stringify({ candidature_id: candidature._id }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Erreur lors de la génération");
-      }
-
-      const data = await res.json();
-      setLetter(data.lettre);
-      setSuccess("Lettre générée avec succès!");
-
-      // Update local state
-      await onUpdate?.(candidature._id as string, {
-        lettre: data.lettre,
-        statut: "lettre générée" as CandidatureStatut,
-      });
-      setStatus("lettre générée");
-
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur inconnue");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
 
   const handleSendEmail = async () => {
     if (!email) {
@@ -189,13 +154,12 @@ export function LetterModal({
             <h3 className="text-lg font-bold text-[var(--text-primary)]">
               Lettre de motivation
             </h3>
-            {!letter && (
+            {!letter && onRequestGenerate && (
               <button
-                onClick={handleGenerateLetter}
-                disabled={isGenerating}
-                className="btn-orange text-sm disabled:opacity-50"
+                onClick={onRequestGenerate}
+                className="btn-orange text-sm"
               >
-                {isGenerating ? "Génération..." : "Générer avec Grok"}
+                Générer une lettre
               </button>
             )}
           </div>
@@ -208,7 +172,7 @@ export function LetterModal({
             </div>
           ) : (
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded p-8 text-center text-[var(--text-tertiary)]">
-              Aucune lettre générée. Cliquez sur "Générer avec Grok" pour en créer une.
+              Aucune lettre générée. Clique sur « Générer une lettre » pour choisir le type (stage / alternance / CDI) et lancer la génération.
             </div>
           )}
 
@@ -217,7 +181,7 @@ export function LetterModal({
             <div className="space-y-3">
               <div>
                 <label className="block text-[var(--text-secondary)] text-sm font-medium mb-2">
-                  Email de l'entreprise
+                  Email de l&apos;entreprise
                 </label>
                 <input
                   type="email"

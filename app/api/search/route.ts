@@ -38,13 +38,20 @@ export async function POST(request: NextRequest) {
       ...indeedResults,
     ].filter((r) => r.url && r.url.trim() !== "");
 
-    // Preview mode: return results with already_saved flag, don't insert
+    // Preview mode: return results with already_saved flag + joined candidature, don't insert
     if (preview) {
       const urls = allResults.map((r) => r.url);
-      const existing = await Candidature.find({ url: { $in: urls } }, { url: 1 }).lean<{ url: string }[]>();
-      const existingUrls = new Set(existing.map((e) => e.url));
+      const existing = await Candidature.find({ url: { $in: urls } }).lean();
+      const existingByUrl = new Map(existing.map((e) => [e.url, e]));
       return NextResponse.json({
-        results: allResults.map((r) => ({ ...r, already_saved: existingUrls.has(r.url) })),
+        results: allResults.map((r) => {
+          const candidature = existingByUrl.get(r.url);
+          return {
+            ...r,
+            already_saved: !!candidature,
+            candidature: candidature ?? undefined,
+          };
+        }),
       });
     }
 
@@ -71,11 +78,22 @@ export async function POST(request: NextRequest) {
 
     let newCount = 0;
     if (toInsert.length > 0) {
-      const inserted = await Candidature.insertMany(toInsert, { ordered: false }).catch((err) => {
-        console.warn("insertMany partial error:", err?.message);
-        return err?.insertedDocs ?? [];
-      });
-      newCount = Array.isArray(inserted) ? inserted.length : 0;
+      try {
+        const inserted = await Candidature.insertMany(toInsert, { ordered: false });
+        newCount = inserted.length;
+      } catch (err) {
+        const e = err as { message?: string; insertedDocs?: unknown[]; writeErrors?: unknown[]; result?: { result?: { nInserted?: number } } };
+        console.warn("insertMany partial error:", e?.message);
+        if (Array.isArray(e?.insertedDocs)) {
+          newCount = e.insertedDocs.length;
+        } else if (e?.result?.result?.nInserted) {
+          newCount = e.result.result.nInserted;
+        } else {
+          // Fallback : recompter en DB pour ne pas mentir au client
+          const stillExisting = await Candidature.find({ url: { $in: toInsert.map((d) => d.url) } }, { _id: 1 }).lean();
+          newCount = stillExisting.length;
+        }
+      }
     }
 
     return NextResponse.json({

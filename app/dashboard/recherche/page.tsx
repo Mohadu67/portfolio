@@ -15,10 +15,12 @@ import {
   AlertCircle,
   MapPin,
   Briefcase,
+  PenLine,
 } from "lucide-react";
-import Link from "next/link";
 import { toast } from "sonner";
 import { useApiKey } from "@/lib/contexts/AuthContext";
+import { GenerateLetterModal } from "@/components/dashboard/GenerateLetterModal";
+import type { ICandidature } from "@/models/Candidature";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ interface OffreResult {
   url: string;
   plateforme: "JSearch" | "Adzuna" | "France Travail" | "Indeed";
   already_saved: boolean;
+  candidature?: ICandidature;
 }
 
 interface CompanyResult {
@@ -103,6 +106,9 @@ export default function RecherchePage() {
   const [savedCompanies, setSavedCompanies] = useState<SavedCompany[]>([]);
   const [savingUrls, setSavingUrls] = useState<Set<string>>(new Set());
 
+  // ── Letter modal state ──
+  const [letterTarget, setLetterTarget] = useState<ICandidature | null>(null);
+
   const keywordsRef = useRef<HTMLInputElement>(null);
 
   // Load saved queries from localStorage
@@ -166,8 +172,8 @@ export default function RecherchePage() {
     }
   }
 
-  async function addOffre(offre: OffreResult) {
-    if (!apiKey) return;
+  async function addOffre(offre: OffreResult): Promise<ICandidature | null> {
+    if (!apiKey) return null;
     setAddingUrls((prev) => new Set(prev).add(offre.url));
     try {
       const res = await fetch("/api/candidatures", {
@@ -183,19 +189,24 @@ export default function RecherchePage() {
           statut: "identifiée",
         }),
       });
-      if (res.status === 409) {
-        // Already saved — just update UI
-      } else if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Erreur");
-      } else {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 409) {
+        throw new Error(data.error ?? "Erreur");
+      }
+      const candidature: ICandidature | undefined =
+        res.status === 409 ? data.candidature : data;
+      if (res.status !== 409) {
         toast.success(`${offre.entreprise} ajoutée`);
       }
       setOffresResults((prev) =>
-        prev.map((r) => (r.url === offre.url ? { ...r, already_saved: true } : r))
+        prev.map((r) =>
+          r.url === offre.url ? { ...r, already_saved: true, candidature: candidature ?? r.candidature } : r
+        )
       );
+      return candidature ?? null;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
+      return null;
     } finally {
       setAddingUrls((prev) => {
         const next = new Set(prev);
@@ -328,6 +339,47 @@ export default function RecherchePage() {
 
   const savedCompanyUrls = new Set(savedCompanies.map((c) => c.url));
   const newOffres = offresResults.filter((r) => !r.already_saved).length;
+
+  // ── Letter actions ──
+
+  async function openLetterFor(offre: OffreResult) {
+    if (offre.candidature) {
+      setLetterTarget(offre.candidature);
+      return;
+    }
+    // Pas encore en mémoire → on l'ajoute d'abord puis on ouvre la modale.
+    const created = await addOffre(offre);
+    if (created) setLetterTarget(created);
+  }
+
+  async function updateCandidature(id: string, updates: Partial<ICandidature>) {
+    if (!apiKey) return;
+    const res = await fetch(`/api/candidatures/${id}`, {
+      method: "PATCH",
+      headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error("Échec de la mise à jour");
+    const updated: ICandidature = await res.json();
+    setLetterTarget((prev) => (prev && prev._id === id ? { ...prev, ...updated } : prev));
+    setOffresResults((prev) =>
+      prev.map((r) =>
+        r.candidature && r.candidature._id === id
+          ? { ...r, candidature: { ...r.candidature, ...updated } }
+          : r
+      )
+    );
+  }
+
+  async function sendCandidature(candidature: ICandidature, lettre: string, email: string) {
+    if (!apiKey) return;
+    const res = await fetch("/api/send-email", {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ candidature_id: candidature._id, email_destinataire: email, lettre }),
+    });
+    if (!res.ok) throw new Error("Erreur lors de l'envoi");
+  }
 
   // ─── Render ──────────────────────────────────────────────
 
@@ -512,6 +564,7 @@ export default function RecherchePage() {
                         offre={offre}
                         adding={addingUrls.has(offre.url)}
                         onAdd={() => addOffre(offre)}
+                        onWriteLetter={() => openLetterFor(offre)}
                       />
                     ))}
                   </div>
@@ -646,6 +699,16 @@ export default function RecherchePage() {
           )}
         </div>
       )}
+
+      {/* Letter modal */}
+      <GenerateLetterModal
+        candidature={letterTarget}
+        isOpen={letterTarget !== null}
+        onClose={() => setLetterTarget(null)}
+        apiKey={apiKey ?? ""}
+        onSend={sendCandidature}
+        onUpdate={updateCandidature}
+      />
     </div>
   );
 }
@@ -656,10 +719,12 @@ function OffreCard({
   offre,
   adding,
   onAdd,
+  onWriteLetter,
 }: {
   offre: OffreResult;
   adding: boolean;
   onAdd: () => void;
+  onWriteLetter: () => void;
 }) {
   return (
     <div
@@ -706,14 +771,15 @@ function OffreCard({
             {adding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
             Ajouter
           </button>
-        ) : (
-          <Link
-            href="/dashboard/candidatures"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--accent-success)]/30 text-[var(--accent-success)] text-xs font-semibold hover:bg-[var(--accent-success)]/10 transition-colors"
-          >
-            Voir dans les candidatures
-          </Link>
-        )}
+        ) : null}
+        <button
+          onClick={onWriteLetter}
+          disabled={adding}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--accent-orange)]/40 bg-[var(--accent-orange)]/10 text-[var(--accent-orange)] text-xs font-semibold disabled:opacity-50 hover:bg-[var(--accent-orange)]/20 transition-colors"
+        >
+          <PenLine size={11} />
+          {offre.already_saved ? "Rédiger la lettre" : "Ajouter & rédiger"}
+        </button>
         {offre.url && (
           <a
             href={offre.url}

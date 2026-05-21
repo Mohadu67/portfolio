@@ -1,15 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Briefcase, Building2 } from "lucide-react";
+import Link from "next/link";
+import { Briefcase, Search } from "lucide-react";
 import { useApiKey } from "@/lib/contexts/AuthContext";
 import { useDashboardData } from "@/lib/hooks/useDashboardData";
-import { SearchPanel } from "@/components/dashboard/SearchPanel";
-import { CompanySearchPanel } from "@/components/dashboard/CompanySearchPanel";
 import { StatsBar } from "@/components/dashboard/StatsBar";
 import { CandidatureList } from "@/components/dashboard/CandidatureList";
 import { LetterModal } from "@/components/dashboard/LetterModal";
-import { SearchLoadingModal } from "@/components/dashboard/SearchLoadingModal";
 import { GenerateLetterModal } from "@/components/dashboard/GenerateLetterModal";
 import { RelanceComposer } from "@/components/dashboard/relances/RelanceComposer";
 import type { ICandidature, CandidatureStatut } from "@/models/Candidature";
@@ -27,7 +25,6 @@ const STATUS_LABELS: Record<CandidatureStatut, string> = {
 export default function CandidaturesPage() {
   const apiKey = useApiKey();
   const data = useDashboardData(apiKey);
-  const [activeTab, setActiveTab] = useState<"offres" | "entreprises">("offres");
   const [filterStatus, setFilterStatus] = useState<CandidatureStatut | null>(null);
   const [selected, setSelected] = useState<ICandidature | null>(null);
   const [showLetter, setShowLetter] = useState(false);
@@ -46,9 +43,6 @@ export default function CandidaturesPage() {
     setSelected(null);
   };
 
-  const offres = data.candidatures.filter((c) => c.plateforme !== "Web");
-  const entreprises = data.candidatures.filter((c) => c.plateforme === "Web");
-
   const onSelect = (id: string) => {
     const c = data.candidatures.find((x) => x._id === id);
     if (c) {
@@ -59,27 +53,19 @@ export default function CandidaturesPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex gap-2">
-        <button
-          onClick={() => setActiveTab("offres")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeTab === "offres"
-              ? "bg-[var(--accent-orange)] text-[var(--bg-primary)]"
-              : "bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-soft)]"
-          }`}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Mes candidatures</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
+            Suivi et relance des offres ajoutées depuis la recherche unifiée.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/recherche"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-orange)] text-[var(--bg-primary)] text-sm font-semibold hover:opacity-90 transition-opacity"
         >
-          <Briefcase size={16} /> Offres d&apos;emploi
-        </button>
-        <button
-          onClick={() => setActiveTab("entreprises")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeTab === "entreprises"
-              ? "bg-[var(--accent-blue)] text-white"
-              : "bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-soft)]"
-          }`}
-        >
-          <Building2 size={16} /> Recherche entreprises
-        </button>
+          <Search size={14} /> Trouver de nouvelles offres
+        </Link>
       </div>
 
       <StatsBar
@@ -89,84 +75,30 @@ export default function CandidaturesPage() {
         onStatusClick={setFilterStatus}
       />
 
-      {filterStatus ? (
-        <div>
-          <div className="flex items-center gap-3 mb-4">
-            <Briefcase size={22} className="text-[var(--accent-orange)]" />
-            <h2 className="text-xl font-bold text-[var(--text-primary)]">
-              {STATUS_LABELS[filterStatus]}
-            </h2>
-          </div>
-          <CandidatureList
-            candidatures={data.candidatures}
-            filterStatus={filterStatus}
-            onSelect={onSelect}
-            onDelete={data.remove}
-            onGenerateLetter={(c) => {
-              setSelected(c);
-              setShowGenerate(true);
-            }}
-            onFollowUp={(c) => {
-              setSelected(c);
-              setShowFollowUp(true);
-            }}
-            onUpdate={data.update}
-            apiKey={apiKey}
-          />
+      <div>
+        <div className="flex items-center gap-3 mb-4">
+          <Briefcase size={22} className="text-[var(--accent-orange)]" />
+          <h2 className="text-xl font-bold text-[var(--text-primary)]">
+            {filterStatus ? STATUS_LABELS[filterStatus] : "Toutes les candidatures"}
+          </h2>
         </div>
-      ) : activeTab === "offres" ? (
-        <>
-          <SearchPanel onSearch={data.search} isLoading={data.searching} apiKey={apiKey} />
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <Briefcase size={22} className="text-[var(--accent-orange)]" />
-              <h2 className="text-xl font-bold text-[var(--text-primary)]">Offres d&apos;emploi</h2>
-            </div>
-            <CandidatureList
-              candidatures={offres}
-              onSelect={onSelect}
-              onDelete={data.remove}
-              onGenerateLetter={(c) => {
-                setSelected(c);
-                setShowGenerate(true);
-              }}
-              onFollowUp={(c) => {
-                setSelected(c);
-                setShowFollowUp(true);
-              }}
-              onUpdate={data.update}
-              apiKey={apiKey}
-            />
-          </div>
-        </>
-      ) : (
-        <>
-          <CompanySearchPanel apiKey={apiKey} onCandidatureCreated={data.load} />
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <Building2 size={22} className="text-[var(--accent-blue)]" />
-              <h2 className="text-xl font-bold text-[var(--text-primary)]">Recherche entreprises</h2>
-            </div>
-            <CandidatureList
-              candidatures={entreprises}
-              onSelect={onSelect}
-              onDelete={data.remove}
-              onGenerateLetter={(c) => {
-                setSelected(c);
-                setShowGenerate(true);
-              }}
-              onFollowUp={(c) => {
-                setSelected(c);
-                setShowFollowUp(true);
-              }}
-              onUpdate={data.update}
-              apiKey={apiKey}
-            />
-          </div>
-        </>
-      )}
-
-      <SearchLoadingModal isOpen={data.searching} progress={data.searchProgress} />
+        <CandidatureList
+          candidatures={data.candidatures}
+          filterStatus={filterStatus ?? undefined}
+          onSelect={onSelect}
+          onDelete={data.remove}
+          onGenerateLetter={(c) => {
+            setSelected(c);
+            setShowGenerate(true);
+          }}
+          onFollowUp={(c) => {
+            setSelected(c);
+            setShowFollowUp(true);
+          }}
+          onUpdate={data.update}
+          apiKey={apiKey}
+        />
+      </div>
 
       {selected && (
         <>
@@ -191,6 +123,10 @@ export default function CandidaturesPage() {
             onClose={closeAll}
             apiKey={apiKey}
             onUpdate={data.update}
+            onRequestGenerate={() => {
+              setShowLetter(false);
+              setShowGenerate(true);
+            }}
           />
         </>
       )}

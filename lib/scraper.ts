@@ -8,6 +8,42 @@ export interface SearchResult {
   plateforme: "JSearch" | "Adzuna" | "France Travail" | "Indeed";
 }
 
+// Wrapper fetch : timeout + retry exponentiel sur 429 / 5xx / abort
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit = {},
+  opts: { timeoutMs?: number; retries?: number; label?: string } = {}
+): Promise<Response> {
+  const { timeoutMs = 8000, retries = 2, label = "fetch" } = opts;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: ctrl.signal });
+      clearTimeout(timer);
+      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+        const backoff = Math.min(1500 * (attempt + 1), 4000);
+        console.warn(`[${label}] HTTP ${res.status} — retry in ${backoff}ms (${attempt + 1}/${retries})`);
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
+      const aborted = (err as { name?: string })?.name === "AbortError";
+      if (attempt < retries) {
+        const backoff = Math.min(1500 * (attempt + 1), 4000);
+        console.warn(`[${label}] ${aborted ? "timeout" : "error"} — retry in ${backoff}ms (${attempt + 1}/${retries})`);
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
+      }
+    }
+  }
+  throw lastErr ?? new Error(`${label} failed after ${retries + 1} attempts`);
+}
+
 // City → department code mapping for France Travail API
 const CITY_TO_DEPT: Record<string, string> = {
   strasbourg: "67",
@@ -68,7 +104,7 @@ export async function searchJSearch(
   }
 
   try {
-    const response = await fetch(
+    const response = await fetchWithRetry(
       `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(
         `${keywords} ${location}`
       )}&country=fr&num_pages=1&date_posted=month`,
@@ -77,7 +113,8 @@ export async function searchJSearch(
           "x-rapidapi-key": rapidApiKey,
           "x-rapidapi-host": "jsearch.p.rapidapi.com",
         },
-      }
+      },
+      { label: "JSearch" }
     );
 
     if (!response.ok) {
@@ -121,10 +158,12 @@ export async function searchAdzuna(
   }
 
   try {
-    const response = await fetch(
+    const response = await fetchWithRetry(
       `https://api.adzuna.com/v1/api/jobs/fr/search/1?app_id=${appId}&app_key=${appKey}&what=${encodeURIComponent(
         keywords
-      )}&where=${encodeURIComponent(location)}&results_per_page=${nbResults}`
+      )}&where=${encodeURIComponent(location)}&results_per_page=${nbResults}`,
+      {},
+      { label: "Adzuna" }
     );
 
     if (!response.ok) {
@@ -171,7 +210,7 @@ export async function searchFranceTravail(
 
   try {
     // Get OAuth2 token (new endpoint)
-    const tokenRes = await fetch(
+    const tokenRes = await fetchWithRetry(
       "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire",
       {
         method: "POST",
@@ -184,7 +223,8 @@ export async function searchFranceTravail(
           client_secret: clientSecret,
           scope: "api_offresdemploiv2 o2dsoffre",
         }).toString(),
-      }
+      },
+      { label: "FranceTravail/OAuth", timeoutMs: 6000 }
     );
 
     if (!tokenRes.ok) {
@@ -207,7 +247,7 @@ export async function searchFranceTravail(
       searchParams.set("departement", deptCode);
     }
 
-    const jobRes = await fetch(
+    const jobRes = await fetchWithRetry(
       `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?${searchParams.toString()}`,
       {
         method: "GET",
@@ -215,7 +255,8 @@ export async function searchFranceTravail(
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
-      }
+      },
+      { label: "FranceTravail/search" }
     );
 
     // 204 = no results found (empty body)
@@ -267,7 +308,7 @@ export async function searchIndeed(
   }
 
   try {
-    const response = await fetch(
+    const response = await fetchWithRetry(
       `https://indeed12.p.rapidapi.com/jobs/search?query=${encodeURIComponent(
         keywords
       )}&location=${encodeURIComponent(location)}&locality=fr&start=1`,
@@ -276,7 +317,8 @@ export async function searchIndeed(
           "x-rapidapi-key": rapidApiKey,
           "x-rapidapi-host": "indeed12.p.rapidapi.com",
         },
-      }
+      },
+      { label: "Indeed" }
     );
 
     if (!response.ok) {

@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     const existing = await Candidature.findOne({ url });
     if (existing) {
       return NextResponse.json(
-        { error: "Une candidature avec cette URL existe déjà", details: "duplicate" },
+        { error: "Une candidature avec cette URL existe déjà", details: "duplicate", candidature: existing },
         { status: 409 }
       );
     }

@@ -36,11 +36,9 @@ export interface ISettings {
     cdi: string;
   };
   profile: {
-    // Texte libre injecté dans le prompt auto-reply quand un RH demande un créneau.
-    // Format conseillé : "mardi 11h-13h, jeudi 14h-17h" — l'IA reprend EXACTEMENT cette phrase.
+    // Texte libre multi-lignes injecté dans le prompt auto-reply quand un RH demande un créneau.
+    // L'IA reprend cette phrase EXACTEMENT. Le lien Calendly est lu auto depuis la CVSection "contact".
     availability: string;
-    // Lien Calendly/réservation perso. Si rempli, l'IA le préfère aux créneaux types.
-    calendlyUrl: string;
   };
   created_at: Date;
   updated_at: Date;
@@ -82,8 +80,10 @@ const settingsSchema = new Schema<ISettings>(
       cdi: { type: String, default: "" },
     },
     profile: {
-      availability: { type: String, default: "mardi 11h-13h, jeudi 14h-17h" },
-      calendlyUrl: { type: String, default: "" },
+      availability: {
+        type: String,
+        default: "Mardi 11h-13h, jeudi 14h-17h.\nFlexible le soir après 18h si besoin.\nFormat préféré : visio (Meet/Zoom).",
+      },
     },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } }

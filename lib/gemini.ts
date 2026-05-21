@@ -250,10 +250,12 @@ Ne JAMAIS redonner une information déjà présente dans le mail entrant, dans l
 4. Pour un créneau d'entretien : ne PAS s'engager sur une date précise. Propose 2-3 créneaux types (voir règle dispo ci-dessous) OU dis que Mohammed reviendra confirmer.
 
 **Désambiguïsation du mot "dispo" (très important) :**
-- "Tu es dispo quand ?" / "Vous êtes dispo comment ?" / "On peut s'appeler ?" → 90% du temps c'est une demande de **créneau d'échange** (call/visio). Utilise les créneaux types fournis dans le contexte utilisateur (champ "Créneaux types") — propose-les EXACTEMENT comme indiqué et laisse la RH choisir. Si un lien Calendly est fourni, donne-le à la place.
+- "Tu es dispo quand ?" / "Vous êtes dispo comment ?" / "On peut s'appeler ?" → 90% du temps c'est une demande de **créneau d'échange** (call/visio).
+  → Utilise le bloc "Dispos détaillées" du contexte utilisateur — reprends-le LITTÉRALEMENT (mot pour mot), pas de paraphrase.
+  → Si un Calendly est aussi fourni : propose-le EN PLUS (ex : « … sinon réserve directement sur [lien] »), pas à la place.
+  → Si aucun des deux n'est fourni : dis que Mohammed reviendra confirmer un créneau par mail.
 - "Quel rythme d'alternance ?" → réponse factuelle : 2 jours en entreprise / 1 jour en cours (rythme CNAM standard).
 - "Quelle date de démarrage ?" → reprend simplement l'info de la candidature initiale (stage = immédiat, alternance = septembre 2026, CDI = négociable).
-- Si aucun créneau ni Calendly n'est fourni dans le contexte : dis simplement que Mohammed reviendra confirmer un créneau.
 - Si vraiment ambigu : pose UNE question de clarification, ne réponds pas dans le vide.
 
 **Catégories à choisir :**
@@ -296,17 +298,23 @@ function buildAutoReplyUserPrompt(input: ClassifyAndReplyInput): string {
   const safeSubject = sanitizeUntrusted(input.subject, "UNTRUSTED_EMAIL");
   const safeFromName = input.fromName ? sanitizeUntrusted(input.fromName, "UNTRUSTED_EMAIL") : "";
 
-  // Bloc dispos paramétré depuis Settings — sinon fallback "à confirmer"
+  // Bloc dispos paramétré depuis Settings (texte libre multi-lignes) + Calendly auto depuis CVSection contact.
   const availability = (input.availability ?? "").trim();
   const calendlyUrl = (input.calendlyUrl ?? "").trim();
-  let availabilityBlock: string;
-  if (calendlyUrl) {
-    availabilityBlock = `- Lien de réservation Calendly : ${calendlyUrl} (donne CE lien si on te demande un créneau, ne propose pas de date à la main)`;
-  } else if (availability) {
-    availabilityBlock = `- Créneaux types pour un échange : ${availability} (reprends cette phrase EXACTEMENT si on te demande un créneau)`;
-  } else {
-    availabilityBlock = `- Aucun créneau ni Calendly paramétré : si on demande un créneau, dis que Mohammed reviendra confirmer rapidement par mail`;
+  const parts: string[] = [];
+  if (availability) {
+    parts.push(
+      `- Dispos détaillées de Mohammed (texte libre — reprends-le LITTÉRALEMENT, ne paraphrase pas, garde le ton et la mise en forme) :\n"""\n${availability}\n"""`,
+    );
   }
+  if (calendlyUrl) {
+    parts.push(
+      `- Lien Calendly de Mohammed : ${calendlyUrl} (propose-le EN PLUS des créneaux ci-dessus si présents, comme alternative pratique : « ou réserve directement sur ${calendlyUrl} »)`,
+    );
+  }
+  const availabilityBlock = parts.length > 0
+    ? parts.join("\n")
+    : "- Aucune dispo ni Calendly paramétré : si on demande un créneau, dis que Mohammed reviendra confirmer rapidement par mail";
 
   return `**Contexte interne (ne JAMAIS répéter dans la réponse — la RH a déjà cette info) :**
 - Entreprise destinataire : ${input.entreprise}

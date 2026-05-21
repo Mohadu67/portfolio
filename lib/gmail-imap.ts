@@ -3,6 +3,7 @@ import { simpleParser } from "mailparser";
 import { connectDB } from "./mongodb";
 import { Candidature, ICandidature, IEmailReceived, IAutoReply } from "@/models/Candidature";
 import { getSettingsDoc } from "@/models/Settings";
+import { CVSection } from "@/models/CVSection";
 import { sendNotification } from "./notifications";
 import { classifyAndReply } from "./gemini";
 import { replyInThread } from "./email";
@@ -79,7 +80,14 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
     ? settingsDoc.gmail.autoReplyMinConfidence
     : 0.7;
   const profileAvailability = settingsDoc.profile?.availability ?? "";
-  const profileCalendlyUrl = settingsDoc.profile?.calendlyUrl ?? "";
+  // Calendly url is read from the CVSection "contact" — single source of truth (no duplicate).
+  let profileCalendlyUrl = "";
+  try {
+    const contactSection = await CVSection.findOne({ type: "contact" }).lean<{ content?: { calendly?: string } } | null>();
+    profileCalendlyUrl = contactSection?.content?.calendly?.trim() ?? "";
+  } catch {
+    /* ignore — pas bloquant si la section n'existe pas encore */
+  }
 
   // Build candidate emails map (lowercase email -> candidature)
   const candidatures = await Candidature.find({

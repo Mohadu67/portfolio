@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   Settings as SettingsIcon,
   FileText,
@@ -62,7 +63,6 @@ interface AppSettings {
   };
   profile: {
     availability: string;
-    calendlyUrl: string;
   };
   _defaults?: {
     letterTemplate: { stage: string; alternance: string; cdi: string };
@@ -626,39 +626,34 @@ export default function SettingsPage() {
           Mes dispos (pour l&apos;auto-reply IA)
         </h2>
         <p className="text-xs text-[var(--text-tertiary)]">
-          Quand un RH demande un créneau pour échanger, l&apos;IA reprend cette phrase EXACTEMENT.
-          Si tu mets un lien Calendly, il sera prioritaire sur les créneaux types.
+          Quand un RH demande un créneau pour échanger, l&apos;IA reprend ce texte EXACTEMENT (mot pour mot).
+          Tu peux mettre plusieurs lignes, des commentaires, des préférences format/durée — l&apos;IA suit ce que tu écris.
         </p>
         <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 space-y-3">
           <div>
             <label className="text-xs text-[var(--text-tertiary)] block mb-1">
-              Créneaux types
+              Dispos détaillées (texte libre, multi-lignes)
             </label>
-            <input
-              type="text"
+            <textarea
               value={settings.profile?.availability ?? ""}
               onChange={(e) => updateProfileField("availability", e.target.value)}
-              placeholder="ex : mardi 11h-13h, jeudi 14h-17h"
-              className="w-full px-3 py-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+              rows={6}
+              placeholder={`Ex :\nMardi 11h-13h ou jeudi 14h-17h en visio (Meet/Zoom).\nFlexible le soir après 18h si besoin.\nPour un call rapide : 15 min suffisent, dis-moi juste l'heure.`}
+              className="w-full px-3 py-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm font-mono leading-relaxed resize-y min-h-[120px]"
             />
             <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
-              Texte libre, repris mot à mot par l&apos;IA. Vide → l&apos;IA dira que tu reviendras confirmer.
+              Vide → l&apos;IA dira que tu reviendras confirmer un créneau.
             </p>
           </div>
-          <div>
-            <label className="text-xs text-[var(--text-tertiary)] block mb-1">
-              Lien Calendly (optionnel)
-            </label>
-            <input
-              type="url"
-              value={settings.profile?.calendlyUrl ?? ""}
-              onChange={(e) => updateProfileField("calendlyUrl", e.target.value)}
-              placeholder="https://calendly.com/ton-handle/30min"
-              className="w-full px-3 py-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
-            />
-            <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
-              Si rempli, l&apos;IA donnera CE lien au lieu des créneaux types.
-            </p>
+          <div className="pt-2 border-t border-[var(--border-soft)] text-xs text-[var(--text-secondary)] flex items-start gap-2">
+            <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-medium">Calendly auto-synchronisé</span> depuis la section{" "}
+              <Link href="/dashboard/cv" className="text-[var(--accent-info)] hover:underline">
+                /dashboard/cv → Contact
+              </Link>
+              . Si le lien y est renseigné, l&apos;IA le proposera EN PLUS des créneaux ci-dessus.
+            </div>
           </div>
         </div>
       </section>

@@ -68,6 +68,57 @@ function normalizeReferences(references: string | undefined): string {
     .join(" ");
 }
 
+// URL du portfolio public — exposé via env pour pouvoir changer sans rebuild.
+const PORTFOLIO_URL = process.env.PROFIL_PORTFOLIO_URL ?? "https://hamiani.mohammed.harmonith.fr";
+
+function portfolioDisplay(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+
+// Bloc signature (juste sous le corps du mail). Identité claire + lien portfolio.
+function agentSignatureText(): string {
+  return `\n—\nAgent Cockpit · pour Mohammed Hamiani\n${PORTFOLIO_URL}`;
+}
+
+function agentSignatureHtml(): string {
+  return `
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-collapse:collapse;">
+  <tr>
+    <td style="padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#1f2937;line-height:1.5;">
+      <div style="font-size:14px;font-weight:600;letter-spacing:0.01em;">
+        Agent Cockpit
+        <span style="font-weight:400;color:#6b7280;"> · pour Mohammed Hamiani</span>
+      </div>
+      <div style="margin-top:3px;font-size:13px;">
+        <a href="${PORTFOLIO_URL}" style="color:#ff6b35;text-decoration:none;font-weight:500;">
+          ${portfolioDisplay(PORTFOLIO_URL)}
+        </a>
+      </div>
+    </td>
+  </tr>
+</table>`;
+}
+
+// Footer disclaimer (sous la signature). Assume le côté IA avec un peu d'humour pour
+// que le RH sache à quoi s'attendre et qu'une éventuelle bourde soit pardonnée d'avance.
+const AGENT_FOOTER_TEXT = `
+─────────────────────────────────────
+🤖  Ce message a été rédigé en autonomie par l'Agent Cockpit (IA).
+Si je raconte une bêtise — mea culpa : Mohammed reprend la main et corrige humain-à-humain.
+─────────────────────────────────────`;
+
+const AGENT_FOOTER_HTML = `
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border-collapse:collapse;width:100%;max-width:560px;">
+  <tr>
+    <td style="padding:12px 14px;background:#f9fafb;border-left:3px solid #ff6b35;border-radius:4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:11px;line-height:1.55;color:#6b7280;">
+      <span style="font-size:13px;vertical-align:-1px;">🤖</span>
+      <span style="margin-left:4px;font-style:italic;">
+        Ce message a été rédigé en autonomie par l'Agent Cockpit (IA). Si je raconte une bêtise — <em>mea culpa</em> : Mohammed reprend la main et corrige humain-à-humain.
+      </span>
+    </td>
+  </tr>
+</table>`;
+
 // Send a reply that keeps Gmail threading by setting In-Reply-To + References headers.
 export async function replyInThread(input: ReplyInThreadInput): Promise<ReplyInThreadResult> {
   const transporter = getTransporter();
@@ -89,10 +140,14 @@ export async function replyInThread(input: ReplyInThreadInput): Promise<ReplyInT
   const tokens = referencesHeader.split(/\s+/).filter(Boolean);
   const trimmedRefs = tokens.length > 6 ? [tokens[0], ...tokens.slice(-5)].join(" ") : tokens.join(" ");
 
-  const html = input.bodyText
+  const htmlBody = input.bodyText
     .split("\n")
     .map((line) => (line.trim() ? `<p style="margin:0 0 12px 0">${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>` : ""))
     .join("");
+
+  // Ordre final : corps IA → signature Agent Cockpit + portfolio → footer mea culpa
+  const textWithFooter = `${input.bodyText}\n${agentSignatureText()}\n\n${AGENT_FOOTER_TEXT}`;
+  const htmlWithFooter = `<div style="font-family: Arial, sans-serif; max-width: 800px;">${htmlBody}${agentSignatureHtml()}${AGENT_FOOTER_HTML}</div>`;
 
   const info = await withRetry(
     () =>
@@ -100,8 +155,8 @@ export async function replyInThread(input: ReplyInThreadInput): Promise<ReplyInT
         from: process.env.GMAIL_USER,
         to: input.to,
         subject,
-        text: input.bodyText,
-        html: `<div style="font-family: Arial, sans-serif; max-width: 800px;">${html}</div>`,
+        text: textWithFooter,
+        html: htmlWithFooter,
         inReplyTo,
         references: trimmedRefs || undefined,
       }),

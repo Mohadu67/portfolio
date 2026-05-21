@@ -45,6 +45,7 @@ services:
       PROFIL_EXPERIENCE: ${PROFIL_EXPERIENCE}
       PROFIL_RECHERCHE: ${PROFIL_RECHERCHE}
       PROFIL_DISPO: ${PROFIL_DISPO}
+      PROFIL_PORTFOLIO_URL: ${PROFIL_PORTFOLIO_URL:-https://hamiani.mohammed.harmonith.fr}
       NODE_ENV: production
       PORT: 3000
     depends_on:

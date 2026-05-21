@@ -385,6 +385,45 @@ export default function RecherchePage() {
     }
   }
 
+  async function applyToCompany(result: CompanyResult) {
+    if (!apiKey) return;
+    setSavingUrls((prev) => new Set(prev).add(result.url));
+    try {
+      const res = await fetch("/api/candidatures", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entreprise: result.name,
+          poste: "Candidature spontanée",
+          plateforme: "Web",
+          localisation: "",
+          url: result.url,
+          description: result.snippet ?? "",
+          aboutText: result.snippet ?? "",
+          statut: "identifiée",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 409) {
+        throw new Error(data.error ?? "Erreur");
+      }
+      const candidature: ICandidature | undefined =
+        res.status === 409 ? data.candidature : data;
+      if (res.status !== 409) {
+        toast.success(`Candidature créée pour ${result.name}`);
+      }
+      if (candidature) setLetterTarget(candidature);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setSavingUrls((prev) => {
+        const next = new Set(prev);
+        next.delete(result.url);
+        return next;
+      });
+    }
+  }
+
   async function saveCompany(result: CompanyResult) {
     if (!apiKey) return;
     setSavingUrls((prev) => new Set(prev).add(result.url));
@@ -785,6 +824,7 @@ export default function RecherchePage() {
                   alreadySaved={savedCompanyUrls.has(r.url)}
                   saving={savingUrls.has(r.url)}
                   onSave={() => saveCompany(r)}
+                  onApply={() => applyToCompany(r)}
                 />
               ))}
             </div>
@@ -906,11 +946,13 @@ function CompanyCard({
   alreadySaved,
   saving,
   onSave,
+  onApply,
 }: {
   result: CompanyResult;
   alreadySaved: boolean;
   saving: boolean;
   onSave: () => void;
+  onApply: () => void;
 }) {
   return (
     <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 flex items-start gap-4">
@@ -932,23 +974,28 @@ function CompanyCard({
           </p>
         )}
       </div>
-      <button
-        onClick={onSave}
-        disabled={alreadySaved || saving}
-        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-          alreadySaved
-            ? "bg-[var(--accent-success)]/10 text-[var(--accent-success)] border border-[var(--accent-success)]/30 cursor-default"
-            : "border border-[var(--border-soft)] text-[var(--text-secondary)] hover:text-[var(--accent-orange)] hover:border-[var(--accent-orange)]/40 disabled:opacity-50"
-        }`}
-      >
-        {saving ? (
-          <Loader2 size={11} className="animate-spin" />
-        ) : alreadySaved ? (
-          <><Check size={11} /> Suivie</>
-        ) : (
-          <><BookmarkPlus size={11} /> Suivre</>
-        )}
-      </button>
+      <div className="shrink-0 flex flex-col sm:flex-row gap-2">
+        <button
+          onClick={onApply}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent-orange)] text-[var(--bg-primary)] text-xs font-semibold disabled:opacity-50 hover:opacity-90 transition-opacity"
+          title="Créer une candidature spontanée + rédiger la lettre"
+        >
+          {saving ? <Loader2 size={11} className="animate-spin" /> : <PenLine size={11} />}
+          Candidater
+        </button>
+        <button
+          onClick={onSave}
+          disabled={alreadySaved || saving}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            alreadySaved
+              ? "bg-[var(--accent-success)]/10 text-[var(--accent-success)] border border-[var(--accent-success)]/30 cursor-default"
+              : "border border-[var(--border-soft)] text-[var(--text-secondary)] hover:text-[var(--accent-orange)] hover:border-[var(--accent-orange)]/40 disabled:opacity-50"
+          }`}
+        >
+          {alreadySaved ? <><Check size={11} /> Suivie</> : <><BookmarkPlus size={11} /> Suivre</>}
+        </button>
+      </div>
     </div>
   );
 }

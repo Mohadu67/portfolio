@@ -9,6 +9,7 @@ export interface ScrapedCompanyData {
 }
 
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+const EMAIL_VALIDATE_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const PHONE_REGEX = /(?:\+33|0)\s*[1-9](?:[\s.-]*\d{2}){4}/g;
 
 const ABOUT_LINK_PATTERNS = [
@@ -65,12 +66,81 @@ const JOB_TITLE_KEYWORDS = [
   "javascript",
 ];
 
-function extractEmails(html: string): string[] {
-  const decoded = html.replace(/&#64;/g, "@").replace(/\[at\]/gi, "@").replace(/\(at\)/gi, "@");
+function decodeCloudflareEmail(hex: string): string | null {
+  if (!hex || hex.length < 4 || hex.length % 2 !== 0) return null;
+  try {
+    const r = parseInt(hex.slice(0, 2), 16);
+    let email = "";
+    for (let i = 2; i < hex.length; i += 2) {
+      const c = parseInt(hex.slice(i, i + 2), 16) ^ r;
+      if (isNaN(c)) return null;
+      email += String.fromCharCode(c);
+    }
+    return EMAIL_VALIDATE_RE.test(email) ? email : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractEmails(html: string, $?: cheerio.CheerioAPI): string[] {
+  const collected: string[] = [];
+
+  // 1. Décoder les entités HTML communes et obfuscations textuelles
+  const decoded = html
+    .replace(/&#0?64;/g, "@")
+    .replace(/&#x40;/gi, "@")
+    .replace(/&#0?46;/g, ".")
+    .replace(/&#x2e;/gi, ".")
+    .replace(/\[\s*(at|arobase|@)\s*\]/gi, "@")
+    .replace(/\(\s*(at|arobase|@)\s*\)/gi, "@")
+    .replace(/\s+(at|arobase)\s+/gi, "@")
+    .replace(/\{\s*at\s*\}/gi, "@")
+    .replace(/\[\s*(dot|point)\s*\]/gi, ".")
+    .replace(/\(\s*(dot|point)\s*\)/gi, ".")
+    .replace(/\s+(dot|point)\s+/gi, ".");
+
   const matches = decoded.match(EMAIL_REGEX) || [];
-  const filtered = matches.filter(
-    (e) => !e.endsWith(".png") && !e.endsWith(".jpg") && !e.endsWith(".svg") && !e.endsWith(".gif") && !e.includes("example.com") && !e.includes("sentry")
-  );
+  collected.push(...matches);
+
+  if ($) {
+    // 2. mailto: links — très souvent oublié par le regex full HTML quand l'attribut est encodé
+    $("a[href^='mailto:']").each((_, el) => {
+      const href = $(el).attr("href") || "";
+      const raw = href.replace(/^mailto:/i, "").split("?")[0].trim();
+      if (raw && EMAIL_VALIDATE_RE.test(raw)) collected.push(raw);
+    });
+
+    // 3. Cloudflare email protection : <a class="__cf_email__" data-cfemail="HEX">
+    $("[data-cfemail], .__cf_email__").each((_, el) => {
+      const hex = $(el).attr("data-cfemail");
+      if (!hex) return;
+      const email = decodeCloudflareEmail(hex);
+      if (email) collected.push(email);
+    });
+
+    // 4. Attributs data-email / data-mail (autres frameworks d'obfuscation)
+    $("[data-email], [data-mail]").each((_, el) => {
+      const raw = ($(el).attr("data-email") || $(el).attr("data-mail") || "").trim();
+      if (raw && EMAIL_VALIDATE_RE.test(raw)) collected.push(raw);
+    });
+  }
+
+  const filtered = collected
+    .map((e) => e.trim().toLowerCase())
+    .filter(
+      (e) =>
+        !e.endsWith(".png") &&
+        !e.endsWith(".jpg") &&
+        !e.endsWith(".jpeg") &&
+        !e.endsWith(".svg") &&
+        !e.endsWith(".gif") &&
+        !e.endsWith(".webp") &&
+        !e.includes("example.com") &&
+        !e.includes("sentry") &&
+        !e.includes("wixpress") &&
+        !e.includes("@2x") &&
+        !e.includes("@3x")
+    );
   return [...new Set(filtered)];
 }
 
@@ -208,7 +278,7 @@ export async function scrapeCompanyWebsite(url: string): Promise<ScrapedCompanyD
   const $home = cheerio.load(homeHtml);
   result.companyName = extractCompanyName($home);
   result.description = extractDescription($home);
-  result.emails = extractEmails(homeHtml);
+  result.emails = extractEmails(homeHtml, $home);
   result.phones = extractPhones($home.text());
 
   // 2. Find about/contact and legal links separately
@@ -221,7 +291,7 @@ export async function scrapeCompanyWebsite(url: string): Promise<ScrapedCompanyD
     for (const pageHtml of aboutResults) {
       if (!pageHtml) continue;
       const $page = cheerio.load(pageHtml);
-      result.emails.push(...extractEmails(pageHtml));
+      result.emails.push(...extractEmails(pageHtml, $page));
       result.phones.push(...extractPhones($page.text()));
       if (!result.aboutText) {
         const text = extractAboutText($page);
@@ -235,7 +305,8 @@ export async function scrapeCompanyWebsite(url: string): Promise<ScrapedCompanyD
     const legalResults = await Promise.all(legalLinks.map(fetchPage));
     for (const pageHtml of legalResults) {
       if (!pageHtml) continue;
-      result.emails.push(...extractEmails(pageHtml));
+      const $legal = cheerio.load(pageHtml);
+      result.emails.push(...extractEmails(pageHtml, $legal));
     }
   }
 

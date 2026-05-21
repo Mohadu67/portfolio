@@ -494,16 +494,32 @@ export function GenerateLetterModal({
           )}
 
           {step === "write" && (
-            <motion.button
-              onClick={handleImprove}
-              disabled={loading || !letterText.trim()}
-              className="ml-auto px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] font-semibold hover:shadow-lg hover:shadow-[var(--accent-orange)]/30 disabled:opacity-50 transition-all flex items-center gap-2"
-              whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(255, 158, 100, 0.3)" }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Wand2 size={18} />
-              Améliorer la lettre
-            </motion.button>
+            <div className="ml-auto flex items-center gap-3">
+              <motion.button
+                onClick={() => {
+                  if (!letterText.trim()) return;
+                  setImprovedLetter(letterText);
+                  setStep("improved");
+                }}
+                disabled={loading || !letterText.trim()}
+                className="px-5 py-3 rounded-lg border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-orange)]/40 disabled:opacity-50 transition-all text-sm font-medium"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                title="Sauter l'amélioration et passer à l'envoi"
+              >
+                Utiliser telle quelle →
+              </motion.button>
+              <motion.button
+                onClick={handleImprove}
+                disabled={loading || !letterText.trim()}
+                className="px-8 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-orange)] to-[var(--accent-orange)]/80 text-[var(--bg-primary)] font-semibold hover:shadow-lg hover:shadow-[var(--accent-orange)]/30 disabled:opacity-50 transition-all flex items-center gap-2"
+                whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(255, 158, 100, 0.3)" }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Wand2 size={18} />
+                Améliorer la lettre
+              </motion.button>
+            </div>
           )}
 
           {step === "improved" && (

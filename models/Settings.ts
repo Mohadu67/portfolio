@@ -30,6 +30,11 @@ export interface ISettings {
     defaultLocation: string;
     defaultKeywords: string;
   };
+  letterTemplate: {
+    stage: string;
+    alternance: string;
+    cdi: string;
+  };
   created_at: Date;
   updated_at: Date;
 }
@@ -63,6 +68,11 @@ const settingsSchema = new Schema<ISettings>(
     search: {
       defaultLocation: { type: String, default: "" },
       defaultKeywords: { type: String, default: "" },
+    },
+    letterTemplate: {
+      stage: { type: String, default: "" },
+      alternance: { type: String, default: "" },
+      cdi: { type: String, default: "" },
     },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } }

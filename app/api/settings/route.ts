@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Settings, getSettings } from "@/models/Settings";
 import { verifyAuth } from "@/lib/auth";
+import { DEFAULT_LETTER_TEMPLATES, TEMPLATE_PLACEHOLDER } from "@/lib/letter-template";
 
 export async function GET(request: NextRequest) {
   if (!verifyAuth(request)) {
@@ -9,7 +10,13 @@ export async function GET(request: NextRequest) {
   }
   await connectDB();
   const settings = await getSettings();
-  return NextResponse.json(settings);
+  return NextResponse.json({
+    ...settings,
+    _defaults: {
+      letterTemplate: DEFAULT_LETTER_TEMPLATES,
+      letterTemplatePlaceholder: TEMPLATE_PLACEHOLDER,
+    },
+  });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -69,6 +76,14 @@ export async function PATCH(request: NextRequest) {
       }
       if (typeof body.search.defaultKeywords === "string") {
         s.search.defaultKeywords = body.search.defaultKeywords.trim();
+      }
+    }
+    if (body.letterTemplate && typeof body.letterTemplate === "object") {
+      for (const k of ["stage", "alternance", "cdi"] as const) {
+        const v = body.letterTemplate[k];
+        if (typeof v === "string") {
+          s.letterTemplate[k] = v;
+        }
       }
     }
 

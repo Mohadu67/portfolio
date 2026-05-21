@@ -55,7 +55,18 @@ interface AppSettings {
     lastProspectRunAt?: string | null;
     lastProspectSummary?: string | null;
   };
+  letterTemplate: {
+    stage: string;
+    alternance: string;
+    cdi: string;
+  };
+  _defaults?: {
+    letterTemplate: { stage: string; alternance: string; cdi: string };
+    letterTemplatePlaceholder: string;
+  };
 }
+
+type LetterType = "stage" | "alternance" | "cdi";
 
 interface ProspectDecision {
   url: string;
@@ -110,6 +121,12 @@ export default function SettingsPage() {
   const [lastSync, setLastSync] = useState<SyncResult | null>(null);
   const [prospecting, setProspecting] = useState(false);
   const [lastProspect, setLastProspect] = useState<ProspectResult | null>(null);
+  const [templateDrafts, setTemplateDrafts] = useState<{ stage: string; alternance: string; cdi: string }>({
+    stage: "",
+    alternance: "",
+    cdi: "",
+  });
+  const [savingTemplate, setSavingTemplate] = useState<LetterType | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,6 +140,13 @@ export default function SettingsPage() {
       const [tData, sData] = await Promise.all([tRes.json(), sRes.json()]);
       setTemplates(tData.templates ?? []);
       setSettings(sData);
+      const defaults = sData?._defaults?.letterTemplate;
+      const tpl = sData?.letterTemplate ?? {};
+      setTemplateDrafts({
+        stage: tpl.stage || defaults?.stage || "",
+        alternance: tpl.alternance || defaults?.alternance || "",
+        cdi: tpl.cdi || defaults?.cdi || "",
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
     } finally {
@@ -172,6 +196,31 @@ export default function SettingsPage() {
     updateSettings({
       automation: { ...settings.automation, autoApplyEnabled: !settings.automation.autoApplyEnabled },
     });
+  };
+
+  const saveLetterTemplate = async (type: LetterType) => {
+    if (!settings) return;
+    const value = templateDrafts[type];
+    const placeholder = settings._defaults?.letterTemplatePlaceholder ?? "{{paragraphe_genere}}";
+    if (value.trim() && !value.includes(placeholder)) {
+      toast.error(`Le template doit contenir le placeholder ${placeholder}`);
+      return;
+    }
+    setSavingTemplate(type);
+    try {
+      await updateSettings({
+        letterTemplate: { ...settings.letterTemplate, [type]: value },
+      });
+      toast.success(`Modèle ${type} enregistré`);
+    } finally {
+      setSavingTemplate(null);
+    }
+  };
+
+  const resetLetterTemplate = (type: LetterType) => {
+    if (!settings?._defaults?.letterTemplate) return;
+    setTemplateDrafts((prev) => ({ ...prev, [type]: settings._defaults!.letterTemplate[type] }));
+    toast.info("Modèle réinitialisé (clique Enregistrer pour appliquer)");
   };
 
   const updateAutoApplyField = <K extends keyof AppSettings["automation"]>(key: K, value: AppSettings["automation"][K]) => {
@@ -619,6 +668,81 @@ export default function SettingsPage() {
       </section>
 
       {/* Config */}
+      {settings && (
+        <section className="space-y-3">
+          <h2 className="font-semibold flex items-center gap-2">
+            <FileText size={16} className="text-[var(--accent-orange)]" />
+            Modèles de lettre de motivation
+          </h2>
+          <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 space-y-4">
+            <p className="text-xs text-[var(--text-tertiary)] leading-relaxed">
+              Trois modèles éditables — un par type de contrat. L&apos;IA génère uniquement le
+              paragraphe placé à l&apos;endroit du placeholder{" "}
+              <code className="px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--accent-orange)] text-[11px]">
+                {settings._defaults?.letterTemplatePlaceholder ?? "{{paragraphe_genere}}"}
+              </code>
+              . Tout le reste est utilisé tel quel.
+            </p>
+            {(["stage", "alternance", "cdi"] as const).map((type) => {
+              const placeholder = settings._defaults?.letterTemplatePlaceholder ?? "{{paragraphe_genere}}";
+              const current = templateDrafts[type];
+              const persisted = settings.letterTemplate?.[type] ?? "";
+              const isCustom = persisted.trim().length > 0;
+              const hasPlaceholder = current.includes(placeholder);
+              const dirty = current !== (persisted || settings._defaults?.letterTemplate[type] || "");
+              return (
+                <div key={type} className="space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold capitalize">{type}</span>
+                      <span
+                        className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                          isCustom
+                            ? "bg-[var(--accent-orange)]/15 text-[var(--accent-orange)]"
+                            : "bg-[var(--bg-secondary)] text-[var(--text-tertiary)]"
+                        }`}
+                      >
+                        {isCustom ? "Personnalisé" : "Par défaut"}
+                      </span>
+                      {!hasPlaceholder && (
+                        <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--accent-danger)]/15 text-[var(--accent-danger)]">
+                          Placeholder manquant
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      {isCustom && (
+                        <button
+                          onClick={() => resetLetterTemplate(type)}
+                          className="text-xs px-3 py-1 rounded border border-[var(--border-soft)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                        >
+                          Réinitialiser
+                        </button>
+                      )}
+                      <button
+                        onClick={() => saveLetterTemplate(type)}
+                        disabled={!dirty || savingTemplate === type || !hasPlaceholder}
+                        className="text-xs px-3 py-1 rounded bg-[var(--accent-orange)] text-[var(--bg-primary)] font-semibold disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center gap-1"
+                      >
+                        {savingTemplate === type ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+                        Enregistrer
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={current}
+                    onChange={(e) => setTemplateDrafts((prev) => ({ ...prev, [type]: e.target.value }))}
+                    rows={10}
+                    className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded px-3 py-2 text-sm text-[var(--text-primary)] font-mono leading-relaxed focus:outline-none focus:border-[var(--accent-orange)] transition-colors resize-y"
+                    spellCheck
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <section className="space-y-3">
         <h2 className="font-semibold flex items-center gap-2">
           <KeyRound size={16} className="text-[var(--accent-blue)]" />

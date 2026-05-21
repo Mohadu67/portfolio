@@ -50,6 +50,8 @@ export function Sidebar({ onLogout }: SidebarProps) {
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
+    // Hydration-safe read of localStorage on mount, one-shot. No cascading render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (stored === "1") setCollapsed(true);
   }, []);
 

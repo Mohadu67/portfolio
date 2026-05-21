@@ -17,7 +17,9 @@ export type EmailLogType = "candidature" | "relance";
 
 export type EmailLogStatus = "sent" | "failed";
 
-export type LetterModel = "grok" | "claude" | "manual";
+export type LetterModel = "gemini" | "grok" | "claude" | "manual";
+
+export type CandidatureSource = "manual" | "auto-apply" | "scraper";
 
 export interface IRelance {
   date: string;
@@ -60,9 +62,32 @@ export interface IEmailReceived {
   fromName?: string;
   subject: string;
   snippet: string;
+  bodyText?: string;
   messageId?: string;
+  references?: string;
   uid?: number;
   archived: boolean;
+}
+
+export type AutoReplyCategory =
+  | "refus"
+  | "entretien"
+  | "demande_infos"
+  | "smalltalk"
+  | "autre"
+  | "uncategorized";
+
+export interface IAutoReply {
+  date: Date;
+  inboundMessageId?: string;
+  category: AutoReplyCategory;
+  confidence: number;
+  reply: string;
+  sent: boolean;
+  sentMessageId?: string;
+  error?: string | null;
+  model: string;
+  dryRun?: boolean;
 }
 
 export interface ICandidature {
@@ -84,7 +109,9 @@ export interface ICandidature {
   letters: ILetterVersion[];
   emailsSent: IEmailLog[];
   emailsReceived: IEmailReceived[];
+  autoReplies: IAutoReply[];
   relanceHistory: IRelanceLog[];
+  source: CandidatureSource;
   date: string;
   created_at: Date;
   updated_at: Date;
@@ -111,7 +138,7 @@ const relanceLogSchema = new Schema<IRelanceLog>(
 const letterVersionSchema = new Schema<ILetterVersion>(
   {
     version: { type: Number, required: true },
-    model: { type: String, enum: ["grok", "claude", "manual"], default: "grok" },
+    model: { type: String, enum: ["gemini", "grok", "claude", "manual"], default: "gemini" },
     content: { type: String, required: true },
     generatedAt: { type: Date, default: () => new Date() },
     type: { type: String, enum: ["stage", "alternance", "cdi"] },
@@ -138,9 +165,31 @@ const emailReceivedSchema = new Schema<IEmailReceived>(
     fromName: { type: String },
     subject: { type: String, required: true },
     snippet: { type: String, default: "" },
+    bodyText: { type: String, default: "" },
     messageId: { type: String },
+    references: { type: String },
     uid: { type: Number },
     archived: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const autoReplySchema = new Schema<IAutoReply>(
+  {
+    date: { type: Date, default: () => new Date() },
+    inboundMessageId: { type: String },
+    category: {
+      type: String,
+      enum: ["refus", "entretien", "demande_infos", "smalltalk", "autre", "uncategorized"],
+      default: "uncategorized",
+    },
+    confidence: { type: Number, default: 0 },
+    reply: { type: String, required: true },
+    sent: { type: Boolean, default: false },
+    sentMessageId: { type: String },
+    error: { type: String, default: null },
+    model: { type: String, required: true },
+    dryRun: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -180,7 +229,9 @@ const candidatureSchema = new Schema<ICandidature>(
     letters: { type: [letterVersionSchema], default: [] },
     emailsSent: { type: [emailLogSchema], default: [] },
     emailsReceived: { type: [emailReceivedSchema], default: [] },
+    autoReplies: { type: [autoReplySchema], default: [] },
     relanceHistory: { type: [relanceLogSchema], default: [] },
+    source: { type: String, enum: ["manual", "auto-apply", "scraper"], default: "manual", index: true },
     date: { type: String },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } }

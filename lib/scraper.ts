@@ -8,6 +8,40 @@ export interface SearchResult {
   plateforme: "JSearch" | "Adzuna" | "France Travail" | "Indeed";
 }
 
+// Raw API shapes — minimal typing on the fields we read.
+interface JSearchJob {
+  employer_name?: string;
+  job_title?: string;
+  job_city?: string;
+  job_state?: string;
+  job_description?: string;
+  job_apply_link?: string;
+}
+
+interface AdzunaJob {
+  company?: { display_name?: string };
+  title?: string;
+  location?: { display_name?: string };
+  description?: string;
+  redirect_url?: string;
+}
+
+interface FranceTravailJob {
+  entreprise?: { nom?: string };
+  intitule?: string;
+  lieuTravail?: { libelle?: string };
+  description?: string;
+  origineOffre?: { urlOrigine?: string };
+  id?: string;
+}
+
+interface IndeedJob {
+  company_name?: string;
+  title?: string;
+  location?: string;
+  link?: string;
+}
+
 // Wrapper fetch : timeout + retry exponentiel sur 429 / 5xx / abort
 async function fetchWithRetry(
   url: string,
@@ -126,7 +160,7 @@ export async function searchJSearch(
 
     return (data.data || [])
       .slice(0, nbResults)
-      .map((job: any) => ({
+      .map((job: JSearchJob) => ({
         entreprise: job.employer_name || "Unknown",
         poste: job.job_title || "",
         localisation:
@@ -174,11 +208,11 @@ export async function searchAdzuna(
     const data = await response.json();
 
     return (data.results || [])
-      .filter((job: any) =>
+      .filter((job: AdzunaJob) =>
         isLocationMatch(job.location?.display_name || "", location)
       )
       .slice(0, nbResults)
-      .map((job: any) => ({
+      .map((job: AdzunaJob) => ({
         entreprise: job.company?.display_name || "Unknown",
         poste: job.title || "",
         localisation: job.location?.display_name || location,
@@ -272,11 +306,11 @@ export async function searchFranceTravail(
     const jobData = await jobRes.json();
 
     return (jobData.resultats || [])
-      .filter((job: any) =>
+      .filter((job: FranceTravailJob) =>
         isLocationMatch(job.lieuTravail?.libelle || "", location)
       )
       .slice(0, nbResults)
-      .map((job: any) => ({
+      .map((job: FranceTravailJob) => ({
         entreprise: job.entreprise?.nom || "Unknown",
         poste: job.intitule || "",
         localisation: job.lieuTravail?.libelle || location,
@@ -330,7 +364,7 @@ export async function searchIndeed(
 
     return (data.hits || [])
       .slice(0, nbResults)
-      .map((job: any) => ({
+      .map((job: IndeedJob) => ({
         entreprise: job.company_name || "Unknown",
         poste: job.title || "",
         localisation: job.location || location,

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Card, Badge, Text, Icon } from "@/components/atoms";
+import { Card, Badge, Text, Icon, type IconName } from "@/components/atoms";
 
 interface SkillCardProps {
   name: string;
@@ -59,7 +59,7 @@ export function SkillCard({
                 </Text>
               </div>
               <div className={`${config.color}`}>
-                <Icon name={config.icon as any} size={24} />
+                <Icon name={config.icon as IconName} size={24} />
               </div>
             </div>
 
@@ -71,7 +71,7 @@ export function SkillCard({
             </div>
 
             <Text variant="caption" color="secondary" className="mt-4 text-center opacity-60">
-              Cliquer pour plus d'info
+              Cliquer pour plus d&apos;info
             </Text>
           </Card>
         </motion.div>
@@ -95,7 +95,7 @@ export function SkillCard({
               {bugStory ? (
                 <>
                   <Text variant="caption" color="secondary" className="text-sm italic leading-relaxed flex-1 flex items-center">
-                    "{bugStory}"
+                    «&nbsp;{bugStory}&nbsp;»
                   </Text>
                   <Text variant="caption" color="tertiary" className="text-xs opacity-60 mt-3">
                     Cliquer pour retourner

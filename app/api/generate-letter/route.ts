@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature } from "@/models/Candidature";
-import { improveLetter } from "@/lib/grok";
+import { improveLetter } from "@/lib/gemini";
 import { verifyAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Candidature not found" }, { status: 404 });
     }
 
-    // Improve the letter with Grok
+    // Improve the letter with Gemini
     const improvedLetter = await improveLetter(letterText, type);
 
     // Update candidature with letter and status
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       ...(candidature.letters ?? []),
       {
         version: nextVersion,
-        model: "grok",
+        model: "gemini",
         content: improvedLetter,
         generatedAt: new Date(),
         type,

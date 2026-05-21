@@ -17,6 +17,7 @@ import {
   Loader2,
   CheckCircle2,
   AlertTriangle,
+  Radar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useApiKey } from "@/lib/contexts/AuthContext";
@@ -38,9 +39,47 @@ interface AppSettings {
   gmail: {
     inboxSyncEnabled: boolean;
     autoArchiveResponses: boolean;
+    autoReplyEnabled: boolean;
+    autoReplyMinConfidence: number;
     lastSyncAt?: string | null;
     lastSyncSummary?: string | null;
   };
+  automation: {
+    autoRelanceJ7Enabled: boolean;
+    autoRelanceDays: number;
+    autoApplyEnabled: boolean;
+    autoApplyMaxPerDay: number;
+    autoApplyMinCompanyScore: number;
+    weeklyProspectKeywords: string;
+    weeklyProspectLocation: string;
+    lastProspectRunAt?: string | null;
+    lastProspectSummary?: string | null;
+  };
+}
+
+interface ProspectDecision {
+  url: string;
+  domain: string;
+  entreprise: string;
+  companyScore?: number;
+  companyReason?: string;
+  bestOffer?: { title: string; url: string; score: number; reason: string; jobType?: string };
+  email?: { email: string; score: number; reasons: string[] };
+  decision: "skipped" | "applied" | "would_apply";
+  skipReason?: string;
+  candidatureId?: string;
+  error?: string;
+}
+
+interface ProspectResult {
+  ok: boolean;
+  dryRun: boolean;
+  scanned: number;
+  applied: number;
+  wouldApply: number;
+  skipped: number;
+  errors: string[];
+  decisions: ProspectDecision[];
 }
 
 interface SyncResult {
@@ -48,8 +87,16 @@ interface SyncResult {
   scanned: number;
   matched: number;
   archived: number;
+  autoReplied: number;
+  autoReplySkipped: number;
   errors: string[];
-  matchedDetails: Array<{ candidatureId: string; entreprise: string; from: string; subject: string }>;
+  matchedDetails: Array<{
+    candidatureId: string;
+    entreprise: string;
+    from: string;
+    subject: string;
+    autoReply?: { category: string; confidence: number; sent: boolean; error?: string };
+  }>;
 }
 
 export default function SettingsPage() {
@@ -61,6 +108,8 @@ export default function SettingsPage() {
   const [creating, setCreating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<SyncResult | null>(null);
+  const [prospecting, setProspecting] = useState(false);
+  const [lastProspect, setLastProspect] = useState<ProspectResult | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -107,9 +156,54 @@ export default function SettingsPage() {
     });
   };
 
-  const toggleGmail = (key: "inboxSyncEnabled" | "autoArchiveResponses") => {
+  const toggleGmail = (key: "inboxSyncEnabled" | "autoArchiveResponses" | "autoReplyEnabled") => {
     if (!settings) return;
     updateSettings({ gmail: { ...settings.gmail, [key]: !settings.gmail[key] } });
+  };
+
+  const setAutoReplyMinConfidence = (value: number) => {
+    if (!settings) return;
+    const clamped = Math.max(0, Math.min(1, value));
+    updateSettings({ gmail: { ...settings.gmail, autoReplyMinConfidence: clamped } });
+  };
+
+  const toggleAutoApply = () => {
+    if (!settings) return;
+    updateSettings({
+      automation: { ...settings.automation, autoApplyEnabled: !settings.automation.autoApplyEnabled },
+    });
+  };
+
+  const updateAutoApplyField = <K extends keyof AppSettings["automation"]>(key: K, value: AppSettings["automation"][K]) => {
+    if (!settings) return;
+    updateSettings({ automation: { ...settings.automation, [key]: value } });
+  };
+
+  const handleProspectNow = async (dryRun = true) => {
+    setProspecting(true);
+    try {
+      const res = await fetch(`/api/auto-apply/run${dryRun ? "?dryRun=1&max=5" : "?max=5"}`, {
+        method: "POST",
+        headers: { "x-api-key": apiKey },
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? "Échec");
+      }
+      const data: ProspectResult = await res.json();
+      setLastProspect(data);
+      load();
+      const total = data.applied + data.wouldApply;
+      if (total > 0) {
+        toast.success(`${data.applied} envoyée(s), ${data.wouldApply} dry-run${dryRun ? "" : ""}`);
+      } else {
+        toast.info(`Aucune candidature ${dryRun ? "(dry-run)" : ""} — ${data.skipped} skippée(s)`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setProspecting(false);
+    }
   };
 
   const handleSyncNow = async (dryRun = false) => {
@@ -235,6 +329,29 @@ export default function SettingsPage() {
             checked={settings.gmail.autoArchiveResponses}
             onChange={() => toggleGmail("autoArchiveResponses")}
           />
+          <Toggle
+            label="Auto-réponse IA (Agent Cockpit)"
+            description="Gemini classifie chaque réponse reçue et envoie automatiquement un message dans le thread. ⚠️ Action irréversible."
+            checked={settings.gmail.autoReplyEnabled}
+            onChange={() => toggleGmail("autoReplyEnabled")}
+          />
+          <div className="p-4 flex items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium">Seuil de confiance minimum</div>
+              <div className="text-xs text-[var(--text-tertiary)]">
+                En dessous, l&apos;IA ne répond pas (notif seulement). 0 = répond à tout, 1 = jamais.
+              </div>
+            </div>
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={settings.gmail.autoReplyMinConfidence}
+              onChange={(e) => setAutoReplyMinConfidence(parseFloat(e.target.value))}
+              className="w-20 px-2 py-1 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm text-right"
+            />
+          </div>
         </div>
 
         {/* Sync controls */}
@@ -271,12 +388,20 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2 font-semibold">
               <CheckCircle2 size={14} className="text-emerald-400" />
               {lastSync.scanned} non lus scannés · {lastSync.matched} matché{lastSync.matched > 1 ? "s" : ""} · {lastSync.archived} archivé{lastSync.archived > 1 ? "s" : ""}
+              {lastSync.autoReplied > 0 && <> · {lastSync.autoReplied} auto-réponse{lastSync.autoReplied > 1 ? "s" : ""}</>}
+              {lastSync.autoReplySkipped > 0 && <> · {lastSync.autoReplySkipped} skip (confiance trop faible)</>}
             </div>
             {lastSync.matchedDetails.length > 0 && (
               <ul className="text-xs space-y-1 pl-4 list-disc text-[var(--text-secondary)]">
                 {lastSync.matchedDetails.map((m, i) => (
                   <li key={i}>
                     <span className="font-semibold">{m.entreprise}</span> ← {m.from} : <em>{m.subject}</em>
+                    {m.autoReply && (
+                      <span className="ml-2 text-[var(--text-tertiary)]">
+                        [IA: {m.autoReply.category} · conf. {m.autoReply.confidence.toFixed(2)} ·{" "}
+                        {m.autoReply.sent ? <span className="text-emerald-400">envoyée</span> : m.autoReply.error ? <span className="text-[var(--accent-danger)]">échec</span> : <span>skip</span>}]
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -285,6 +410,151 @@ export default function SettingsPage() {
               <div className="text-xs text-[var(--accent-danger)]">
                 <AlertTriangle size={12} className="inline mr-1" />
                 {lastSync.errors.length} erreur(s) : {lastSync.errors.slice(0, 2).join(" · ")}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Prospection auto hebdo */}
+      <section className="space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Radar size={16} className="text-[var(--accent-orange)]" />
+          Prospection auto (hebdo)
+        </h2>
+        <p className="text-xs text-[var(--text-tertiary)]">
+          L&apos;IA scrape Google une fois par semaine, lit la page « à propos » de chaque entreprise, détecte une page recrutement si elle existe,
+          match les annonces avec ton profil, extrait l&apos;email RH (whitelist) et envoie la candidature.
+          <strong className="text-[var(--accent-warning)]"> Action irréversible.</strong>
+        </p>
+
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] divide-y divide-[var(--border-soft)]">
+          <Toggle
+            label="Activer la prospection auto"
+            description="Le cron VPS lance le pipeline une fois par semaine (lundi 9h). Désactivé = aucune candidature envoyée."
+            checked={settings.automation.autoApplyEnabled}
+            onChange={toggleAutoApply}
+          />
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-[var(--text-tertiary)] block mb-1">Mots-clés Google</label>
+              <input
+                type="text"
+                value={settings.automation.weeklyProspectKeywords}
+                onChange={(e) => updateAutoApplyField("weeklyProspectKeywords", e.target.value)}
+                className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+                placeholder="entreprise tech Strasbourg"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[var(--text-tertiary)] block mb-1">Localisation</label>
+              <input
+                type="text"
+                value={settings.automation.weeklyProspectLocation}
+                onChange={(e) => updateAutoApplyField("weeklyProspectLocation", e.target.value)}
+                className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+                placeholder="Strasbourg"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[var(--text-tertiary)] block mb-1">Max envois / jour</label>
+              <input
+                type="number"
+                min={0}
+                max={50}
+                value={settings.automation.autoApplyMaxPerDay}
+                onChange={(e) => updateAutoApplyField("autoApplyMaxPerDay", parseInt(e.target.value, 10) || 0)}
+                className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[var(--text-tertiary)] block mb-1">Score qualité minimum (0–1)</label>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={settings.automation.autoApplyMinCompanyScore}
+                onChange={(e) => updateAutoApplyField("autoApplyMinCompanyScore", parseFloat(e.target.value))}
+                className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => handleProspectNow(true)}
+            disabled={prospecting}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-[var(--border-soft)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50"
+          >
+            {prospecting ? <Loader2 size={14} className="animate-spin" /> : <Radar size={14} />}
+            Test dry-run (5 entreprises)
+          </button>
+          <button
+            onClick={() => {
+              if (!confirm("⚠️ Lancer un vrai envoi de candidatures auto ? Action irréversible.")) return;
+              handleProspectNow(false);
+            }}
+            disabled={prospecting || !settings.automation.autoApplyEnabled}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[var(--accent-warning)] text-[var(--bg-primary)] text-sm font-semibold disabled:opacity-50"
+          >
+            Lancer maintenant (vrai envoi)
+          </button>
+          <span className="text-xs text-[var(--text-tertiary)]">
+            {settings.automation.lastProspectRunAt
+              ? `Dernier run : ${new Date(settings.automation.lastProspectRunAt).toLocaleString("fr-FR", {
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })} — ${settings.automation.lastProspectSummary}`
+              : "Jamais lancé"}
+          </span>
+        </div>
+
+        {lastProspect && (
+          <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 text-sm space-y-2">
+            <div className="flex items-center gap-2 font-semibold">
+              <CheckCircle2 size={14} className="text-emerald-400" />
+              {lastProspect.scanned} scannée(s) · {lastProspect.applied} envoyée(s)
+              {lastProspect.wouldApply > 0 && <> · {lastProspect.wouldApply} would-apply (dry-run)</>}
+              · {lastProspect.skipped} skip
+              {lastProspect.dryRun && <span className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--bg-secondary)] text-[var(--text-tertiary)]">DRY-RUN</span>}
+            </div>
+            {lastProspect.decisions.length > 0 && (
+              <ul className="text-xs space-y-2">
+                {lastProspect.decisions.map((d, i) => (
+                  <li key={i} className="border-l-2 pl-2" style={{ borderColor: d.decision === "applied" ? "var(--accent-orange)" : d.decision === "would_apply" ? "var(--accent-info)" : "var(--border-soft)" }}>
+                    <div className="font-semibold text-[var(--text-primary)]">
+                      {d.entreprise || d.domain}
+                      <span className="ml-2 text-[var(--text-tertiary)] font-normal">[{d.decision}]</span>
+                    </div>
+                    {d.companyScore !== undefined && (
+                      <div className="text-[var(--text-secondary)]">
+                        Score qualité : {d.companyScore.toFixed(2)} — {d.companyReason}
+                      </div>
+                    )}
+                    {d.bestOffer && (
+                      <div className="text-[var(--text-secondary)]">
+                        Offre matchée : <em>{d.bestOffer.title}</em> ({d.bestOffer.score.toFixed(2)}, {d.bestOffer.jobType ?? "?"}) — {d.bestOffer.reason}
+                      </div>
+                    )}
+                    {d.email && (
+                      <div className="text-[var(--text-secondary)]">
+                        Email choisi : <code className="text-[var(--accent-info)]">{d.email.email}</code> (score {d.email.score.toFixed(2)}, {d.email.reasons.join(", ")})
+                      </div>
+                    )}
+                    {d.skipReason && <div className="text-[var(--text-tertiary)]">Skip : {d.skipReason}</div>}
+                    {d.error && <div className="text-[var(--accent-danger)]">Erreur : {d.error}</div>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {lastProspect.errors.length > 0 && (
+              <div className="text-xs text-[var(--accent-danger)]">
+                <AlertTriangle size={12} className="inline mr-1" />
+                {lastProspect.errors.length} erreur(s) : {lastProspect.errors.slice(0, 2).join(" · ")}
               </div>
             )}
           </div>
@@ -357,11 +627,11 @@ export default function SettingsPage() {
         <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 space-y-2 text-sm">
           <ConfigRow name="API_SECRET" detail="Auth dashboard" />
           <ConfigRow name="ANTHROPIC_API_KEY" detail="Génération de lettres (Claude)" />
-          <ConfigRow name="GROQ_API_KEY" detail="Chat dashboard + amélioration de lettres (Groq Cloud)" />
+          <ConfigRow name="GEMINI_API_KEY" detail="Chat dashboard + amélioration de lettres (Google AI Studio)" />
           <ConfigRow name="MONGO_URI" detail="Base MongoDB" />
           <ConfigRow name="GMAIL_USER + GMAIL_APP_PASSWORD" detail="Envoi emails + sync IMAP réponses" />
           <ConfigRow name="CRON_SECRET" detail="Schedulers (relances + inbox)" />
-          <ConfigRow name="CHAT_MODEL" detail="Override modèle Groq (défaut llama-3.3-70b-versatile)" />
+          <ConfigRow name="CHAT_MODEL" detail="Override modèle Gemini (défaut gemini-2.5-flash)" />
         </div>
         <p className="text-xs text-[var(--text-tertiary)]">
           Crontab à configurer côté VPS pour que les schedulers tournent (cf. routes /api/cron/run-relances et /api/cron/check-inbox).

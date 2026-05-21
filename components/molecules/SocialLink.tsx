@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { Card, Icon, Text } from "@/components/atoms";
+import { Card, Icon, Text, type IconName } from "@/components/atoms";
 
 interface SocialLinkProps {
   name: string;
@@ -28,7 +28,7 @@ export function SocialLink({
       >
         {/* Icon */}
         <div className="text-4xl mb-3 group-hover:scale-125 group-hover:rotate-6 transition-transform duration-300">
-          <Icon name={iconName as any} size={32} className="text-[var(--accent-orange)]" />
+          <Icon name={iconName as IconName} size={32} className="text-[var(--accent-orange)]" />
         </div>
 
         {/* Name */}

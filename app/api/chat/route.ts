@@ -6,8 +6,8 @@ import { toolsForOpenAI, getTool } from "@/lib/ai/tools";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = process.env.CHAT_MODEL ?? "llama-3.3-70b-versatile";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const MODEL = process.env.CHAT_MODEL ?? "gemini-2.5-flash";
 
 interface ToolCallSnapshot {
   id: string;
@@ -39,10 +39,10 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "GROQ_API_KEY (Groq Cloud) non configuré côté serveur" }),
+      JSON.stringify({ error: "GEMINI_API_KEY (Google AI Studio) non configuré côté serveur" }),
       { status: 500 }
     );
   }
@@ -106,8 +106,8 @@ Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question gé
     }
   }
 
-  // Sliding window: keep system prompt + last 8 messages to stay within TPM limits.
-  // Groq free tier = 12k TPM; tool results can be large (50+ items).
+  // Sliding window: keep system prompt + last 8 messages to keep payload reasonable.
+  // Tool results can be large (50+ items) and Gemini's 1M-token window is overkill.
   const [systemMsg, ...rest] = openaiMessages;
   const windowed: OpenAIMessage[] = [systemMsg, ...rest.slice(-8)];
 
@@ -128,7 +128,7 @@ Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question gé
       };
 
       try {
-        const upstream = await fetch(GROQ_URL, {
+        const upstream = await fetch(GEMINI_URL, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -147,7 +147,7 @@ Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question gé
 
         if (!upstream.ok || !upstream.body) {
           const errText = await upstream.text();
-          send("error", { error: `Groq API ${upstream.status}: ${errText.slice(0, 300)}` });
+          send("error", { error: `Gemini API ${upstream.status}: ${errText.slice(0, 300)}` });
           controller.close();
           return;
         }
@@ -156,11 +156,11 @@ Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question gé
         const decoder = new TextDecoder();
         let buffer = "";
 
-        // Tool call accumulator (Groq streams tool_calls progressively)
+        // Tool call accumulator (Gemini streams tool_calls progressively, OpenAI-compatible format)
         const toolCallsAcc: Map<number, { id: string; name: string; argsBuffer: string }> = new Map();
         let finishReason: string | null = null;
 
-        // eslint-disable-next-line no-constant-condition
+         
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;

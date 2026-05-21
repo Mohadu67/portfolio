@@ -253,7 +253,7 @@ export function ScrapedCompanyCard({
             className="flex items-center gap-2 text-sm font-medium text-[var(--accent-blue)] hover:underline"
           >
             {showAbout ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            Page "À propos" ({data.aboutText.length} caractères)
+            Page «&nbsp;À propos&nbsp;» ({data.aboutText.length} caractères)
           </button>
           {showAbout && (
             <motion.div

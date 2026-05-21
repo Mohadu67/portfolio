@@ -157,7 +157,7 @@ export function EducationSection({ education, title = "Formation" }: EducationSe
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-1 h-6 bg-gradient-to-b from-[var(--accent-orange)] to-[var(--accent-blue)] rounded-full" />
                       <Text as="h4" variant="h4" className="text-white">
-                        Ce que j'ai appris
+                        Ce que j&apos;ai appris
                       </Text>
                     </div>
                     <Text color="secondary" className="text-base leading-relaxed">

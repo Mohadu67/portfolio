@@ -18,7 +18,7 @@ export const slideUpContainer: Variants = {
       staggerChildren: 0.1,
       delayChildren: 0.2,
     },
-  } as any,
+  },
 };
 
 export const slideUpItem: Variants = {
@@ -47,7 +47,7 @@ export const staggerContainer: Variants = {
       staggerChildren: 0.12,
       delayChildren: 0.1,
     },
-  } as any,
+  },
 };
 
 export const staggerItem: Variants = {

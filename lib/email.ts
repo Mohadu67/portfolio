@@ -37,6 +37,80 @@ export async function sendEmail(
   );
 }
 
+export interface ReplyInThreadInput {
+  to: string;
+  subject: string;
+  bodyText: string;
+  inReplyToMessageId?: string;
+  references?: string;
+}
+
+export interface ReplyInThreadResult {
+  messageId?: string;
+}
+
+// RFC 2822 : Message-ID must be enclosed in angle brackets <...>.
+// IMAP envelopes parfois retournent l'ID brut (sans chevrons) — Nodemailer attend la forme avec chevrons,
+// sinon Gmail ne thread plus et certains MTA marquent la réponse comme orpheline.
+function ensureBrackets(id: string): string {
+  const trimmed = id.trim();
+  if (!trimmed) return "";
+  const inner = trimmed.replace(/^<+/, "").replace(/>+$/, "");
+  return `<${inner}>`;
+}
+
+function normalizeReferences(references: string | undefined): string {
+  if (!references) return "";
+  return references
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(ensureBrackets)
+    .join(" ");
+}
+
+// Send a reply that keeps Gmail threading by setting In-Reply-To + References headers.
+export async function replyInThread(input: ReplyInThreadInput): Promise<ReplyInThreadResult> {
+  const transporter = getTransporter();
+  const subject = input.subject.toLowerCase().startsWith("re:")
+    ? input.subject
+    : `Re: ${input.subject}`;
+
+  const inReplyTo = input.inReplyToMessageId ? ensureBrackets(input.inReplyToMessageId) : undefined;
+
+  // References = original References (normalisée) + the message we reply to
+  const refsParts: string[] = [];
+  const normalizedExisting = normalizeReferences(input.references);
+  if (normalizedExisting) refsParts.push(normalizedExisting);
+  if (inReplyTo) refsParts.push(inReplyTo);
+  const referencesHeader = refsParts.join(" ").trim();
+
+  // RFC 2822 : header line max 998 chars. Si References est très long, on garde le 1er + les 5 derniers tokens
+  // (pratique courante pour préserver la racine de thread + le contexte récent).
+  const tokens = referencesHeader.split(/\s+/).filter(Boolean);
+  const trimmedRefs = tokens.length > 6 ? [tokens[0], ...tokens.slice(-5)].join(" ") : tokens.join(" ");
+
+  const html = input.bodyText
+    .split("\n")
+    .map((line) => (line.trim() ? `<p style="margin:0 0 12px 0">${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>` : ""))
+    .join("");
+
+  const info = await withRetry(
+    () =>
+      transporter.sendMail({
+        from: process.env.GMAIL_USER,
+        to: input.to,
+        subject,
+        text: input.bodyText,
+        html: `<div style="font-family: Arial, sans-serif; max-width: 800px;">${html}</div>`,
+        inReplyTo,
+        references: trimmedRefs || undefined,
+      }),
+    { retries: 2, baseDelayMs: 1000 }
+  );
+
+  return { messageId: info?.messageId };
+}
+
 export async function sendCandidature(
   entreprise: string,
   poste: string,

@@ -15,6 +15,9 @@ export function useAuth() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const k = sessionStorage.getItem(STORAGE_KEY);
+    // Hydration-safe read of sessionStorage — server can't access it, so we set state
+    // exactly once on mount to move from "loading" to a real value. No cascading render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState(k ? { status: "authenticated", apiKey: k } : { status: "anonymous", apiKey: null });
   }, []);
 

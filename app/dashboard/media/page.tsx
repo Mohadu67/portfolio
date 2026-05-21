@@ -103,7 +103,7 @@ export default function MediaPage() {
     }
   };
 
-  const useAsPhoto = async (id: string) => {
+  const setAsPhoto = async (id: string) => {
     try {
       const res = await fetch(`/api/media/${id}/use-as-photo`, {
         method: "POST",
@@ -226,7 +226,7 @@ export default function MediaPage() {
                     </button>
                     {!p.isActive && (
                       <button
-                        onClick={() => useAsPhoto(p._id)}
+                        onClick={() => setAsPhoto(p._id)}
                         className="p-2 rounded-full bg-[var(--accent-orange)] hover:opacity-90 text-[var(--bg-primary)]"
                         title="Définir comme photo de profil"
                       >
@@ -268,7 +268,7 @@ export default function MediaPage() {
         </div>
         {cvs.length === 0 ? (
           <div className="rounded-lg border border-dashed border-[var(--border-soft)] p-6 text-center">
-            <p className="text-sm text-[var(--text-tertiary)]">Aucun CV. Ajoute-en depuis "Gérer en détail".</p>
+            <p className="text-sm text-[var(--text-tertiary)]">Aucun CV. Ajoute-en depuis «&nbsp;Gérer en détail&nbsp;».</p>
           </div>
         ) : (
           <div className="space-y-2">

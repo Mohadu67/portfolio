@@ -97,7 +97,7 @@ export async function generateLettrePDF(
   y += 9;
 
   // Clean letter content — remove "Madame, Monsieur," and signature if AI included them
-  let cleanedLettre = lettre
+  const cleanedLettre = lettre
     .replace(/^\s*Madame,?\s*Monsieur,?\s*/i, "")
     .replace(/\[Votre\s+nom\]/gi, "")
     .replace(/\s*Bien\s+cordialement,?\s*/i, "")

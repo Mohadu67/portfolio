@@ -38,9 +38,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = await res.json();
+    const data = await res.json() as {
+      organic_results?: Array<{ title?: string; link?: string; snippet?: string; displayed_link?: string }>;
+    };
 
-    const results = (data.organic_results || []).map((item: any) => ({
+    const results = (data.organic_results || []).map((item) => ({
       name: item.title || "",
       url: item.link || "",
       snippet: item.snippet || "",

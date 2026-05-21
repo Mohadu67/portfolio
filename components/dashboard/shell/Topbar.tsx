@@ -37,6 +37,8 @@ export function Topbar({ onOpenChat, onOpenMobileNav, actions }: TopbarProps) {
 
   const [mac, setMac] = useState(false);
   useEffect(() => {
+    // Hydration-safe browser-only detection on mount, one-shot.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMac(/Mac/i.test(navigator.userAgent));
   }, []);
 

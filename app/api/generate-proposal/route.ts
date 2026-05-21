@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateLetterProposal } from "@/lib/grok";
+import { generateLetterProposal } from "@/lib/gemini";
 import { verifyAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {

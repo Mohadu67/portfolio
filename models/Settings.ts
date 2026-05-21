@@ -10,12 +10,21 @@ export interface ISettings {
   gmail: {
     inboxSyncEnabled: boolean;
     autoArchiveResponses: boolean;
+    autoReplyEnabled: boolean;
+    autoReplyMinConfidence: number;
     lastSyncAt?: Date | null;
     lastSyncSummary?: string | null;
   };
   automation: {
     autoRelanceJ7Enabled: boolean;
     autoRelanceDays: number;
+    autoApplyEnabled: boolean;
+    autoApplyMaxPerDay: number;
+    autoApplyMinCompanyScore: number;
+    weeklyProspectKeywords: string;
+    weeklyProspectLocation: string;
+    lastProspectRunAt?: Date | null;
+    lastProspectSummary?: string | null;
   };
   search: {
     defaultLocation: string;
@@ -35,12 +44,21 @@ const settingsSchema = new Schema<ISettings>(
     gmail: {
       inboxSyncEnabled: { type: Boolean, default: false },
       autoArchiveResponses: { type: Boolean, default: false },
+      autoReplyEnabled: { type: Boolean, default: false },
+      autoReplyMinConfidence: { type: Number, default: 0.7 },
       lastSyncAt: { type: Date, default: null },
       lastSyncSummary: { type: String, default: null },
     },
     automation: {
       autoRelanceJ7Enabled: { type: Boolean, default: true },
       autoRelanceDays: { type: Number, default: 7 },
+      autoApplyEnabled: { type: Boolean, default: false },
+      autoApplyMaxPerDay: { type: Number, default: 5 },
+      autoApplyMinCompanyScore: { type: Number, default: 0.6 },
+      weeklyProspectKeywords: { type: String, default: "entreprise tech Strasbourg" },
+      weeklyProspectLocation: { type: String, default: "Strasbourg" },
+      lastProspectRunAt: { type: Date, default: null },
+      lastProspectSummary: { type: String, default: null },
     },
     search: {
       defaultLocation: { type: String, default: "" },

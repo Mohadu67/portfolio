@@ -1,4 +1,5 @@
 # Production Compose - Pull images from GHCR only (no build)
+# Usage VPS : docker compose -f docker-compose.prod.yml up -d
 
 services:
   mongodb:
@@ -9,8 +10,8 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS:-admin}
     volumes:
-      - mongodb_data:/data/db
-      - mongodb_config:/data/configdb
+      - mongodb_portfolio_data:/data/db
+      - mongodb_portfolio_config:/data/configdb
     networks:
       - portfolio-network
     healthcheck:
@@ -28,38 +29,22 @@ services:
     ports:
       - "127.0.0.1:3002:3000"
     environment:
-      # MongoDB
       MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASS:-admin}@mongodb:27017/stage_agent?authSource=admin
-
-      # Auth
       API_SECRET: ${API_SECRET:?API secret required}
-
-      # AI
-      GROQ_API_KEY: ${GROQ_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-
-      # Gmail SMTP
       GMAIL_USER: ${GMAIL_USER}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
-
-      # RapidAPI (JSearch + Adzuna)
       RAPIDAPI_KEY: ${RAPIDAPI_KEY}
-
-      # France Travail OAuth2
       FRANCE_TRAVAIL_CLIENT_ID: ${FRANCE_TRAVAIL_CLIENT_ID}
       FRANCE_TRAVAIL_CLIENT_SECRET: ${FRANCE_TRAVAIL_CLIENT_SECRET}
-
-      # SerpAPI
       SERPAPI_KEY: ${SERPAPI_KEY}
-
-      # Profil
       PROFIL_NOM: ${PROFIL_NOM:-Mohammed Hamiani}
       PROFIL_FORMATION: ${PROFIL_FORMATION:-Concepteur Développeur Fullstack}
       PROFIL_COMPETENCES: ${PROFIL_COMPETENCES}
       PROFIL_EXPERIENCE: ${PROFIL_EXPERIENCE}
       PROFIL_RECHERCHE: ${PROFIL_RECHERCHE}
       PROFIL_DISPO: ${PROFIL_DISPO}
-
       NODE_ENV: production
       PORT: 3000
     depends_on:
@@ -82,7 +67,9 @@ networks:
     driver: bridge
 
 volumes:
-  mongodb_data:
-    driver: local
-  mongodb_config:
-    driver: local
+  mongodb_portfolio_data:
+    external: true
+    name: portfolio_mongodb_portfolio_data
+  mongodb_portfolio_config:
+    external: true
+    name: portfolio_mongodb_portfolio_config

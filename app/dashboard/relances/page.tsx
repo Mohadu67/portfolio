@@ -52,6 +52,10 @@ export default function RelancesPage() {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<Filter>("programmée");
   const [view, setView] = useState<View>("timeline");
+  // Snapshot du temps au render — déterministe et partagé par toutes les RelanceCard.
+  // Le re-render naturel (load des relances, changement de filtre) suffit pour rafraîchir.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
 
   // Composer state
   const [composerOpen, setComposerOpen] = useState(false);
@@ -268,6 +272,7 @@ export default function RelancesPage() {
             <RelanceCard
               key={`${String(r.candidature._id)}-${r.index}`}
               relance={r}
+              now={now}
               onCancel={() => handleCancel(String(r.candidature._id), r.index)}
               onDuplicate={() => handleDuplicate(String(r.candidature._id), r.index)}
               onSendNow={() => handleSendNow(r)}
@@ -299,6 +304,7 @@ export default function RelancesPage() {
                   <RelanceCard
                     key={r.index}
                     relance={{ candidature, log: r.log, index: r.index }}
+                    now={now}
                     onCancel={() => handleCancel(String(candidature._id), r.index)}
                     onDuplicate={() => handleDuplicate(String(candidature._id), r.index)}
                     onSendNow={() =>
@@ -329,15 +335,16 @@ export default function RelancesPage() {
 
 interface RelanceCardProps {
   relance: FlatRelance;
+  now: number;
   onCancel: () => void;
   onDuplicate: () => void;
   onSendNow: () => void;
   onEdit: () => void;
 }
 
-function RelanceCard({ relance: r, onCancel, onDuplicate, onSendNow, onEdit }: RelanceCardProps) {
+function RelanceCard({ relance: r, now, onCancel, onDuplicate, onSendNow, onEdit }: RelanceCardProps) {
   const meta = statusMeta(r.log.status);
-  const due = r.log.status === "programmée" && new Date(r.log.scheduledFor).getTime() <= Date.now();
+  const due = r.log.status === "programmée" && new Date(r.log.scheduledFor).getTime() <= now;
 
   return (
     <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-3.5 hover:border-[var(--accent-orange)]/40 transition-colors">

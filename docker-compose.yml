@@ -1,18 +1,19 @@
-# Production Compose - Pull images from GHCR only (no build)
+# Local Compose — Mongo + App buildée localement (arm64 / amd64 natif).
+# Usage : docker compose up --build
 
 services:
   mongodb:
     image: mongo:7
-    container_name: portfolio-mongodb
+    container_name: portfolio-mongodb-dev
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:27018:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS:-admin}
     volumes:
-      - mongodb_portfolio_data:/data/db
-      - mongodb_portfolio_config:/data/configdb
-    networks:
-      - portfolio-network
+      - mongodb_dev_data:/data/db
+      - mongodb_dev_config:/data/configdb
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -21,16 +22,17 @@ services:
       start_period: 10s
 
   app:
-    image: ghcr.io/mohadu67/curriculum-app:latest
-    pull_policy: always
-    container_name: portfolio
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portfolio-dev
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3002:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASS:-admin}@mongodb:27017/stage_agent?authSource=admin
-      API_SECRET: ${API_SECRET:?API secret required}
-      GROQ_API_KEY: ${GROQ_API_KEY}
+      API_SECRET: ${API_SECRET:?API_SECRET requis dans .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GMAIL_USER: ${GMAIL_USER}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
@@ -49,26 +51,10 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
-    networks:
-      - portfolio-network
     volumes:
       - ./candidatureModel:/app/candidatureModel
       - ./logs:/app/logs
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-networks:
-  portfolio-network:
-    driver: bridge
 
 volumes:
-  mongodb_portfolio_data:
-    external: true
-    name: portfolio_mongodb_portfolio_data
-  mongodb_portfolio_config:
-    external: true
-    name: portfolio_mongodb_portfolio_config
+  mongodb_dev_data:
+  mongodb_dev_config:

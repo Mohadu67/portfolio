@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import gsap from "gsap";
 import { Clock, Video, Sparkles, CalendarCheck, ArrowRight } from "lucide-react";
-import { Container, Card, Text, Icon } from "@/components/atoms";
+import { Container, Card, Text, Icon, type IconName } from "@/components/atoms";
 import { staggerContainer, staggerItem } from "@/lib/animations";
 import type { CVContactContent } from "@/models/CVSection";
 
@@ -32,6 +32,8 @@ export function ContactSection({ contact, title = "Me contacter" }: ContactSecti
       hide_gdpr_banner: "1",
       hide_landing_page_details: "0",
     });
+    // Browser-only embed URL builder (uses window.location). One-shot per contact.calendly change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEmbedUrl(`${contact.calendly}${sep}${params.toString()}`);
   }, [contact.calendly]);
 
@@ -181,7 +183,7 @@ export function ContactSection({ contact, title = "Me contacter" }: ContactSecti
                     whileHover={{ scale: 1.2, rotate: 6 }}
                     transition={{ type: "spring", stiffness: 300 }}
                   >
-                    <Icon name={method.icon as any} size={32} className="text-[var(--accent-orange)] mx-auto" />
+                    <Icon name={method.icon as IconName} size={32} className="text-[var(--accent-orange)] mx-auto" />
                   </motion.div>
                   <Text as="h4" variant="h4" className="mb-2">
                     {method.label}
@@ -230,8 +232,8 @@ export function ContactSection({ contact, title = "Me contacter" }: ContactSecti
               </h3>
 
               <p className="gsap-pitch-line text-base md:text-lg text-[var(--text-secondary)] max-w-xl mb-10 leading-relaxed">
-                Réserve un créneau en visio, on discute de ton projet, d'une opportunité de stage
-                ou d'alternance — ou simplement pour faire connaissance.
+                Réserve un créneau en visio, on discute de ton projet, d&apos;une opportunité de stage
+                ou d&apos;alternance — ou simplement pour faire connaissance.
               </p>
 
               <ul className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl w-full mb-10">

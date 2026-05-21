@@ -304,7 +304,7 @@ export function GenerateLetterModal({
                     </motion.button>
                   </div>
                   <p className="text-xs text-[var(--text-secondary)] mb-3">
-                    Écris ta lettre comme tu le souhaites, ou clique sur "Générer une proposition" pour avoir une base. L'IA l'améliorera au niveau du style et de la structure.
+                    Écris ta lettre comme tu le souhaites, ou clique sur «&nbsp;Générer une proposition&nbsp;» pour avoir une base. L&apos;IA l&apos;améliorera au niveau du style et de la structure.
                   </p>
                   <motion.textarea
                     value={letterText}

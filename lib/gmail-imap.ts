@@ -1,9 +1,11 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { connectDB } from "./mongodb";
-import { Candidature, ICandidature, IEmailReceived } from "@/models/Candidature";
+import { Candidature, ICandidature, IEmailReceived, IAutoReply } from "@/models/Candidature";
 import { getSettingsDoc } from "@/models/Settings";
 import { sendNotification } from "./notifications";
+import { classifyAndReply } from "./gemini";
+import { replyInThread } from "./email";
 
 const ARCHIVE_LABEL = "Cockpit/Réponses candidatures";
 
@@ -14,7 +16,9 @@ interface MatchedEmail {
   fromName?: string;
   subject: string;
   snippet: string;
+  bodyText: string;
   messageId?: string;
+  references?: string;
 }
 
 function normalizeEmail(s: string | undefined | null): string {
@@ -31,12 +35,20 @@ interface SyncResult {
   scanned: number;
   matched: number;
   archived: number;
+  autoReplied: number;
+  autoReplySkipped: number;
   errors: string[];
   matchedDetails: Array<{
     candidatureId: string;
     entreprise: string;
     from: string;
     subject: string;
+    autoReply?: {
+      category: string;
+      confidence: number;
+      sent: boolean;
+      error?: string;
+    };
   }>;
 }
 
@@ -46,6 +58,8 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
     scanned: 0,
     matched: 0,
     archived: 0,
+    autoReplied: 0,
+    autoReplySkipped: 0,
     errors: [],
     matchedDetails: [],
   };
@@ -60,6 +74,10 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
   await connectDB();
   const settingsDoc = await getSettingsDoc();
   const autoArchive = settingsDoc.gmail.autoArchiveResponses && !opts.dryRun;
+  const autoReplyEnabled = !!settingsDoc.gmail.autoReplyEnabled;
+  const autoReplyMinConfidence = typeof settingsDoc.gmail.autoReplyMinConfidence === "number"
+    ? settingsDoc.gmail.autoReplyMinConfidence
+    : 0.7;
 
   // Build candidate emails map (lowercase email -> candidature)
   const candidatures = await Candidature.find({
@@ -103,6 +121,9 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
       const uids: number[] = Array.isArray(searchResult) ? (searchResult as number[]) : [];
       result.scanned = uids.length;
 
+      const selfEmail = normalizeEmail(process.env.GMAIL_USER ?? "");
+      const BOUNCE_PREFIXES = ["mailer-daemon@", "postmaster@", "noreply@", "no-reply@", "bounces@"];
+
       for (const uid of uids) {
         try {
           const msg = await client.fetchOne(String(uid), {
@@ -118,28 +139,54 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
 
           const candidature = emailToCandidature.get(fromEmail)!;
 
-          // Parse message for snippet
+          // Parse message for snippet + full body (needed for auto-reply classification)
           let snippet = "";
+          let bodyText = "";
+          let references: string | undefined;
+          let parsedHeaders: Map<string, unknown> | null = null;
           if (msg.source) {
             try {
               const parsed = await simpleParser(msg.source as Buffer);
               snippet = snippetFromBody(parsed.text);
+              // Keep up to 8k chars — enough context for classification, bounded for DB size
+              bodyText = (parsed.text ?? "").slice(0, 8000);
+              const ref = parsed.references;
+              if (ref) references = Array.isArray(ref) ? ref.join(" ") : ref;
+              parsedHeaders = parsed.headers as unknown as Map<string, unknown>;
             } catch {
               // ignore parse error
             }
           }
 
-          // Skip if already in emailsReceived (by messageId)
-          const messageId = msg.envelope.messageId ?? undefined;
-          const candDoc = await Candidature.findById(candidature._id);
-          if (!candDoc) continue;
-          if (
-            messageId &&
-            (candDoc.emailsReceived ?? []).some((e: IEmailReceived) => e.messageId === messageId)
-          ) {
-            continue;
+          // ---------- Safeguards : éviter boucles infinies et auto-replies sur bounces / mailing lists ----------
+          // 1. Ne JAMAIS répondre à un mail qu'on s'est envoyé à soi-même (Gmail rapatrie parfois les sent en INBOX)
+          if (selfEmail && fromEmail === selfEmail) continue;
+          // 2. Skip les bounces / no-reply / postmaster
+          if (BOUNCE_PREFIXES.some((p) => fromEmail.startsWith(p))) continue;
+          // 3. Skip les headers d'auto-replies / mailing lists / bulk
+          if (parsedHeaders) {
+            const getHeader = (name: string): string => {
+              const raw = parsedHeaders!.get(name.toLowerCase());
+              if (!raw) return "";
+              if (typeof raw === "string") return raw.toLowerCase();
+              if (Array.isArray(raw)) return raw.map(String).join(" ").toLowerCase();
+              return String(raw).toLowerCase();
+            };
+            const autoSubmitted = getHeader("auto-submitted");
+            const precedence = getHeader("precedence");
+            const listId = getHeader("list-id");
+            const xAutoreply = getHeader("x-autoreply");
+            if (autoSubmitted && autoSubmitted.includes("auto-replied")) continue;
+            if (precedence && (precedence.includes("bulk") || precedence.includes("list") || precedence.includes("auto_reply"))) continue;
+            if (listId) continue;
+            if (xAutoreply) continue;
           }
 
+          const messageId = msg.envelope.messageId ?? undefined;
+
+          // ---------- Idempotence atomique : updateOne avec condition $ne sur messageId ----------
+          // Évite la race condition cron + bouton manuel qui sinon enverraient 2 auto-replies.
+          // findOneAndUpdate retourne le doc post-update si modifiedCount === 1, sinon on skip.
           const rawDate = msg.internalDate ?? msg.envelope.date ?? new Date();
           const matched: MatchedEmail = {
             uid,
@@ -148,40 +195,198 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
             fromName: fromAddr?.name,
             subject: msg.envelope.subject ?? "(sans sujet)",
             snippet,
+            bodyText,
             messageId,
+            references,
           };
 
-          // Add to candidature
-          candDoc.emailsReceived = [
-            ...(candDoc.emailsReceived ?? []),
-            {
+          let candDoc;
+          if (opts.dryRun) {
+            // En dry-run on lit le doc sans muter
+            candDoc = await Candidature.findById(candidature._id);
+            if (!candDoc) continue;
+            if (
+              messageId &&
+              (candDoc.emailsReceived ?? []).some((e: IEmailReceived) => e.messageId === messageId)
+            ) {
+              continue;
+            }
+          } else {
+            const newEmailEntry = {
               date: matched.date,
               from: matched.from,
               fromName: matched.fromName,
               subject: matched.subject,
               snippet: matched.snippet,
+              bodyText: matched.bodyText,
               messageId: matched.messageId,
+              references: matched.references,
               uid: matched.uid,
               archived: autoArchive,
-            },
-          ];
-
-          // Update status if currently postulée
-          if (candDoc.statut === "postulée") {
-            candDoc.statut = "réponse reçue";
-          }
-
-          if (!opts.dryRun) {
-            await candDoc.save();
+            };
+            // Condition d'idempotence : messageId absent du tableau (ou messageId vide → toujours push)
+            const filter = messageId
+              ? { _id: candidature._id, "emailsReceived.messageId": { $ne: messageId } }
+              : { _id: candidature._id };
+            candDoc = await Candidature.findOneAndUpdate(
+              filter,
+              {
+                $push: { emailsReceived: newEmailEntry },
+                $set: {
+                  ...(matched.date ? { updated_at: new Date() } : {}),
+                },
+              },
+              { new: true }
+            );
+            if (!candDoc) {
+              // Un autre process a déjà traité ce messageId (race condition évitée), skip silencieusement
+              continue;
+            }
+            // Update status if currently postulée (séparé pour rester atomique sur le push)
+            if (candDoc.statut === "postulée") {
+              candDoc.statut = "réponse reçue";
+              await candDoc.save();
+            }
           }
 
           result.matched++;
-          result.matchedDetails.push({
+          const detail: SyncResult["matchedDetails"][number] = {
             candidatureId: String(candDoc._id),
             entreprise: candDoc.entreprise,
             from: matched.from,
             subject: matched.subject,
-          });
+          };
+          result.matchedDetails.push(detail);
+
+          // ---------- Auto-reply ----------
+          // Garde dure : sans messageId on ne peut pas garantir l'idempotence atomique (race condition
+          // entre 2 syncs concurrents → double envoi possible) ni tracer proprement dans autoReplies.
+          // On préfère ne pas répondre du tout plutôt qu'envoyer 2x à un RH.
+          if (autoReplyEnabled && matched.bodyText.trim().length > 0 && matched.messageId) {
+            try {
+              // Idempotence pré-classify : si une autoReply existe déjà pour ce inboundMessageId, skip
+              // (couvre le cas où l'idempotence emailsReceived a foiré mais autoReplies est en place)
+              if (!opts.dryRun) {
+                const already = (candDoc.autoReplies ?? []).some(
+                  (a: IAutoReply) => a.inboundMessageId === matched.messageId
+                );
+                if (already) {
+                  // Skip auto-reply silencieusement : déjà traité par un run concurrent
+                  continue;
+                }
+              }
+
+              const cls = await classifyAndReply({
+                entreprise: candDoc.entreprise,
+                poste: candDoc.poste,
+                candidatureType: candDoc.type,
+                fromName: matched.fromName,
+                subject: matched.subject,
+                bodyText: matched.bodyText,
+              });
+
+              const shouldSend = cls.confidence >= autoReplyMinConfidence;
+              let sentMessageId: string | undefined;
+              let sendError: string | undefined;
+
+              if (shouldSend && !opts.dryRun) {
+                // Idempotence atomique sur le push d'autoReply : on push UNIQUEMENT si aucune autoReply
+                // n'existe encore pour cet inboundMessageId. modifiedCount === 1 → on est propriétaire de l'envoi.
+                if (matched.messageId) {
+                  const claim = await Candidature.updateOne(
+                    {
+                      _id: candDoc._id,
+                      "autoReplies.inboundMessageId": { $ne: matched.messageId },
+                    },
+                    {
+                      $push: {
+                        autoReplies: {
+                          date: new Date(),
+                          inboundMessageId: matched.messageId,
+                          category: cls.category,
+                          confidence: cls.confidence,
+                          reply: cls.reply,
+                          sent: false,
+                          sentMessageId: undefined,
+                          error: null,
+                          model: cls.model,
+                          dryRun: false,
+                        },
+                      },
+                    }
+                  );
+                  if (claim.modifiedCount !== 1) {
+                    // Une autre exécution a déjà claim cet inbound, on skip pour éviter le double envoi.
+                    continue;
+                  }
+                }
+
+                try {
+                  const sent = await replyInThread({
+                    to: matched.from,
+                    subject: matched.subject,
+                    bodyText: cls.reply,
+                    inReplyToMessageId: matched.messageId,
+                    references: matched.references,
+                  });
+                  sentMessageId = sent.messageId;
+                  result.autoReplied++;
+                } catch (sendErr) {
+                  sendError = sendErr instanceof Error ? sendErr.message : String(sendErr);
+                  result.errors.push(`Auto-reply send failed for ${candDoc.entreprise}: ${sendError}`);
+                }
+
+                // Patch l'entrée autoReplies pushée plus haut avec le résultat de l'envoi
+                if (matched.messageId) {
+                  await Candidature.updateOne(
+                    { _id: candDoc._id, "autoReplies.inboundMessageId": matched.messageId },
+                    {
+                      $set: {
+                        "autoReplies.$.sent": !!sentMessageId,
+                        "autoReplies.$.sentMessageId": sentMessageId,
+                        "autoReplies.$.error": sendError ?? null,
+                      },
+                    }
+                  );
+                }
+              } else if (!shouldSend) {
+                result.autoReplySkipped++;
+                // Confidence trop basse : on log quand même pour traçabilité (pas d'envoi)
+                if (!opts.dryRun) {
+                  const autoReply: IAutoReply = {
+                    date: new Date(),
+                    inboundMessageId: matched.messageId,
+                    category: cls.category,
+                    confidence: cls.confidence,
+                    reply: cls.reply,
+                    sent: false,
+                    sentMessageId: undefined,
+                    error: null,
+                    model: cls.model,
+                    dryRun: false,
+                  };
+                  const skipFilter = matched.messageId
+                    ? { _id: candDoc._id, "autoReplies.inboundMessageId": { $ne: matched.messageId } }
+                    : { _id: candDoc._id };
+                  await Candidature.updateOne(skipFilter, { $push: { autoReplies: autoReply } });
+                }
+              }
+
+              if (opts.dryRun) {
+                // En dry-run on n'écrit rien en DB, juste le détail en réponse
+              }
+
+              detail.autoReply = {
+                category: cls.category,
+                confidence: cls.confidence,
+                sent: !!sentMessageId,
+                error: sendError,
+              };
+            } catch (classifyErr) {
+              const msg = classifyErr instanceof Error ? classifyErr.message : String(classifyErr);
+              result.errors.push(`Auto-reply classify failed for ${candDoc.entreprise}: ${msg}`);
+            }
+          }
 
           // Notification
           if (!opts.dryRun) {
@@ -196,7 +401,7 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
               emailFrom: matched.fromName ? `${matched.fromName} <${matched.from}>` : matched.from,
               emailSubject: matched.subject,
               snippet: matched.snippet,
-            }).catch(() => {});
+            }).catch((e) => console.error("[gmail-imap] notification failed:", e));
           }
 
           // Archive (move out of INBOX) if configured
@@ -238,7 +443,7 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
   // Update settings with last sync info
   if (!opts.dryRun) {
     settingsDoc.gmail.lastSyncAt = new Date();
-    settingsDoc.gmail.lastSyncSummary = `${result.matched} match${result.matched > 1 ? "s" : ""} sur ${result.scanned} non lus${result.archived > 0 ? `, ${result.archived} archivé(s)` : ""}${result.errors.length ? `, ${result.errors.length} erreur(s)` : ""}`;
+    settingsDoc.gmail.lastSyncSummary = `${result.matched} match${result.matched > 1 ? "s" : ""} sur ${result.scanned} non lus${result.archived > 0 ? `, ${result.archived} archivé(s)` : ""}${result.autoReplied > 0 ? `, ${result.autoReplied} auto-réponse(s)` : ""}${result.autoReplySkipped > 0 ? `, ${result.autoReplySkipped} skip (confiance)` : ""}${result.errors.length ? `, ${result.errors.length} erreur(s)` : ""}`;
     await settingsDoc.save();
   }
 

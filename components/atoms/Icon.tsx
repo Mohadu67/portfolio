@@ -1,7 +1,7 @@
 import React from "react";
 import * as LucideIcons from "lucide-react";
 
-type IconName =
+export type IconName =
   | "github"
   | "linkedin"
   | "mail"

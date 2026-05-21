@@ -33,6 +33,12 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.gmail.autoArchiveResponses === "boolean") {
         s.gmail.autoArchiveResponses = body.gmail.autoArchiveResponses;
       }
+      if (typeof body.gmail.autoReplyEnabled === "boolean") {
+        s.gmail.autoReplyEnabled = body.gmail.autoReplyEnabled;
+      }
+      if (typeof body.gmail.autoReplyMinConfidence === "number" && body.gmail.autoReplyMinConfidence >= 0 && body.gmail.autoReplyMinConfidence <= 1) {
+        s.gmail.autoReplyMinConfidence = body.gmail.autoReplyMinConfidence;
+      }
     }
     if (body.automation && typeof body.automation === "object") {
       if (typeof body.automation.autoRelanceJ7Enabled === "boolean") {
@@ -40,6 +46,21 @@ export async function PATCH(request: NextRequest) {
       }
       if (typeof body.automation.autoRelanceDays === "number" && body.automation.autoRelanceDays > 0) {
         s.automation.autoRelanceDays = body.automation.autoRelanceDays;
+      }
+      if (typeof body.automation.autoApplyEnabled === "boolean") {
+        s.automation.autoApplyEnabled = body.automation.autoApplyEnabled;
+      }
+      if (typeof body.automation.autoApplyMaxPerDay === "number" && body.automation.autoApplyMaxPerDay >= 0) {
+        s.automation.autoApplyMaxPerDay = Math.floor(body.automation.autoApplyMaxPerDay);
+      }
+      if (typeof body.automation.autoApplyMinCompanyScore === "number" && body.automation.autoApplyMinCompanyScore >= 0 && body.automation.autoApplyMinCompanyScore <= 1) {
+        s.automation.autoApplyMinCompanyScore = body.automation.autoApplyMinCompanyScore;
+      }
+      if (typeof body.automation.weeklyProspectKeywords === "string") {
+        s.automation.weeklyProspectKeywords = body.automation.weeklyProspectKeywords.trim();
+      }
+      if (typeof body.automation.weeklyProspectLocation === "string") {
+        s.automation.weeklyProspectLocation = body.automation.weeklyProspectLocation.trim();
       }
     }
     if (body.search && typeof body.search === "object") {

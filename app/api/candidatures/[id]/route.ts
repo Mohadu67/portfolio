@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature, CandidatureStatut } from "@/models/Candidature";
 import { verifyAuth } from "@/lib/auth";
+import { scheduleAutoRelance } from "@/lib/auto-relance";
 
 export async function PATCH(
   request: NextRequest,
@@ -16,21 +17,28 @@ export async function PATCH(
     const body = await request.json();
 
     await connectDB();
-    const candidature = await Candidature.findByIdAndUpdate(
-      id,
-      {
-        ...(body.statut && { statut: body.statut as CandidatureStatut }),
-        ...(body.notes !== undefined && { notes: body.notes }),
-        ...(body.type && { type: body.type }),
-        ...(body.relance !== undefined && { relance: body.relance }),
-      },
-      { new: true }
-    );
+    const candidature = await Candidature.findById(id);
 
     if (!candidature) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    const previousStatut = candidature.statut;
+
+    if (body.statut) candidature.statut = body.statut as CandidatureStatut;
+    if (body.notes !== undefined) candidature.notes = body.notes;
+    if (body.type) candidature.type = body.type;
+    if (body.relance !== undefined) candidature.relance = body.relance;
+
+    if (
+      body.statut === "postulée" &&
+      previousStatut !== "postulée" &&
+      body.skipAutoRelance !== true
+    ) {
+      await scheduleAutoRelance(candidature);
+    }
+
+    await candidature.save();
     return NextResponse.json(candidature);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

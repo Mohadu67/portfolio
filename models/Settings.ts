@@ -13,6 +13,10 @@ export interface ISettings {
     lastSyncAt?: Date | null;
     lastSyncSummary?: string | null;
   };
+  automation: {
+    autoRelanceJ7Enabled: boolean;
+    autoRelanceDays: number;
+  };
   created_at: Date;
   updated_at: Date;
 }
@@ -29,6 +33,10 @@ const settingsSchema = new Schema<ISettings>(
       autoArchiveResponses: { type: Boolean, default: false },
       lastSyncAt: { type: Date, default: null },
       lastSyncSummary: { type: String, default: null },
+    },
+    automation: {
+      autoRelanceJ7Enabled: { type: Boolean, default: true },
+      autoRelanceDays: { type: Number, default: 7 },
     },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } }

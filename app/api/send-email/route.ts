@@ -6,6 +6,7 @@ import { generateLettrePDF } from "@/lib/pdf-generator";
 import { verifyAuth } from "@/lib/auth";
 import { resolveCVForSend } from "@/lib/cvFile";
 import { sendNotification } from "@/lib/notifications";
+import { scheduleAutoRelance } from "@/lib/auto-relance";
 import fs from "fs";
 import path from "path";
 
@@ -104,9 +105,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Update status to "postulée" and save type
+    const wasAlreadyPostulee = candidature.statut === "postulée";
     candidature.statut = "postulée";
     candidature.email = email_destinataire;
     candidature.type = type || "stage";
+    if (!wasAlreadyPostulee) {
+      await scheduleAutoRelance(candidature);
+    }
     await candidature.save();
 
     // Fire-and-forget notification

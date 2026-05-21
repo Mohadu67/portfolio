@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import { Candidature, ICandidature, IRelanceLog } from "@/models/Candidature";
 import { sendRelance } from "@/lib/email";
 import { sendNotification } from "@/lib/notifications";
+import { recordCronRun } from "@/lib/cron-log";
 
 // Cron endpoint: runs all due relances.
 //
@@ -21,9 +22,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const startedAt = new Date();
   try {
     await connectDB();
-    const now = new Date();
+    const now = startedAt;
 
     const due = await Candidature.find({
       "relanceHistory.status": "programmée",
@@ -109,6 +111,16 @@ export async function POST(request: NextRequest) {
       await (candidature as unknown as { save: () => Promise<unknown> }).save();
     }
 
+    await recordCronRun({
+      name: "run-relances",
+      startedAt,
+      status: failed > 0 ? "failed" : "success",
+      processed,
+      succeeded,
+      failed,
+      summary: `${succeeded}/${processed} relances envoyées`,
+    });
+
     return NextResponse.json({
       ok: true,
       ranAt: now.toISOString(),
@@ -120,6 +132,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[cron run-relances]", msg);
+    await recordCronRun({
+      name: "run-relances",
+      startedAt,
+      status: "failed",
+      error: msg,
+    });
     return NextResponse.json({ error: "Cron failed", details: msg }, { status: 500 });
   }
 }

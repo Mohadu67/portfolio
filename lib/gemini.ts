@@ -1,5 +1,7 @@
 import { getLetterTemplate, splitTemplate, fillTemplate } from "./letter-template";
 
+import { GoogleGenerativeAI, type GenerationConfig } from "@google/generative-ai";
+
 function getGeminiApiKey(): string {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
@@ -8,45 +10,43 @@ function getGeminiApiKey(): string {
   return key;
 }
 
-// Gemini exposes an OpenAI-compatible endpoint
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
-interface GeminiMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
+// Singleton SDK client — réutilise la même connexion HTTP/2 entre appels.
+let _genAI: GoogleGenerativeAI | null = null;
+function getGenAI(): GoogleGenerativeAI {
+  if (!_genAI) _genAI = new GoogleGenerativeAI(getGeminiApiKey());
+  return _genAI;
 }
 
-async function callGemini(prompt: string, systemPrompt?: string): Promise<string> {
-  const messages: GeminiMessage[] = [];
-
-  if (systemPrompt) {
-    messages.push({ role: "system", content: systemPrompt });
+// Helper bas niveau : envoie un prompt user (+ optionnel system) et retourne le texte.
+// Utilise l'endpoint NATIF Google (pas OpenAI-compat) → quota free tier ~75× plus large.
+async function callGeminiNative(
+  userPrompt: string,
+  systemPrompt?: string,
+  options: { model?: string; temperature?: number; maxOutputTokens?: number; jsonMode?: boolean } = {},
+): Promise<string> {
+  const modelName = options.model ?? DEFAULT_MODEL;
+  const generationConfig: GenerationConfig = {
+    temperature: options.temperature ?? 0.7,
+    maxOutputTokens: options.maxOutputTokens ?? 2048,
+  };
+  if (options.jsonMode) {
+    generationConfig.responseMimeType = "application/json";
   }
 
-  messages.push({ role: "user", content: prompt });
-
-  const response = await fetch(`${GEMINI_API_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${getGeminiApiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      messages,
-      temperature: 0.7,
-      max_tokens: 2048,
-    }),
+  const model = getGenAI().getGenerativeModel({
+    model: modelName,
+    ...(systemPrompt ? { systemInstruction: systemPrompt } : {}),
+    generationConfig,
   });
+  const result = await model.generateContent(userPrompt);
+  return result.response.text();
+}
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${error}`);
-  }
-
-  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-  return data.choices?.[0]?.message?.content ?? "";
+// Compat : ancien helper qui appelait l'API. Maintenant aliasé sur le SDK natif.
+async function callGemini(prompt: string, systemPrompt?: string): Promise<string> {
+  return callGeminiNative(prompt, systemPrompt);
 }
 
 const PROFIL_CONTEXT = `
@@ -351,31 +351,11 @@ Retourne maintenant le JSON strict avec category, confidence et reply.`;
 
 export async function classifyAndReply(input: ClassifyAndReplyInput): Promise<ClassifyAndReplyResult> {
   const model = DEFAULT_MODEL;
-  const response = await fetch(`${GEMINI_API_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${getGeminiApiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: AUTO_REPLY_SYSTEM_PROMPT },
-        { role: "user", content: buildAutoReplyUserPrompt(input) },
-      ],
-      temperature: 0.5,
-      max_tokens: 1024,
-      response_format: { type: "json_object" },
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gemini classifyAndReply error: ${response.status} - ${error}`);
-  }
-
-  const data = await response.json() as OpenAICompletionResponse;
-  const raw = data.choices?.[0]?.message?.content ?? "";
+  const raw = await callGeminiNative(
+    buildAutoReplyUserPrompt(input),
+    AUTO_REPLY_SYSTEM_PROMPT,
+    { model, temperature: 0.5, maxOutputTokens: 1024, jsonMode: true },
+  );
 
   let parsed: { category?: string; confidence?: number; reply?: string };
   try {
@@ -407,10 +387,6 @@ export async function classifyAndReply(input: ClassifyAndReplyInput): Promise<Cl
 }
 
 // ---------- Auto-apply scoring (filtrage qualité avant candidature) ----------
-
-interface OpenAICompletionResponse {
-  choices?: Array<{ message?: { content?: string } }>;
-}
 
 export interface CompanyFitScore {
   score: number;        // 0-1
@@ -454,31 +430,11 @@ ${safeAbout || "(aucun texte disponible)"}
 
 Évalue la pertinence pour une candidature spontanée dev fullstack junior.`;
 
-  const response = await fetch(`${GEMINI_API_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${getGeminiApiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 256,
-      response_format: { type: "json_object" },
-    }),
+  const raw = await callGeminiNative(userPrompt, systemPrompt, {
+    temperature: 0.3,
+    maxOutputTokens: 256,
+    jsonMode: true,
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gemini scoreCompanyFit error: ${response.status} - ${error}`);
-  }
-
-  const data = await response.json() as OpenAICompletionResponse;
-  const raw = data.choices?.[0]?.message?.content ?? "";
   let parsed: { score?: number; isTechRelevant?: boolean; reason?: string };
   try {
     parsed = JSON.parse(raw);
@@ -543,31 +499,11 @@ Description :
 ${safeDesc}
 </UNTRUSTED_CONTENT>`;
 
-  const response = await fetch(`${GEMINI_API_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${getGeminiApiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 256,
-      response_format: { type: "json_object" },
-    }),
+  const raw = await callGeminiNative(userPrompt, systemPrompt, {
+    temperature: 0.3,
+    maxOutputTokens: 256,
+    jsonMode: true,
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gemini matchJobOffer error: ${response.status} - ${error}`);
-  }
-
-  const data = await response.json() as OpenAICompletionResponse;
-  const raw = data.choices?.[0]?.message?.content ?? "";
   let parsed: { match?: boolean; score?: number; reason?: string; jobType?: string };
   try {
     parsed = JSON.parse(raw);

@@ -156,6 +156,39 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "apply_to_company",
+    description:
+      "Lance le pipeline de candidature spontanée pour une entreprise : scrape la home + page about, score qualité via IA, extrait l'email RH (filtre whitelist), génère la lettre de motivation, crée la candidature en DB et envoie le mail avec CV + LM. Requiert l'URL du site de l'entreprise. À utiliser UNIQUEMENT quand l'utilisateur demande explicitement d'envoyer une candidature à une URL précise.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "URL complète du site de l'entreprise cible (https://...). Pas l'URL d'une offre, le site corporate.",
+        },
+        type: {
+          type: "string",
+          enum: ["stage", "alternance", "cdi"],
+          description: "Type de candidature visé (défaut: stage). Adapte le 1er paragraphe de la lettre.",
+        },
+        dry_run: {
+          type: "boolean",
+          description: "Si true : génère tout (scrape, lettre, choix email) mais N'ENVOIE PAS le mail. Utile pour vérifier avant de valider.",
+        },
+        skip_quality_score: {
+          type: "boolean",
+          description: "Bypass le scoring qualité Gemini (sinon refuse les boîtes notées < 0.3). À utiliser si l'utilisateur insiste explicitement.",
+        },
+        allow_duplicate: {
+          type: "boolean",
+          description: "Forcer même si le domaine a déjà été contacté (rare).",
+        },
+      },
+      required: ["url"],
+    },
+  },
+  {
     name: "send_relance_now",
     description: "Envoie immédiatement une relance par email (si l'email destinataire est connu).",
     requiresConfirmation: true,

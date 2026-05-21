@@ -74,6 +74,7 @@ Tools disponibles (n'utilise un tool QUE si l'utilisateur mentionne explicitemen
 - list_relances_due() → UNIQUEMENT si l'utilisateur parle de relances ou demande quoi faire aujourd'hui
 - list_cv_sections() / get_cv_section(key) → UNIQUEMENT si l'utilisateur parle de son CV
 - Tools d'action (confirmation requise) : schedule_relance, cancel_relance, update_candidature_status, update_candidature_notes, send_relance_now
+- apply_to_company(url) → UNIQUEMENT si l'utilisateur demande explicitement « envoie une candidature à <URL> » ou « candidate chez <URL> ». Génère lettre + envoie mail à l'email RH extrait. À confirmer avant exécution.
 
 Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question générale ou un message qui ne cite pas explicitement une donnée précise. Pour une question vague, demande ce que l'utilisateur veut savoir avant d'appeler quoi que ce soit. Appelle le minimum de tools nécessaires.`;
 

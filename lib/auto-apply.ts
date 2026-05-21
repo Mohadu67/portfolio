@@ -385,3 +385,192 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
   result.ok = true;
   return result;
 }
+
+// ---------- Mode "URL unique" déclenché depuis le chat dashboard ----------
+// Variante : pas de SerpAPI, pas de rate-limit 24h (l'utilisateur déclenche manuellement),
+// score qualité plus permissif (la cible a été choisie consciemment).
+// Garde-fous conservés : email whitelist + dédup par domaine (sauf override).
+
+export interface ProcessSingleOptions {
+  dryRun?: boolean;
+  // Force l'envoi même si le domaine a déjà été contacté (rare, à utiliser avec parcimonie)
+  allowDuplicate?: boolean;
+  // Bypass complet du score qualité Gemini (l'user a déjà jugé que ça l'intéressait)
+  skipQualityScore?: boolean;
+  // Type de candidature (défaut: stage)
+  candidatureType?: "stage" | "alternance" | "cdi";
+}
+
+export async function processSingleCompany(
+  inputUrl: string,
+  opts: ProcessSingleOptions = {},
+): Promise<CandidateDecision> {
+  await connectDB();
+  const candidatureType = opts.candidatureType ?? "stage";
+
+  const decision: CandidateDecision = {
+    url: inputUrl,
+    domain: domainOf(inputUrl),
+    entreprise: "",
+    decision: "skipped",
+  };
+
+  // Validation URL
+  let cleanUrl: string;
+  try {
+    const u = new URL(inputUrl);
+    if (!u.hostname) throw new Error("hostname vide");
+    cleanUrl = u.toString();
+  } catch {
+    decision.error = `URL invalide : ${inputUrl}`;
+    return decision;
+  }
+
+  try {
+    // 1. Dedup par domaine (sauf override)
+    if (!opts.allowDuplicate && (await alreadyContactedDomain(decision.domain))) {
+      decision.skipReason = "déjà contactée (domaine présent en DB)";
+      return decision;
+    }
+
+    // 2. Scrape entreprise
+    const scraped = await scrapeCompanyWebsite(cleanUrl);
+    if (!scraped.aboutText && scraped.emails.length === 0) {
+      decision.skipReason = "scrape vide (site inaccessible, JS-only ou pas d'email exposé)";
+      return decision;
+    }
+    const entrepriseName = scraped.companyName || decision.domain;
+    decision.entreprise = entrepriseName;
+
+    // 3. Score qualité (optionnel — l'user a déjà choisi la cible)
+    if (!opts.skipQualityScore) {
+      try {
+        const fit = await scoreCompanyFit(entrepriseName, scraped.aboutText || scraped.description);
+        decision.companyScore = fit.score;
+        decision.companyReason = fit.reason;
+        // Seuil plus permissif que le hebdo (0.3 au lieu de 0.6) — l'user a explicitement ciblé
+        if (fit.score < 0.3) {
+          decision.skipReason = `score qualité très bas (${fit.score.toFixed(2)}) — ${fit.reason}. Override possible avec skipQualityScore.`;
+          return decision;
+        }
+      } catch (geminiErr) {
+        // Non-bloquant : on continue sans score
+        const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+        decision.companyReason = `(scoring Gemini échoué : ${msg})`;
+      }
+    }
+
+    // 4. Email whitelist (garde-fou non négociable)
+    const bestEmail = pickBestContactEmail(scraped.emails, cleanUrl);
+    if (!bestEmail) {
+      decision.skipReason = `aucun email RH valable trouvé. Candidats scrappés : ${scraped.emails.join(", ") || "(aucun)"}`;
+      return decision;
+    }
+    decision.email = bestEmail;
+
+    // 5. Génération lettre via Gemini
+    const poste = "Candidature spontanée — Développeur fullstack";
+    let lettre: string;
+    try {
+      lettre = await generateLetterProposal(entrepriseName, scraped.aboutText, poste, candidatureType);
+    } catch (geminiErr) {
+      const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+      decision.error = `Génération lettre échouée : ${msg}`;
+      return decision;
+    }
+
+    // 6. Création Candidature en DB
+    const candDoc = await Candidature.create({
+      entreprise: entrepriseName,
+      poste,
+      plateforme: "Web",
+      localisation: "",
+      url: cleanUrl,
+      description: (scraped.description || "").slice(0, 500),
+      email: bestEmail.email,
+      aboutText: scraped.aboutText,
+      statut: "lettre générée",
+      type: candidatureType,
+      lettre,
+      notes: `Chat manual ${new Date().toISOString().slice(0, 10)}${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""}`,
+      source: "auto-apply",
+      date: new Date().toISOString().slice(0, 10),
+      letters: [{
+        version: 1,
+        model: "gemini",
+        content: lettre,
+        generatedAt: new Date(),
+        type: candidatureType,
+      }],
+    });
+    decision.candidatureId = String(candDoc._id);
+
+    // 7. Dry-run ou envoi réel
+    if (opts.dryRun) {
+      decision.decision = "would_apply";
+      return decision;
+    }
+
+    try {
+      const letterPdfBuffer = await generateLettrePDF(lettre, entrepriseName, poste);
+      const resolvedCV = await resolveCVForSend({ cvFileId: null, type: candidatureType });
+      await sendCandidature(
+        entrepriseName,
+        poste,
+        bestEmail.email,
+        letterPdfBuffer,
+        process.env.PROFIL_NOM || "Mohammed Hamiani",
+        candidatureType,
+        { buffer: resolvedCV.buffer, filename: resolvedCV.filename },
+      );
+
+      candDoc.emailsSent = [
+        ...(candDoc.emailsSent ?? []),
+        {
+          date: new Date(),
+          to: bestEmail.email,
+          subject: `Candidature - ${poste} - ${process.env.PROFIL_NOM || "Mohammed Hamiani"}`,
+          type: "candidature",
+          status: "sent",
+          error: null,
+        },
+      ];
+      candDoc.statut = "postulée";
+      await scheduleAutoRelance(candDoc);
+      await candDoc.save();
+
+      decision.decision = "applied";
+
+      sendNotification({
+        type: "candidature",
+        candidature: {
+          _id: String(candDoc._id),
+          entreprise: entrepriseName,
+          poste,
+          email: bestEmail.email,
+          statut: "postulée",
+        },
+        emailSubject: `[CHAT] ${entrepriseName} - ${poste}`,
+      }).catch((e) => console.error("[chat-apply] notification failed:", e));
+    } catch (sendErr) {
+      const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      decision.error = `Envoi échoué : ${msg}`;
+      candDoc.emailsSent = [
+        ...(candDoc.emailsSent ?? []),
+        {
+          date: new Date(),
+          to: bestEmail.email,
+          subject: `Candidature - ${poste}`,
+          type: "candidature",
+          status: "failed",
+          error: msg,
+        },
+      ];
+      await candDoc.save();
+    }
+  } catch (err) {
+    decision.error = err instanceof Error ? err.message : String(err);
+  }
+
+  return decision;
+}

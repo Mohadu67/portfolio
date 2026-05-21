@@ -5,6 +5,7 @@ import { CVSection, ICVSection } from "@/models/CVSection";
 import { sendRelance } from "@/lib/email";
 import { verifyAuth } from "@/lib/auth";
 import { getTool } from "@/lib/ai/tools";
+import { processSingleCompany } from "@/lib/auto-apply";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -292,6 +293,30 @@ export async function POST(request: NextRequest) {
         ];
         await c.save();
         return NextResponse.json({ ok: true, summary: `Relance envoyée à ${c.email} (${c.entreprise})` });
+      }
+
+      case "apply_to_company": {
+        const url = String(input.url ?? "").trim();
+        if (!url) return NextResponse.json({ error: "url required" }, { status: 400 });
+        const type = (input.type === "alternance" || input.type === "cdi") ? input.type : "stage";
+        const decision = await processSingleCompany(url, {
+          dryRun: input.dry_run === true,
+          skipQualityScore: input.skip_quality_score === true,
+          allowDuplicate: input.allow_duplicate === true,
+          candidatureType: type,
+        });
+        const summary = JSON.stringify({
+          decision: decision.decision,
+          entreprise: decision.entreprise || decision.domain,
+          url: decision.url,
+          candidatureId: decision.candidatureId ?? null,
+          email: decision.email ? { address: decision.email.email, score: decision.email.score, reasons: decision.email.reasons } : null,
+          companyScore: decision.companyScore ?? null,
+          companyReason: decision.companyReason ?? null,
+          skipReason: decision.skipReason ?? null,
+          error: decision.error ?? null,
+        });
+        return NextResponse.json({ ok: !decision.error, summary });
       }
 
       default:

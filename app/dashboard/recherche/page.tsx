@@ -49,14 +49,24 @@ interface SavedCompany {
   type: string;
 }
 
+type QueryFrequency = "manual" | "daily" | "weekly" | "biweekly";
+
 interface SavedQuery {
+  _id: string;
   keywords: string;
   location: string;
+  frequency: QueryFrequency;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastRunNewCount: number;
 }
 
-// ─── Constantes ──────────────────────────────────────────
-
-const SAVED_QUERIES_KEY = "recherche-saved-queries";
+const FREQUENCY_LABEL: Record<QueryFrequency, string> = {
+  manual: "Manuelle",
+  daily: "Quotidienne",
+  weekly: "Hebdomadaire",
+  biweekly: "Bi-hebdo",
+};
 
 type Platform = OffreResult["plateforme"];
 
@@ -111,13 +121,24 @@ export default function RecherchePage() {
 
   const keywordsRef = useRef<HTMLInputElement>(null);
 
-  // Load saved queries from localStorage
+  // Load saved queries from DB
   useEffect(() => {
+    if (!apiKey) return;
+    fetchSavedQueries();
+  }, [apiKey]);
+
+  async function fetchSavedQueries() {
+    if (!apiKey) return;
     try {
-      const raw = localStorage.getItem(SAVED_QUERIES_KEY);
-      if (raw) setSavedQueries(JSON.parse(raw));
+      const res = await fetch("/api/saved-queries", {
+        headers: { "x-api-key": apiKey },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSavedQueries(data.queries ?? []);
+      }
     } catch {}
-  }, []);
+  }
 
   // Load saved companies from DB
   useEffect(() => {
@@ -245,22 +266,60 @@ export default function RecherchePage() {
     setImportingAll(false);
   }
 
-  function saveQuery() {
+  async function saveQuery(frequency: QueryFrequency = "manual") {
+    if (!apiKey) return;
     const kw = keywords.trim();
     const loc = location.trim();
     if (!kw || !loc) return;
-    const already = savedQueries.some((q) => q.keywords === kw && q.location === loc);
-    if (already) return;
-    const next = [{ keywords: kw, location: loc }, ...savedQueries].slice(0, 10);
-    setSavedQueries(next);
-    localStorage.setItem(SAVED_QUERIES_KEY, JSON.stringify(next));
-    toast.success("Recherche sauvegardée");
+    try {
+      const res = await fetch("/api/saved-queries", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ keywords: kw, location: loc, frequency }),
+      });
+      if (!res.ok) throw new Error("Erreur");
+      await fetchSavedQueries();
+      toast.success(
+        frequency === "manual"
+          ? "Recherche sauvegardée"
+          : `Recherche planifiée (${FREQUENCY_LABEL[frequency].toLowerCase()})`
+      );
+    } catch {
+      toast.error("Erreur lors de la sauvegarde");
+    }
   }
 
-  function removeQuery(i: number) {
-    const next = savedQueries.filter((_, idx) => idx !== i);
-    setSavedQueries(next);
-    localStorage.setItem(SAVED_QUERIES_KEY, JSON.stringify(next));
+  async function removeQuery(id: string) {
+    if (!apiKey) return;
+    try {
+      await fetch(`/api/saved-queries?id=${id}`, {
+        method: "DELETE",
+        headers: { "x-api-key": apiKey },
+      });
+      setSavedQueries((prev) => prev.filter((q) => q._id !== id));
+    } catch {
+      toast.error("Erreur lors de la suppression");
+    }
+  }
+
+  async function setQueryFrequency(id: string, frequency: QueryFrequency) {
+    if (!apiKey) return;
+    try {
+      const res = await fetch(`/api/saved-queries/${id}`, {
+        method: "PATCH",
+        headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ frequency }),
+      });
+      if (!res.ok) throw new Error();
+      await fetchSavedQueries();
+      toast.success(
+        frequency === "manual"
+          ? "Planification désactivée"
+          : `Planifié en ${FREQUENCY_LABEL[frequency].toLowerCase()}`
+      );
+    } catch {
+      toast.error("Erreur lors de la mise à jour");
+    }
   }
 
   function rerunQuery(q: SavedQuery) {
@@ -457,7 +516,7 @@ export default function RecherchePage() {
               {hasSearched && keywords.trim() && location.trim() && (
                 <button
                   type="button"
-                  onClick={saveQuery}
+                  onClick={() => saveQuery("manual")}
                   title="Sauvegarder cette recherche"
                   className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-[var(--border-soft)] text-[var(--text-secondary)] hover:text-[var(--accent-orange)] hover:border-[var(--accent-orange)]/40 transition-colors"
                 >
@@ -469,12 +528,32 @@ export default function RecherchePage() {
             {/* Saved queries */}
             {savedQueries.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {savedQueries.map((q, i) => (
+                {savedQueries.map((q) => (
                   <div
-                    key={i}
-                    className="inline-flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full border border-[var(--border-soft)] bg-[var(--bg-primary)] text-xs text-[var(--text-secondary)]"
+                    key={q._id}
+                    className={`inline-flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full border text-xs ${
+                      q.frequency !== "manual"
+                        ? "border-[var(--accent-orange)]/40 bg-[var(--accent-orange)]/10 text-[var(--accent-orange)]"
+                        : "border-[var(--border-soft)] bg-[var(--bg-primary)] text-[var(--text-secondary)]"
+                    }`}
+                    title={
+                      q.frequency !== "manual"
+                        ? `Planifiée — prochaine exécution ${q.nextRunAt ? new Date(q.nextRunAt).toLocaleString("fr-FR") : "à définir"}`
+                        : "Recherche manuelle"
+                    }
                   >
                     <span>{q.keywords} · {q.location}</span>
+                    <select
+                      value={q.frequency}
+                      onChange={(e) => setQueryFrequency(q._id, e.target.value as QueryFrequency)}
+                      className="bg-transparent text-[10px] uppercase tracking-wide font-semibold focus:outline-none cursor-pointer pr-1"
+                      title="Fréquence d'exécution"
+                    >
+                      <option value="manual">Manuelle</option>
+                      <option value="daily">Quotidienne</option>
+                      <option value="weekly">Hebdomadaire</option>
+                      <option value="biweekly">Bi-hebdo</option>
+                    </select>
                     <button
                       onClick={() => rerunQuery(q)}
                       className="p-0.5 rounded-full hover:text-[var(--accent-orange)] transition-colors"
@@ -483,7 +562,7 @@ export default function RecherchePage() {
                       <RotateCcw size={11} />
                     </button>
                     <button
-                      onClick={() => removeQuery(i)}
+                      onClick={() => removeQuery(q._id)}
                       className="p-0.5 rounded-full hover:text-[var(--accent-danger)] transition-colors"
                       title="Supprimer"
                     >

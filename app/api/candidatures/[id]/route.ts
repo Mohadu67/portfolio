@@ -29,6 +29,8 @@ export async function PATCH(
     if (body.notes !== undefined) candidature.notes = body.notes;
     if (body.type) candidature.type = body.type;
     if (body.relance !== undefined) candidature.relance = body.relance;
+    if (typeof body.lettre === "string") candidature.lettre = body.lettre;
+    if (typeof body.email === "string") candidature.email = body.email;
 
     if (
       body.statut === "postulée" &&

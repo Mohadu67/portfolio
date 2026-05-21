@@ -25,6 +25,7 @@ interface ScrapedCompanyCardProps {
   url: string;
   apiKey: string;
   onCandidatureCreated: () => void;
+  onSent?: () => void;
 }
 
 export function ScrapedCompanyCard({
@@ -32,6 +33,7 @@ export function ScrapedCompanyCard({
   url,
   apiKey,
   onCandidatureCreated,
+  onSent,
 }: ScrapedCompanyCardProps) {
   const [showAbout, setShowAbout] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -145,6 +147,7 @@ export function ScrapedCompanyCard({
 
       toast.success(`Email envoyé à ${email} !`);
       onCandidatureCreated();
+      onSent?.();
     } catch (error) {
       toast.error("Erreur lors de l'envoi de l'email");
     } finally {
@@ -351,6 +354,7 @@ export function ScrapedCompanyCard({
           apiKey={apiKey}
           onSend={handleSendFromModal}
           onUpdate={handleUpdateCandidature}
+          onSent={() => onSent?.()}
         />
       )}
     </motion.div>

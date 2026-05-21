@@ -23,6 +23,7 @@ interface GenerateLetterModalProps {
   apiKey: string;
   onSend: (candidature: ICandidature, lettre: string, email: string) => Promise<void>;
   onUpdate: (id: string, updates: Partial<ICandidature>) => Promise<void>;
+  onSent?: (candidature: ICandidature) => void;
 }
 
 export function GenerateLetterModal({
@@ -32,6 +33,7 @@ export function GenerateLetterModal({
   apiKey,
   onSend,
   onUpdate,
+  onSent,
 }: GenerateLetterModalProps) {
   const [letterText, setLetterText] = useState("");
   const [type, setType] = useState<"stage" | "alternance" | "cdi">("stage");
@@ -172,9 +174,25 @@ export function GenerateLetterModal({
       toast.error("Veuillez entrer l'email de l'entreprise");
       return;
     }
+    if (!candidature?._id) {
+      toast.error("Candidature introuvable");
+      return;
+    }
+    if (!improvedLetter.trim()) {
+      toast.error("Lettre vide — génère ou rédige avant d'envoyer");
+      return;
+    }
     setLoading(true);
     try {
-      // Send with type parameter
+      // S'assurer que la lettre est persistée en DB AVANT l'envoi
+      // (sinon /api/send-email refuse avec "Lettre not generated").
+      const persistRes = await fetch(`/api/candidatures/${candidature._id}`, {
+        method: "PATCH",
+        headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ lettre: improvedLetter, email }),
+      });
+      if (!persistRes.ok) throw new Error("Impossible de sauvegarder la lettre");
+
       const res = await fetch("/api/send-email", {
         method: "POST",
         headers: {
@@ -196,6 +214,7 @@ export function GenerateLetterModal({
         statut: "postulée",
         email,
       });
+      onSent?.({ ...candidature, lettre: improvedLetter, statut: "postulée", email } as ICandidature);
       onClose();
       toast.success("Candidature envoyée!");
     } catch (error) {

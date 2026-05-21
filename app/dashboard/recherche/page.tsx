@@ -857,7 +857,10 @@ export default function RecherchePage() {
                   url={r.url}
                   apiKey={apiKey ?? ""}
                   onCandidatureCreated={() => {
-                    /* déjà ouvert dans la modale lettre directement par ScrapedCompanyCard */
+                    /* la modale lettre interne gère le flow ; rien à faire ici */
+                  }}
+                  onSent={() => {
+                    setScrapedResults((prev) => prev.filter((s) => s.url !== r.url));
                   }}
                 />
               ))}
@@ -926,6 +929,17 @@ export default function RecherchePage() {
         apiKey={apiKey ?? ""}
         onSend={sendCandidature}
         onUpdate={updateCandidature}
+        onSent={(sentCand) => {
+          // Reflète le nouveau statut dans la liste d'offres et nettoie l'éventuelle scrape card.
+          setOffresResults((prev) =>
+            prev.map((r) =>
+              r.candidature && r.candidature._id === sentCand._id
+                ? { ...r, candidature: sentCand }
+                : r
+            )
+          );
+          setScrapedResults((prev) => prev.filter((s) => s.url !== sentCand.url));
+        }}
       />
     </div>
   );

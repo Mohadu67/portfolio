@@ -69,8 +69,13 @@ function getTags(position: string): string[] {
 export function ChapterKitchens({ experiences, story }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
+  const trackWrapRef = useRef<HTMLDivElement | null>(null);
 
-  const kitchens = experiences.filter(isKitchen);
+  // Ordre chronologique ascendant : la narration commence en 2018.
+  const kitchens = experiences
+    .filter(isKitchen)
+    .slice()
+    .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
 
   useEffect(() => {
     if (!trackRef.current || !rootRef.current) return;
@@ -129,13 +134,14 @@ export function ChapterKitchens({ experiences, story }: Props) {
       const mm = gsap.matchMedia();
       mm.add("(min-width: 768px)", () => {
         const track = trackRef.current!;
+        const wrap = trackWrapRef.current!;
         const getDistance = () => track.scrollWidth - window.innerWidth;
 
         gsap.to(track, {
           x: () => -getDistance(),
           ease: "none",
           scrollTrigger: {
-            trigger: rootRef.current,
+            trigger: wrap,
             start: "top top",
             end: () => `+=${getDistance()}`,
             pin: true,
@@ -177,10 +183,10 @@ export function ChapterKitchens({ experiences, story }: Props) {
       </div>
 
       {/* Track horizontal — desktop pinné, mobile scroll normal */}
-      <div className="md:h-screen md:overflow-hidden">
+      <div ref={trackWrapRef} className="md:h-screen md:overflow-hidden">
         <div
           ref={trackRef}
-          className="flex flex-col gap-8 px-6 pb-20 md:h-screen md:flex-row md:items-center md:gap-12 md:px-[20vw] md:pb-0"
+          className="flex flex-col gap-8 px-6 pb-20 md:h-screen md:flex-row md:items-center md:gap-12 md:px-[12vw] md:pb-0"
         >
           {kitchens.map((exp, i) => {
             const missions = parseMissions(exp.details || exp.description);

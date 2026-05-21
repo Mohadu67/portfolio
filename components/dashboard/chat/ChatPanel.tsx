@@ -19,6 +19,8 @@ interface ToolResult {
 
 interface ToolCallState {
   call: ToolCall;
+  // Input édité par l'utilisateur dans la card avant approbation (override de call.input à l'exec)
+  editedInput?: Record<string, unknown>;
   status: "pending" | "approved" | "executing" | "done" | "rejected" | "error";
   result?: string;
 }
@@ -51,6 +53,7 @@ const TOOL_LABELS: Record<string, string> = {
   list_relances_due: "📋 Lister les relances dues",
   list_cv_sections: "📚 Lister les sections du CV",
   get_cv_section: "📖 Lire une section du CV",
+  apply_to_company: "🚀 Envoyer une candidature à une entreprise",
 };
 
 interface ChatPanelProps {
@@ -206,7 +209,8 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
       const res = await fetch("/api/chat/tool-exec", {
         method: "POST",
         headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ tool: state.call.name, input: state.call.input }),
+        // Utilise l'input édité par l'user dans la card si présent, sinon l'input proposé par l'IA
+        body: JSON.stringify({ tool: state.call.name, input: state.editedInput ?? state.call.input }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -289,6 +293,16 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
     setMessages(next);
     setPendingTools([]);
     await streamFromMessages(next);
+  };
+
+  const updateToolInput = (callId: string, patch: Record<string, unknown>) => {
+    setPendingTools((p) =>
+      p.map((t) =>
+        t.call.id === callId
+          ? { ...t, editedInput: { ...(t.editedInput ?? t.call.input), ...patch } }
+          : t,
+      ),
+    );
   };
 
   const clear = () => {
@@ -388,7 +402,9 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
             </div>
             <div className="space-y-2">
               {pendingTools.map((t) => (
-                <ToolCard key={t.call.id} state={t} />
+                t.call.name === "apply_to_company"
+                  ? <ApplyToCompanyCard key={t.call.id} state={t} onEdit={(patch) => updateToolInput(t.call.id, patch)} />
+                  : <ToolCard key={t.call.id} state={t} />
               ))}
             </div>
             <div className="flex items-center gap-2 pt-1">
@@ -463,6 +479,141 @@ function ToolCard({ state }: { state: ToolCallState }) {
       </pre>
       {state.result && (
         <p className="text-xs mt-2 text-[var(--text-secondary)]">{state.result}</p>
+      )}
+    </div>
+  );
+}
+
+// Card custom pour le tool apply_to_company : permet d'éditer le type/mode avant validation.
+function ApplyToCompanyCard({
+  state,
+  onEdit,
+}: {
+  state: ToolCallState;
+  onEdit: (patch: Record<string, unknown>) => void;
+}) {
+  const effectiveInput = (state.editedInput ?? state.call.input) as {
+    url?: string;
+    type?: "stage" | "alternance" | "cdi";
+    dry_run?: boolean;
+    skip_quality_score?: boolean;
+    allow_duplicate?: boolean;
+  };
+  const url = effectiveInput.url ?? "";
+  const type = effectiveInput.type ?? "stage";
+  const dryRun = effectiveInput.dry_run === true;
+  const skipQuality = effectiveInput.skip_quality_score === true;
+  const allowDup = effectiveInput.allow_duplicate === true;
+
+  const readOnly = state.status !== "pending";
+
+  return (
+    <div className="rounded-lg border border-[var(--accent-orange)]/40 bg-[var(--bg-card)] p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold text-[var(--text-primary)]">
+          🚀 Envoyer une candidature
+        </span>
+        {state.status === "executing" && (
+          <Loader2 size={12} className="animate-spin text-[var(--text-tertiary)]" />
+        )}
+        {state.status === "done" && <Check size={12} className="text-[var(--accent-success)]" />}
+        {state.status === "error" && <AlertTriangle size={12} className="text-[var(--accent-danger)]" />}
+        {state.status === "rejected" && <X size={12} className="text-[var(--text-tertiary)]" />}
+      </div>
+
+      <div className="text-xs text-[var(--text-tertiary)]">Cible</div>
+      <a
+        href={url || "#"}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm text-[var(--accent-info)] hover:underline break-all block -mt-2"
+      >
+        {url || "(URL manquante)"}
+      </a>
+
+      <div>
+        <div className="text-xs text-[var(--text-tertiary)] mb-1.5">Type de candidature</div>
+        <div className="flex gap-2">
+          {(["stage", "alternance", "cdi"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              disabled={readOnly}
+              onClick={() => onEdit({ type: t })}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:opacity-50 ${
+                type === t
+                  ? "bg-[var(--accent-orange)] text-[var(--bg-primary)] border-[var(--accent-orange)]"
+                  : "bg-[var(--bg-primary)] text-[var(--text-secondary)] border-[var(--border-soft)] hover:bg-[var(--bg-hover)]"
+              }`}
+            >
+              {t === "stage" ? "Stage" : t === "alternance" ? "Alternance" : "CDI"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-xs text-[var(--text-tertiary)] mb-1.5">Mode</div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={() => onEdit({ dry_run: false })}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:opacity-50 ${
+              !dryRun
+                ? "bg-[var(--accent-success)] text-[var(--bg-primary)] border-[var(--accent-success)]"
+                : "bg-[var(--bg-primary)] text-[var(--text-secondary)] border-[var(--border-soft)] hover:bg-[var(--bg-hover)]"
+            }`}
+          >
+            Envoyer le mail
+          </button>
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={() => onEdit({ dry_run: true })}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:opacity-50 ${
+              dryRun
+                ? "bg-[var(--accent-info)] text-[var(--bg-primary)] border-[var(--accent-info)]"
+                : "bg-[var(--bg-primary)] text-[var(--text-secondary)] border-[var(--border-soft)] hover:bg-[var(--bg-hover)]"
+            }`}
+          >
+            Dry-run (preview sans envoi)
+          </button>
+        </div>
+      </div>
+
+      <details className="text-xs">
+        <summary className="cursor-pointer text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]">
+          Options avancées
+        </summary>
+        <div className="mt-2 space-y-1.5 pl-2">
+          <label className="flex items-center gap-2 text-[var(--text-secondary)]">
+            <input
+              type="checkbox"
+              disabled={readOnly}
+              checked={skipQuality}
+              onChange={(e) => onEdit({ skip_quality_score: e.target.checked })}
+              className="accent-[var(--accent-orange)]"
+            />
+            Ignorer le score qualité Gemini (cible déjà validée à la main)
+          </label>
+          <label className="flex items-center gap-2 text-[var(--text-secondary)]">
+            <input
+              type="checkbox"
+              disabled={readOnly}
+              checked={allowDup}
+              onChange={(e) => onEdit({ allow_duplicate: e.target.checked })}
+              className="accent-[var(--accent-orange)]"
+            />
+            Autoriser même si le domaine a déjà été contacté
+          </label>
+        </div>
+      </details>
+
+      {state.result && (
+        <pre className="text-xs whitespace-pre-wrap bg-[var(--bg-primary)] border border-[var(--border-soft)] rounded p-2 max-h-48 overflow-y-auto font-mono text-[var(--text-secondary)]">
+          {state.result}
+        </pre>
       )}
     </div>
   );

@@ -35,6 +35,13 @@ export interface ISettings {
     alternance: string;
     cdi: string;
   };
+  profile: {
+    // Texte libre injecté dans le prompt auto-reply quand un RH demande un créneau.
+    // Format conseillé : "mardi 11h-13h, jeudi 14h-17h" — l'IA reprend EXACTEMENT cette phrase.
+    availability: string;
+    // Lien Calendly/réservation perso. Si rempli, l'IA le préfère aux créneaux types.
+    calendlyUrl: string;
+  };
   created_at: Date;
   updated_at: Date;
 }
@@ -73,6 +80,10 @@ const settingsSchema = new Schema<ISettings>(
       stage: { type: String, default: "" },
       alternance: { type: String, default: "" },
       cdi: { type: String, default: "" },
+    },
+    profile: {
+      availability: { type: String, default: "mardi 11h-13h, jeudi 14h-17h" },
+      calendlyUrl: { type: String, default: "" },
     },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } }

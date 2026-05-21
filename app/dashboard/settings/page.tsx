@@ -60,6 +60,10 @@ interface AppSettings {
     alternance: string;
     cdi: string;
   };
+  profile: {
+    availability: string;
+    calendlyUrl: string;
+  };
   _defaults?: {
     letterTemplate: { stage: string; alternance: string; cdi: string };
     letterTemplatePlaceholder: string;
@@ -226,6 +230,11 @@ export default function SettingsPage() {
   const updateAutoApplyField = <K extends keyof AppSettings["automation"]>(key: K, value: AppSettings["automation"][K]) => {
     if (!settings) return;
     updateSettings({ automation: { ...settings.automation, [key]: value } });
+  };
+
+  const updateProfileField = <K extends keyof AppSettings["profile"]>(key: K, value: AppSettings["profile"][K]) => {
+    if (!settings) return;
+    updateSettings({ profile: { ...settings.profile, [key]: value } });
   };
 
   const handleProspectNow = async (dryRun = true) => {
@@ -608,6 +617,50 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+      </section>
+
+      {/* Mes dispos pour les auto-replies */}
+      <section className="space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Mail size={16} className="text-[var(--accent-info)]" />
+          Mes dispos (pour l&apos;auto-reply IA)
+        </h2>
+        <p className="text-xs text-[var(--text-tertiary)]">
+          Quand un RH demande un créneau pour échanger, l&apos;IA reprend cette phrase EXACTEMENT.
+          Si tu mets un lien Calendly, il sera prioritaire sur les créneaux types.
+        </p>
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 space-y-3">
+          <div>
+            <label className="text-xs text-[var(--text-tertiary)] block mb-1">
+              Créneaux types
+            </label>
+            <input
+              type="text"
+              value={settings.profile?.availability ?? ""}
+              onChange={(e) => updateProfileField("availability", e.target.value)}
+              placeholder="ex : mardi 11h-13h, jeudi 14h-17h"
+              className="w-full px-3 py-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+            />
+            <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
+              Texte libre, repris mot à mot par l&apos;IA. Vide → l&apos;IA dira que tu reviendras confirmer.
+            </p>
+          </div>
+          <div>
+            <label className="text-xs text-[var(--text-tertiary)] block mb-1">
+              Lien Calendly (optionnel)
+            </label>
+            <input
+              type="url"
+              value={settings.profile?.calendlyUrl ?? ""}
+              onChange={(e) => updateProfileField("calendlyUrl", e.target.value)}
+              placeholder="https://calendly.com/ton-handle/30min"
+              className="w-full px-3 py-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+            />
+            <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
+              Si rempli, l&apos;IA donnera CE lien au lieu des créneaux types.
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* Templates */}

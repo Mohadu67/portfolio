@@ -86,6 +86,14 @@ export async function PATCH(request: NextRequest) {
         }
       }
     }
+    if (body.profile && typeof body.profile === "object") {
+      if (typeof body.profile.availability === "string") {
+        s.profile.availability = body.profile.availability.trim();
+      }
+      if (typeof body.profile.calendlyUrl === "string") {
+        s.profile.calendlyUrl = body.profile.calendlyUrl.trim();
+      }
+    }
 
     await s.save();
     return NextResponse.json(s);

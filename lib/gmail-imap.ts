@@ -78,6 +78,8 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
   const autoReplyMinConfidence = typeof settingsDoc.gmail.autoReplyMinConfidence === "number"
     ? settingsDoc.gmail.autoReplyMinConfidence
     : 0.7;
+  const profileAvailability = settingsDoc.profile?.availability ?? "";
+  const profileCalendlyUrl = settingsDoc.profile?.calendlyUrl ?? "";
 
   // Build candidate emails map (lowercase email -> candidature)
   const candidatures = await Candidature.find({
@@ -283,6 +285,8 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
                 fromName: matched.fromName,
                 subject: matched.subject,
                 bodyText: matched.bodyText,
+                availability: profileAvailability,
+                calendlyUrl: profileCalendlyUrl,
               });
 
               const shouldSend = cls.confidence >= autoReplyMinConfidence;

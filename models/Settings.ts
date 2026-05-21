@@ -17,6 +17,10 @@ export interface ISettings {
     autoRelanceJ7Enabled: boolean;
     autoRelanceDays: number;
   };
+  search: {
+    defaultLocation: string;
+    defaultKeywords: string;
+  };
   created_at: Date;
   updated_at: Date;
 }
@@ -37,6 +41,10 @@ const settingsSchema = new Schema<ISettings>(
     automation: {
       autoRelanceJ7Enabled: { type: Boolean, default: true },
       autoRelanceDays: { type: Number, default: 7 },
+    },
+    search: {
+      defaultLocation: { type: String, default: "" },
+      defaultKeywords: { type: String, default: "" },
     },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } }

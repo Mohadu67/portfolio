@@ -34,6 +34,22 @@ export async function PATCH(request: NextRequest) {
         s.gmail.autoArchiveResponses = body.gmail.autoArchiveResponses;
       }
     }
+    if (body.automation && typeof body.automation === "object") {
+      if (typeof body.automation.autoRelanceJ7Enabled === "boolean") {
+        s.automation.autoRelanceJ7Enabled = body.automation.autoRelanceJ7Enabled;
+      }
+      if (typeof body.automation.autoRelanceDays === "number" && body.automation.autoRelanceDays > 0) {
+        s.automation.autoRelanceDays = body.automation.autoRelanceDays;
+      }
+    }
+    if (body.search && typeof body.search === "object") {
+      if (typeof body.search.defaultLocation === "string") {
+        s.search.defaultLocation = body.search.defaultLocation.trim();
+      }
+      if (typeof body.search.defaultKeywords === "string") {
+        s.search.defaultKeywords = body.search.defaultKeywords.trim();
+      }
+    }
 
     await s.save();
     return NextResponse.json(s);

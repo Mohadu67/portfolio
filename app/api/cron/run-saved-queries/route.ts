@@ -4,6 +4,7 @@ import { Candidature } from "@/models/Candidature";
 import { SavedQuery, computeNextRunAt } from "@/models/SavedQuery";
 import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed } from "@/lib/scraper";
 import { recordCronRun } from "@/lib/cron-log";
+import { normalizeUrl } from "@/lib/url-normalize";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -47,7 +48,16 @@ export async function POST(request: NextRequest) {
           searchFranceTravail(query.keywords, query.location, 10),
           searchIndeed(query.keywords, query.location, 10),
         ]);
-        const all = [...j, ...a, ...f, ...i].filter((r) => r.url && r.url.trim() !== "");
+        const raw = [...j, ...a, ...f, ...i].filter((r) => r.url && r.url.trim() !== "");
+
+        // Dédup intra-results par URL normalisée (collapse cross-source).
+        const seenNorm = new Set<string>();
+        const all = raw.filter((r) => {
+          const norm = normalizeUrl(r.url);
+          if (!norm || seenNorm.has(norm)) return false;
+          seenNorm.add(norm);
+          return true;
+        });
 
         const urls = all.map((r) => r.url);
         const existing = await Candidature.find(

@@ -24,13 +24,16 @@ import type { ICandidature } from "@/models/Candidature";
 
 // ─── Types ───────────────────────────────────────────────
 
+type Platform = "JSearch" | "Adzuna" | "France Travail" | "Indeed";
+
 interface OffreResult {
   entreprise: string;
   poste: string;
   localisation: string;
   description: string;
   url: string;
-  plateforme: "JSearch" | "Adzuna" | "France Travail" | "Indeed";
+  plateforme: Platform;
+  sources?: Platform[];
   already_saved: boolean;
   candidature?: ICandidature;
 }
@@ -68,8 +71,6 @@ const FREQUENCY_LABEL: Record<QueryFrequency, string> = {
   biweekly: "Bi-hebdo",
 };
 
-type Platform = OffreResult["plateforme"];
-
 const PLATFORM_STYLES: Record<Platform, { bg: string; text: string; label: string }> = {
   JSearch:          { bg: "bg-[var(--accent-blue)]/15",    text: "text-[var(--accent-blue)]",    label: "JSearch" },
   Adzuna:           { bg: "bg-[var(--accent-orange)]/15",  text: "text-[var(--accent-orange)]",  label: "Adzuna" },
@@ -79,11 +80,17 @@ const PLATFORM_STYLES: Record<Platform, { bg: string; text: string; label: strin
 
 // ─── Composants locaux ───────────────────────────────────
 
-function PlatformBadge({ platform }: { platform: Platform }) {
+function PlatformBadge({ platform, sources }: { platform: Platform; sources?: Platform[] }) {
   const s = PLATFORM_STYLES[platform];
+  const extraCount = sources && sources.length > 1 ? sources.length - 1 : 0;
+  const label = extraCount > 0 ? `${s.label} +${extraCount}` : s.label;
+  const title = sources && sources.length > 1 ? `Trouvée sur : ${sources.join(", ")}` : undefined;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${s.bg} ${s.text}`}>
-      {s.label}
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${s.bg} ${s.text}`}
+      title={title}
+    >
+      {label}
     </span>
   );
 }
@@ -139,6 +146,24 @@ export default function RecherchePage() {
       }
     } catch {}
   }
+
+  // Pré-remplit keywords/location depuis Settings.search au 1er load.
+  useEffect(() => {
+    if (!apiKey) return;
+    let aborted = false;
+    fetch("/api/settings", { headers: { "x-api-key": apiKey } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (aborted || !s?.search) return;
+        if (!keywords && s.search.defaultKeywords) setKeywords(s.search.defaultKeywords);
+        if (!location && s.search.defaultLocation) setLocation(s.search.defaultLocation);
+      })
+      .catch(() => {});
+    return () => {
+      aborted = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKey]);
 
   // Load saved companies from DB
   useEffect(() => {
@@ -814,7 +839,7 @@ function OffreCard({
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <PlatformBadge platform={offre.plateforme} />
+        <PlatformBadge platform={offre.plateforme} sources={offre.sources} />
         {offre.already_saved && (
           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--accent-success)] bg-[var(--accent-success)]/10 px-2 py-0.5 rounded-full">
             <Check size={10} /> Enregistrée

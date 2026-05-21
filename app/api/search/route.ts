@@ -1,8 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature } from "@/models/Candidature";
-import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed } from "@/lib/scraper";
+import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed, type SearchResult } from "@/lib/scraper";
 import { verifyAuth } from "@/lib/auth";
+import { normalizeUrl } from "@/lib/url-normalize";
+
+/**
+ * Collapse les doublons cross-source : si la même offre revient depuis 2 sources
+ * (URL normalisée identique), on garde la 1ère occurrence et on accumule les
+ * plateformes dans un champ `sources`.
+ */
+function collapseBySources(results: SearchResult[]): Array<SearchResult & { sources: SearchResult["plateforme"][] }> {
+  const byNorm = new Map<string, SearchResult & { sources: SearchResult["plateforme"][] }>();
+  for (const r of results) {
+    const norm = normalizeUrl(r.url);
+    if (!norm) continue;
+    const existing = byNorm.get(norm);
+    if (existing) {
+      if (!existing.sources.includes(r.plateforme)) existing.sources.push(r.plateforme);
+    } else {
+      byNorm.set(norm, { ...r, sources: [r.plateforme] });
+    }
+  }
+  return [...byNorm.values()];
+}
 
 export async function POST(request: NextRequest) {
   if (!verifyAuth(request)) {
@@ -31,12 +52,14 @@ export async function POST(request: NextRequest) {
         searchIndeed(keywords, location, nb_results),
       ]);
 
-    const allResults = [
+    const rawResults = [
       ...jsearchResults,
       ...adzunaResults,
       ...franceTravailResults,
       ...indeedResults,
     ].filter((r) => r.url && r.url.trim() !== "");
+
+    const allResults = collapseBySources(rawResults);
 
     // Preview mode: return results with already_saved flag + joined candidature, don't insert
     if (preview) {

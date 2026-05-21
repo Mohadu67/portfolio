@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
+import { GoogleGenerativeAI, type Content, type Part } from "@google/generative-ai";
 import { verifyAuth } from "@/lib/auth";
 import { buildContextLite } from "@/lib/ai/context";
-import { toolsForOpenAI, getTool } from "@/lib/ai/tools";
+import { toolsForGemini, getTool } from "@/lib/ai/tools";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 const MODEL = process.env.CHAT_MODEL ?? "gemini-2.5-flash";
 
 interface ToolCallSnapshot {
@@ -28,11 +28,11 @@ interface ClientMessage {
   tool_results?: ToolResultPayload[];
 }
 
-type OpenAIMessage =
-  | { role: "system"; content: string }
-  | { role: "user"; content: string }
-  | { role: "assistant"; content: string | null; tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> }
-  | { role: "tool"; tool_call_id: string; content: string };
+let _genAI: GoogleGenerativeAI | null = null;
+function getGenAI(apiKey: string): GoogleGenerativeAI {
+  if (!_genAI) _genAI = new GoogleGenerativeAI(apiKey);
+  return _genAI;
+}
 
 export async function POST(request: NextRequest) {
   if (!verifyAuth(request)) {
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "GEMINI_API_KEY (Google AI Studio) non configuré côté serveur" }),
+      JSON.stringify({ error: "GEMINI_API_KEY non configuré côté serveur" }),
       { status: 500 }
     );
   }
@@ -78,45 +78,68 @@ Tools disponibles (n'utilise un tool QUE si l'utilisateur mentionne explicitemen
 
 Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question générale ou un message qui ne cite pas explicitement une donnée précise. Pour une question vague, demande ce que l'utilisateur veut savoir avant d'appeler quoi que ce soit. Appelle le minimum de tools nécessaires.`;
 
-  // Convert client messages to OpenAI format (tool_calls/tool_results expansion)
-  const openaiMessages: OpenAIMessage[] = [{ role: "system", content: systemPrompt }];
+  // Build tool_call id → name lookup. Gemini's functionResponse needs the function name,
+  // not the call id used by the OpenAI shape we receive from the client.
+  const idToName = new Map<string, string>();
   for (const m of messages) {
-    if (m.role === "user" && m.tool_results && m.tool_results.length > 0) {
-      // Each tool_result becomes a separate "tool" role message
-      for (const tr of m.tool_results) {
-        openaiMessages.push({
-          role: "tool",
-          tool_call_id: tr.tool_use_id,
-          content: tr.is_error ? `Erreur: ${tr.content}` : tr.content,
-        });
-      }
-    } else if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
-      openaiMessages.push({
-        role: "assistant",
-        content: m.content || null,
-        tool_calls: m.tool_calls.map((tc) => ({
-          id: tc.id,
-          type: "function" as const,
-          function: { name: tc.name, arguments: JSON.stringify(tc.input) },
-        })),
-      });
-    } else if (m.role === "user") {
-      openaiMessages.push({ role: "user", content: m.content });
-    } else if (m.role === "assistant" && m.content) {
-      openaiMessages.push({ role: "assistant", content: m.content });
+    if (m.role === "assistant" && m.tool_calls) {
+      for (const tc of m.tool_calls) idToName.set(tc.id, tc.name);
     }
   }
 
-  // Sliding window: keep system prompt + last 8 messages to keep payload reasonable.
-  // Tool results can be large (50+ items) and Gemini's 1M-token window is overkill.
-  const [systemMsg, ...rest] = openaiMessages;
-  const windowed: OpenAIMessage[] = [systemMsg, ...rest.slice(-8)];
+  // Convert client messages → Gemini Content[]
+  const contents: Content[] = [];
+  for (const m of messages) {
+    if (m.role === "user" && m.tool_results && m.tool_results.length > 0) {
+      const parts: Part[] = m.tool_results.map((tr) => {
+        const name = idToName.get(tr.tool_use_id) ?? "unknown_tool";
+        let response: Record<string, unknown>;
+        if (tr.is_error) {
+          response = { error: tr.content };
+        } else {
+          try {
+            const parsed = JSON.parse(tr.content);
+            response = typeof parsed === "object" && parsed !== null
+              ? (parsed as Record<string, unknown>)
+              : { result: parsed };
+          } catch {
+            response = { result: tr.content };
+          }
+        }
+        return { functionResponse: { name, response } };
+      });
+      contents.push({ role: "user", parts });
+    } else if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+      const parts: Part[] = [];
+      if (m.content) parts.push({ text: m.content });
+      for (const tc of m.tool_calls) {
+        parts.push({ functionCall: { name: tc.name, args: tc.input } });
+      }
+      contents.push({ role: "model", parts });
+    } else if (m.role === "user") {
+      contents.push({ role: "user", parts: [{ text: m.content }] });
+    } else if (m.role === "assistant" && m.content) {
+      contents.push({ role: "model", parts: [{ text: m.content }] });
+    }
+  }
 
-  // Validate last message can drive a response
-  const lastUseful = windowed[windowed.length - 1];
-  if (!lastUseful || (lastUseful.role !== "user" && lastUseful.role !== "tool")) {
+  // Sliding window: keep last 8 turns. Strip leading orphan functionResponse turns
+  // (Gemini rejects a user turn with functionResponse that isn't preceded by a matching model functionCall).
+  let windowed = contents.slice(-8);
+  while (windowed.length > 0) {
+    const first = windowed[0];
+    const hasFuncResp = first.parts?.some((p) => "functionResponse" in p);
+    if (first.role === "user" && hasFuncResp) {
+      windowed = windowed.slice(1);
+    } else {
+      break;
+    }
+  }
+
+  const last = windowed[windowed.length - 1];
+  if (!last || last.role !== "user") {
     return new Response(
-      JSON.stringify({ error: "Last message must be user or tool" }),
+      JSON.stringify({ error: "Last message must be user or tool response" }),
       { status: 400 }
     );
   }
@@ -129,110 +152,48 @@ Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question gé
       };
 
       try {
-        const upstream = await fetch(GEMINI_URL, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: MODEL,
-            messages: windowed,
-            tools: toolsForOpenAI(),
-            tool_choice: "auto",
-            stream: true,
-            temperature: 0.6,
-            max_tokens: 2048,
-          }),
+        const model = getGenAI(apiKey).getGenerativeModel({
+          model: MODEL,
+          systemInstruction: systemPrompt,
+          tools: toolsForGemini(),
+          generationConfig: { temperature: 0.6, maxOutputTokens: 2048 },
         });
 
-        if (!upstream.ok || !upstream.body) {
-          const errText = await upstream.text();
-          send("error", { error: `Gemini API ${upstream.status}: ${errText.slice(0, 300)}` });
-          controller.close();
-          return;
-        }
+        const result = await model.generateContentStream({ contents: windowed });
 
-        const reader = upstream.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        // Tool call accumulator (Gemini streams tool_calls progressively, OpenAI-compatible format)
-        const toolCallsAcc: Map<number, { id: string; name: string; argsBuffer: string }> = new Map();
+        const toolCallsAcc: Array<{ name: string; args: Record<string, unknown> }> = [];
         let finishReason: string | null = null;
 
-         
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+        for await (const chunk of result.stream) {
+          try {
+            const text = chunk.text();
+            if (text) send("delta", { text });
+          } catch {
+            // chunk.text() throws when the chunk contains no text part (e.g., pure functionCall)
+          }
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data: ")) continue;
-            const payload = trimmed.slice(6);
-            if (payload === "[DONE]") continue;
-
-            let chunk: {
-              choices?: Array<{
-                delta?: {
-                  content?: string;
-                  tool_calls?: Array<{
-                    index: number;
-                    id?: string;
-                    function?: { name?: string; arguments?: string };
-                  }>;
-                };
-                finish_reason?: string;
-              }>;
-            };
-            try {
-              chunk = JSON.parse(payload);
-            } catch {
-              continue;
-            }
-
-            const choice = chunk.choices?.[0];
-            if (!choice) continue;
-            const delta = choice.delta;
-
-            if (delta?.content) {
-              send("delta", { text: delta.content });
-            }
-
-            if (delta?.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index;
-                const cur = toolCallsAcc.get(idx) ?? { id: "", name: "", argsBuffer: "" };
-                if (tc.id) cur.id = tc.id;
-                if (tc.function?.name) cur.name = tc.function.name;
-                if (tc.function?.arguments) cur.argsBuffer += tc.function.arguments;
-                toolCallsAcc.set(idx, cur);
-              }
-            }
-
-            if (choice.finish_reason) {
-              finishReason = choice.finish_reason;
+          const fcs = chunk.functionCalls?.();
+          if (fcs && fcs.length > 0) {
+            for (const fc of fcs) {
+              toolCallsAcc.push({
+                name: fc.name,
+                args: (fc.args ?? {}) as Record<string, unknown>,
+              });
             }
           }
+
+          const fr = chunk.candidates?.[0]?.finishReason;
+          if (fr) finishReason = fr;
         }
 
-        // Emit accumulated tool calls if any
-        if (toolCallsAcc.size > 0) {
-          const tool_calls = Array.from(toolCallsAcc.values()).map((tc) => {
-            let input: Record<string, unknown> = {};
-            try {
-              input = tc.argsBuffer ? JSON.parse(tc.argsBuffer) : {};
-            } catch {
-              input = { _rawArguments: tc.argsBuffer };
-            }
+        if (toolCallsAcc.length > 0) {
+          const ts = Date.now();
+          const tool_calls = toolCallsAcc.map((tc, i) => {
             const def = getTool(tc.name);
             return {
-              id: tc.id,
+              id: `call_${ts}_${i}`,
               name: tc.name,
-              input,
+              input: tc.args,
               requires_confirmation: def?.requiresConfirmation ?? true,
             };
           });

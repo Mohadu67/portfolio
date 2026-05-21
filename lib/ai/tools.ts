@@ -204,14 +204,23 @@ export const TOOLS: ToolDefinition[] = [
   },
 ];
 
+import type { Tool } from "@google/generative-ai";
+
 /**
- * Convert tool definitions to OpenAI-compatible format (used by Groq Cloud).
+ * Convert tool definitions to Gemini-native format (functionDeclarations).
+ * Tools without parameters must omit `parameters` entirely — Gemini rejects empty `properties: {}`.
+ * Cast at boundary: SDK types use `SchemaType` enum but accept the equivalent string literals at runtime.
  */
-export function toolsForOpenAI() {
-  return TOOLS.map(({ name, description, input_schema }) => ({
-    type: "function" as const,
-    function: { name, description, parameters: input_schema },
-  }));
+export function toolsForGemini(): Tool[] {
+  const functionDeclarations = TOOLS.map(({ name, description, input_schema }) => {
+    const hasProps = input_schema.properties && Object.keys(input_schema.properties).length > 0;
+    return {
+      name,
+      description,
+      ...(hasProps ? { parameters: input_schema } : {}),
+    };
+  });
+  return [{ functionDeclarations }] as unknown as Tool[];
 }
 
 export function getTool(name: string): ToolDefinition | undefined {

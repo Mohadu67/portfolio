@@ -20,7 +20,9 @@ import {
 import { toast } from "sonner";
 import { useApiKey } from "@/lib/contexts/AuthContext";
 import { GenerateLetterModal } from "@/components/dashboard/GenerateLetterModal";
+import { ScrapedCompanyCard } from "@/components/dashboard/ScrapedCompanyCard";
 import type { ICandidature } from "@/models/Candidature";
+import type { ScrapedCompanyData } from "@/lib/web-scraper";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -122,6 +124,8 @@ export default function RecherchePage() {
   const [companyResults, setCompanyResults] = useState<CompanyResult[]>([]);
   const [savedCompanies, setSavedCompanies] = useState<SavedCompany[]>([]);
   const [savingUrls, setSavingUrls] = useState<Set<string>>(new Set());
+  const [scrapedResults, setScrapedResults] = useState<{ url: string; data: ScrapedCompanyData }[]>([]);
+  const [scrapingUrl, setScrapingUrl] = useState<string | null>(null);
 
   // ── Letter modal state ──
   const [letterTarget, setLetterTarget] = useState<ICandidature | null>(null);
@@ -385,21 +389,21 @@ export default function RecherchePage() {
     }
   }
 
-  async function applyToCompany(result: CompanyResult) {
+  async function applyToCompanyByUrl(name: string, url: string, snippet?: string) {
     if (!apiKey) return;
-    setSavingUrls((prev) => new Set(prev).add(result.url));
+    setSavingUrls((prev) => new Set(prev).add(url));
     try {
       const res = await fetch("/api/candidatures", {
         method: "POST",
         headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
-          entreprise: result.name,
+          entreprise: name,
           poste: "Candidature spontanée",
           plateforme: "Web",
           localisation: "",
-          url: result.url,
-          description: result.snippet ?? "",
-          aboutText: result.snippet ?? "",
+          url,
+          description: snippet ?? "",
+          aboutText: snippet ?? "",
           statut: "identifiée",
         }),
       });
@@ -410,7 +414,7 @@ export default function RecherchePage() {
       const candidature: ICandidature | undefined =
         res.status === 409 ? data.candidature : data;
       if (res.status !== 409) {
-        toast.success(`Candidature créée pour ${result.name}`);
+        toast.success(`Candidature créée pour ${name}`);
       }
       if (candidature) setLetterTarget(candidature);
     } catch (err) {
@@ -418,9 +422,36 @@ export default function RecherchePage() {
     } finally {
       setSavingUrls((prev) => {
         const next = new Set(prev);
-        next.delete(result.url);
+        next.delete(url);
         return next;
       });
+    }
+  }
+
+  async function handleScrape(url: string) {
+    if (!apiKey) return;
+    if (scrapedResults.some((r) => r.url === url)) {
+      toast.info("Ce site a déjà été analysé");
+      return;
+    }
+    setScrapingUrl(url);
+    try {
+      const res = await fetch("/api/scrape", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.details || err.error || "Erreur de scraping");
+      }
+      const data: ScrapedCompanyData = await res.json();
+      setScrapedResults((prev) => [{ url, data }, ...prev]);
+      toast.success(`Site analysé — ${data.emails.length} email(s) trouvé(s)`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur lors du scraping");
+    } finally {
+      setScrapingUrl(null);
     }
   }
 
@@ -767,28 +798,69 @@ export default function RecherchePage() {
                 Entreprises suivies ({savedCompanies.length})
               </p>
               <div className="flex flex-wrap gap-2">
-                {savedCompanies.map((c) => (
-                  <div
-                    key={c._id}
-                    className="inline-flex items-center gap-1.5 pl-3 pr-1 py-1.5 rounded-full border border-[var(--border-soft)] bg-[var(--bg-primary)] text-xs text-[var(--text-secondary)]"
-                  >
-                    <a
-                      href={c.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-[var(--accent-orange)] transition-colors flex items-center gap-1"
+                {savedCompanies.map((c) => {
+                  const analyzing = scrapingUrl === c.url;
+                  const applying = savingUrls.has(c.url);
+                  return (
+                    <div
+                      key={c._id}
+                      className="inline-flex items-center gap-1 pl-3 pr-1 py-1 rounded-full border border-[var(--border-soft)] bg-[var(--bg-primary)] text-xs text-[var(--text-secondary)]"
                     >
-                      {c.companyName} <ExternalLink size={9} />
-                    </a>
-                    <button
-                      onClick={() => deleteCompany(c._id)}
-                      className="p-0.5 rounded-full hover:text-[var(--accent-danger)] transition-colors"
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
-                ))}
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-[var(--accent-orange)] transition-colors flex items-center gap-1 mr-1"
+                      >
+                        {c.companyName} <ExternalLink size={9} />
+                      </a>
+                      <button
+                        onClick={() => handleScrape(c.url)}
+                        disabled={analyzing}
+                        className="p-1 rounded-full text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/15 disabled:opacity-50 transition-colors"
+                        title="Analyser le site (emails, à propos)"
+                      >
+                        {analyzing ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
+                      </button>
+                      <button
+                        onClick={() => applyToCompanyByUrl(c.companyName, c.url)}
+                        disabled={applying}
+                        className="p-1 rounded-full text-[var(--accent-orange)] hover:bg-[var(--accent-orange)]/15 disabled:opacity-50 transition-colors"
+                        title="Créer une candidature spontanée + rédiger la lettre"
+                      >
+                        {applying ? <Loader2 size={11} className="animate-spin" /> : <PenLine size={11} />}
+                      </button>
+                      <button
+                        onClick={() => deleteCompany(c._id)}
+                        className="p-1 rounded-full hover:text-[var(--accent-danger)] transition-colors"
+                        title="Retirer du suivi"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
+            </div>
+          )}
+
+          {/* Scraped previews */}
+          {scrapedResults.length > 0 && (
+            <div className="space-y-4">
+              <p className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+                Sites analysés ({scrapedResults.length})
+              </p>
+              {scrapedResults.map((r) => (
+                <ScrapedCompanyCard
+                  key={r.url}
+                  data={r.data}
+                  url={r.url}
+                  apiKey={apiKey ?? ""}
+                  onCandidatureCreated={() => {
+                    /* déjà ouvert dans la modale lettre directement par ScrapedCompanyCard */
+                  }}
+                />
+              ))}
             </div>
           )}
 
@@ -824,7 +896,9 @@ export default function RecherchePage() {
                   alreadySaved={savedCompanyUrls.has(r.url)}
                   saving={savingUrls.has(r.url)}
                   onSave={() => saveCompany(r)}
-                  onApply={() => applyToCompany(r)}
+                  onApply={() => applyToCompanyByUrl(r.name, r.url, r.snippet)}
+                  onAnalyze={() => handleScrape(r.url)}
+                  analyzing={scrapingUrl === r.url}
                 />
               ))}
             </div>
@@ -947,12 +1021,16 @@ function CompanyCard({
   saving,
   onSave,
   onApply,
+  onAnalyze,
+  analyzing,
 }: {
   result: CompanyResult;
   alreadySaved: boolean;
   saving: boolean;
   onSave: () => void;
   onApply: () => void;
+  onAnalyze: () => void;
+  analyzing: boolean;
 }) {
   return (
     <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 flex items-start gap-4">
@@ -975,6 +1053,15 @@ function CompanyCard({
         )}
       </div>
       <div className="shrink-0 flex flex-col sm:flex-row gap-2">
+        <button
+          onClick={onAnalyze}
+          disabled={analyzing}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--accent-blue)]/40 bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] text-xs font-semibold disabled:opacity-50 hover:bg-[var(--accent-blue)]/20 transition-colors"
+          title="Scraper le site pour extraire emails + à propos"
+        >
+          {analyzing ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
+          Analyser
+        </button>
         <button
           onClick={onApply}
           disabled={saving}

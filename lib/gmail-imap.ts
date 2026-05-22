@@ -7,6 +7,11 @@ import { CVSection } from "@/models/CVSection";
 import { sendNotification } from "./notifications";
 import { classifyAndReply } from "./gemini";
 import { replyInThread } from "./email";
+import {
+  buildCandidatureEmailIndex,
+  findCandidatureForSender,
+  normalizeEmail as normalizeEmailShared,
+} from "./gmail-imap-matching";
 
 const ARCHIVE_LABEL = "Cockpit/Réponses candidatures";
 
@@ -22,9 +27,7 @@ interface MatchedEmail {
   references?: string;
 }
 
-function normalizeEmail(s: string | undefined | null): string {
-  return (s ?? "").trim().toLowerCase();
-}
+const normalizeEmail = normalizeEmailShared;
 
 function snippetFromBody(text: string | undefined | null): string {
   if (!text) return "";
@@ -94,16 +97,11 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
     email: { $ne: "" },
   }).lean<ICandidature[]>();
 
-  const emailToCandidature = new Map<string, ICandidature>();
-  for (const c of candidatures) {
-    const e = normalizeEmail(c.email);
-    if (e) {
-      // Latest wins (already sorted by Mongo default)
-      if (!emailToCandidature.has(e)) emailToCandidature.set(e, c);
-    }
-  }
+  // Index email exact + index domaine pour le fallback "collègue répond depuis l'autre alias".
+  // Cf. lib/gmail-imap-matching.ts pour la logique testée.
+  const candidatureIndex = buildCandidatureEmailIndex(candidatures);
 
-  if (emailToCandidature.size === 0) {
+  if (candidatureIndex.emailToCandidature.size === 0) {
     result.ok = true;
     return result;
   }
@@ -121,11 +119,8 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
     const lock = await client.getMailboxLock("INBOX");
 
     try {
-      // Search unseen messages from any of our candidature emails
-      const fromAddresses = Array.from(emailToCandidature.keys());
-
-      // IMAP search "FROM" can only take one address at a time efficiently — combine via OR
-      // Simpler: fetch all unseen messages from last 30 days and filter in code
+      // Search unseen messages from last 30 days then filter en code via l'index candidatures.
+      // (Le filtrage IMAP par FROM ne supporte qu'une seule adresse à la fois — on filtre côté code.)
       const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const searchResult = await client.search({ seen: false, since });
       const uids: number[] = Array.isArray(searchResult) ? (searchResult as number[]) : [];
@@ -145,9 +140,11 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
 
           const fromAddr = msg.envelope.from?.[0];
           const fromEmail = normalizeEmail(fromAddr?.address);
-          if (!fromEmail || !emailToCandidature.has(fromEmail)) continue;
+          if (!fromEmail) continue;
 
-          const candidature = emailToCandidature.get(fromEmail)!;
+          // Match exact email d'abord, fallback domaine si 1 seule candidature sur le domaine.
+          const candidature = findCandidatureForSender(fromEmail, candidatureIndex);
+          if (!candidature) continue;
 
           // Parse message for snippet + full body (needed for auto-reply classification)
           let snippet = "";

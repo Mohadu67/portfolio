@@ -56,7 +56,7 @@ const BLACKLIST_LOCAL_PREFIXES = [
   "hi",
 ];
 
-const FREE_EMAIL_DOMAINS = new Set([
+export const FREE_EMAIL_DOMAINS = new Set([
   "gmail.com",
   "yahoo.com",
   "yahoo.fr",

@@ -49,6 +49,35 @@ async function callGemini(prompt: string, systemPrompt?: string): Promise<string
   return callGeminiNative(prompt, systemPrompt);
 }
 
+// Extrait un objet JSON d'une réponse Gemini, même si elle est wrappée dans des fences
+// markdown (```json ... ```) ou précédée d'un préambule (« Here is the JSON requested: »).
+// Throw si rien d'exploitable.
+function extractJson<T = unknown>(raw: string): T {
+  const trimmed = raw.trim();
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch {
+    // pass
+  }
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence?.[1]) {
+    try {
+      return JSON.parse(fence[1].trim()) as T;
+    } catch {
+      // pass
+    }
+  }
+  const braced = trimmed.match(/\{[\s\S]*\}/);
+  if (braced) {
+    try {
+      return JSON.parse(braced[0]) as T;
+    } catch {
+      // pass
+    }
+  }
+  throw new Error(`non-JSON response: ${trimmed.slice(0, 200)}`);
+}
+
 const PROFIL_CONTEXT = `
 **Profil du candidat — Mohammed Hamiani:**
 - Formation actuelle : Bachelier CDA (Concepteur Développeur d'Application) — formation intensive fullstack
@@ -359,12 +388,9 @@ export async function classifyAndReply(input: ClassifyAndReplyInput): Promise<Cl
 
   let parsed: { category?: string; confidence?: number; reply?: string };
   try {
-    parsed = JSON.parse(raw);
-  } catch {
-    // Try to extract JSON from a wrapped response
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error(`Gemini returned non-JSON response: ${raw.slice(0, 200)}`);
-    parsed = JSON.parse(match[0]);
+    parsed = extractJson<typeof parsed>(raw);
+  } catch (err) {
+    throw new Error(`Gemini classifyAndReply ${(err as Error).message}`);
   }
 
   const validCategories: AutoReplyCategory[] = ["refus", "entretien", "demande_infos", "smalltalk", "autre"];
@@ -432,16 +458,14 @@ ${safeAbout || "(aucun texte disponible)"}
 
   const raw = await callGeminiNative(userPrompt, systemPrompt, {
     temperature: 0.3,
-    maxOutputTokens: 256,
+    maxOutputTokens: 1024,
     jsonMode: true,
   });
   let parsed: { score?: number; isTechRelevant?: boolean; reason?: string };
   try {
-    parsed = JSON.parse(raw);
-  } catch {
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error(`Gemini scoreCompanyFit non-JSON: ${raw.slice(0, 200)}`);
-    parsed = JSON.parse(m[0]);
+    parsed = extractJson<typeof parsed>(raw);
+  } catch (err) {
+    throw new Error(`Gemini scoreCompanyFit ${(err as Error).message}`);
   }
 
   const score = typeof parsed.score === "number" ? Math.max(0, Math.min(1, parsed.score)) : 0;
@@ -501,16 +525,14 @@ ${safeDesc}
 
   const raw = await callGeminiNative(userPrompt, systemPrompt, {
     temperature: 0.3,
-    maxOutputTokens: 256,
+    maxOutputTokens: 1024,
     jsonMode: true,
   });
   let parsed: { match?: boolean; score?: number; reason?: string; jobType?: string };
   try {
-    parsed = JSON.parse(raw);
-  } catch {
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error(`Gemini matchJobOffer non-JSON: ${raw.slice(0, 200)}`);
-    parsed = JSON.parse(m[0]);
+    parsed = extractJson<typeof parsed>(raw);
+  } catch (err) {
+    throw new Error(`Gemini matchJobOffer ${(err as Error).message}`);
   }
 
   const score = typeof parsed.score === "number" ? Math.max(0, Math.min(1, parsed.score)) : 0;

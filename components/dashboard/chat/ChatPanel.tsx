@@ -1,60 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Sparkles, Trash2, Loader2, Wrench, Check, X, AlertTriangle } from "lucide-react";
+import { Loader2, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-interface ToolCall {
-  id: string;
-  name: string;
-  input: Record<string, unknown>;
-  requires_confirmation?: boolean;
-}
-
-interface ToolResult {
-  tool_use_id: string;
-  content: string;
-  is_error?: boolean;
-}
-
-interface ToolCallState {
-  call: ToolCall;
-  // Input édité par l'utilisateur dans la card avant approbation (override de call.input à l'exec)
-  editedInput?: Record<string, unknown>;
-  status: "pending" | "approved" | "executing" | "done" | "rejected" | "error";
-  result?: string;
-}
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  tool_calls?: ToolCall[];
-  tool_results?: ToolResult[];
-}
-
-const STORAGE_KEY = "chat-messages-v2";
-
-const SUGGESTIONS = [
-  "Que dois-je faire aujourd'hui ?",
-  "Quelles candidatures je devrais relancer cette semaine ?",
-  "Programme une relance polie pour ma candidature la plus ancienne sans réponse.",
-  "Marque la candidature X en 'entretien'.",
-  "Donne-moi un récap de la semaine.",
-];
-
-const TOOL_LABELS: Record<string, string> = {
-  schedule_relance: "📅 Programmer une relance",
-  cancel_relance: "🚫 Annuler une relance",
-  update_candidature_status: "🔖 Changer le statut",
-  update_candidature_notes: "📝 Mettre à jour les notes",
-  send_relance_now: "✉️ Envoyer une relance immédiatement",
-  list_candidatures: "🔍 Lister les candidatures",
-  get_candidature: "📄 Lire une candidature",
-  list_relances_due: "📋 Lister les relances dues",
-  list_cv_sections: "📚 Lister les sections du CV",
-  get_cv_section: "📖 Lire une section du CV",
-  apply_to_company: "🚀 Envoyer une candidature à une entreprise",
-};
+import { EmptyState } from "./EmptyState";
+import { MessageList } from "./MessageList";
+import { PendingToolsPanel } from "./PendingToolsPanel";
+import { STORAGE_KEY } from "./types";
+import type { Message, ToolCall, ToolCallState, ToolResult } from "./types";
 
 interface ChatPanelProps {
   apiKey: string;
@@ -66,7 +20,7 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
     if (typeof window === "undefined") return [];
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      return raw ? (JSON.parse(raw) as Message[]) : [];
     } catch {
       return [];
     }
@@ -77,12 +31,25 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Persist + auto-scroll to bottom on new message
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
     });
-  }, [messages]);
+  }, [messages, pendingTools]);
+
+  // Auto-resize textarea (mobile : max-h-40 = 160px, desktop : max-h-48 = 192px)
+  useEffect(() => {
+    const ta = inputRef.current;
+    if (!ta) return;
+    ta.style.height = "0px";
+    const max = window.innerWidth >= 640 ? 192 : 160;
+    ta.style.height = `${Math.min(Math.max(ta.scrollHeight, 44), max)}px`;
+  }, [input]);
 
   const streamFromMessages = async (msgs: Message[]) => {
     setStreaming(true);
@@ -93,7 +60,6 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
     // Anthropic requires the last message to be a user message.
     const sendable = msgs.filter((m, i) => {
       if (i !== msgs.length - 1) return true;
-      // last message — keep only if user, or assistant with actual content/tool_calls
       if (m.role === "user") return true;
       return Boolean(m.content || (m.tool_calls && m.tool_calls.length > 0));
     });
@@ -120,7 +86,6 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
       const decoder = new TextDecoder();
       let buffer = "";
 
-       
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -146,7 +111,7 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
               return copy;
             });
           } else if (eventName === "tool_calls") {
-            receivedToolCalls = data.tool_calls ?? [];
+            receivedToolCalls = (data.tool_calls ?? []) as ToolCall[];
           } else if (eventName === "error") {
             throw new Error(data.error ?? "Erreur côté IA");
           }
@@ -155,12 +120,12 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
 
       // Attach tool_calls to the assistant message if any
       if (receivedToolCalls.length > 0) {
-        // Build the updated messages array locally (don't rely on setMessages updater side-effect
-        // which can be deferred in React 18 concurrent mode, leaving snapshot as []).
+        // Build the updated messages array locally (don't rely on setMessages updater
+        // side-effect which can be deferred in React 18 concurrent mode).
         const msgsWithToolCalls = msgs.map((m, i) =>
           i === msgs.length - 1
             ? { ...m, content: acc, tool_calls: receivedToolCalls }
-            : m
+            : m,
         );
         setMessages(msgsWithToolCalls);
 
@@ -179,7 +144,11 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
       toast.error(msg);
       setMessages((prev) => {
         const copy = [...prev];
-        if (copy[copy.length - 1]?.role === "assistant" && !copy[copy.length - 1].content && !receivedToolCalls.length) {
+        if (
+          copy[copy.length - 1]?.role === "assistant" &&
+          !copy[copy.length - 1].content &&
+          !receivedToolCalls.length
+        ) {
           copy.pop();
         }
         return copy;
@@ -209,8 +178,12 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
       const res = await fetch("/api/chat/tool-exec", {
         method: "POST",
         headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
-        // Utilise l'input édité par l'user dans la card si présent, sinon l'input proposé par l'IA
-        body: JSON.stringify({ tool: state.call.name, input: state.editedInput ?? state.call.input }),
+        // Utilise l'input édité par l'user dans la card si présent,
+        // sinon l'input proposé par l'IA.
+        body: JSON.stringify({
+          tool: state.call.name,
+          input: state.editedInput ?? state.call.input,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -259,14 +232,14 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
         p.map((x) =>
           x.call.id === t.call.id
             ? { ...x, status: res.is_error ? "error" : "done", result: res.content }
-            : x
-        )
+            : x,
+        ),
       );
       if (res.is_error) toast.error(res.content);
       else toast.success(res.content);
     }
 
-    // Add a user message with tool_results, then call the model again to get final response
+    // Add a user message with tool_results, then call the model again
     const next: Message[] = [
       ...messages,
       { role: "user", content: "", tool_results: results },
@@ -312,119 +285,58 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
     sessionStorage.removeItem(STORAGE_KEY);
   };
 
+  const hasMessages = messages.length > 0;
+  const hasPending = pendingTools.some((t) => t.status === "pending");
+  const canSend = !!input.trim() && !streaming && !hasPending;
+
+  // Largeurs : full-width sur mobile, contenu lisible en max-w-3xl sur desktop.
+  // On utilise une largeur "claude.ai-like" centrée pour le contenu.
+  const contentWidth =
+    variant === "page" ? "max-w-3xl mx-auto w-full" : "w-full";
+
   return (
     <div
-      className={`flex flex-col ${
+      className={`flex flex-col bg-[var(--bg-primary)] ${
         variant === "dock"
           ? "h-[calc(100%-var(--topbar-height))]"
-          : "h-[calc(100vh-var(--topbar-height)-3rem)] max-h-[800px]"
+          : "h-[calc(100dvh-var(--topbar-height))] sm:h-[calc(100vh-var(--topbar-height)-1.5rem)]"
       }`}
     >
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-soft)]">
-        <p className="text-xs text-[var(--text-tertiary)]">
-          {messages.length === 0
-            ? "Démarre une conversation"
-            : `${messages.length} message${messages.length > 1 ? "s" : ""}`}
-        </p>
-        {messages.length > 0 && (
+      {hasMessages && (
+        <div className="flex items-center justify-between px-4 sm:px-5 py-2 border-b border-[var(--border-soft)]">
+          <p className="text-xs text-[var(--text-tertiary)]">
+            {messages.length} message{messages.length > 1 ? "s" : ""}
+          </p>
           <button
             onClick={clear}
-            className="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--accent-danger)]"
+            className="inline-flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--accent-danger)] py-1.5 px-2 -mr-2 rounded transition-colors"
           >
             <Trash2 size={12} /> Effacer
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="text-center py-8 space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[var(--accent-orange)]/20 to-[var(--accent-blue)]/20 flex items-center justify-center mx-auto">
-              <Sparkles size={22} className="text-[var(--accent-orange)]" />
-            </div>
-            <p className="text-sm text-[var(--text-secondary)]">
-              J&apos;ai accès à toutes tes candidatures, ton CV et tes relances.
-              <br />
-              <span className="text-[var(--text-tertiary)]">
-                Je peux aussi <strong>agir</strong> avec ta confirmation.
-              </span>
-            </p>
-            <div className="flex flex-col gap-2 max-w-md mx-auto">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => send(s)}
-                  className="text-left px-3 py-2 rounded-lg border border-[var(--border-soft)] text-sm text-[var(--text-secondary)] hover:border-[var(--accent-orange)]/40 hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map((m, i) => {
-          if (m.role === "user" && m.tool_results) {
-            // Hide tool result messages (they're system-level)
-            return null;
-          }
-          if (!m.content && !m.tool_calls) return null;
-
-          return (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div
-                className={`max-w-[88%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed ${
-                  m.role === "user"
-                    ? "bg-[var(--accent-orange)] text-[var(--bg-primary)]"
-                    : "bg-[var(--bg-card)] border border-[var(--border-soft)] text-[var(--text-primary)]"
-                }`}
-              >
-                {m.content ||
-                  (m.tool_calls ? (
-                    <span className="text-[var(--text-tertiary)] italic">
-                      Demande d&apos;action...
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-2 text-[var(--text-tertiary)]">
-                      <Loader2 size={12} className="animate-spin" /> Réflexion…
-                    </span>
-                  ))}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Pending tool calls — confirmation UI */}
-        {pendingTools.length > 0 && (
-          <div className="rounded-xl border border-[var(--accent-warning)]/40 bg-[var(--accent-warning)]/5 p-4 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--accent-warning)]">
-              <Wrench size={14} /> Action{pendingTools.length > 1 ? "s" : ""} demandée{pendingTools.length > 1 ? "s" : ""} par l&apos;IA
-            </div>
-            <div className="space-y-2">
-              {pendingTools.map((t) => (
-                t.call.name === "apply_to_company"
-                  ? <ApplyToCompanyCard key={t.call.id} state={t} onEdit={(patch) => updateToolInput(t.call.id, patch)} />
-                  : <ToolCard key={t.call.id} state={t} />
-              ))}
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={approveAll}
-                disabled={streaming || pendingTools.some((t) => t.status === "executing")}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--accent-success)] text-[var(--bg-primary)] text-sm font-semibold disabled:opacity-50"
-              >
-                <Check size={14} /> Confirmer
-              </button>
-              <button
-                onClick={rejectAll}
-                disabled={streaming || pendingTools.some((t) => t.status === "executing")}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[var(--border-soft)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50"
-              >
-                <X size={14} /> Refuser
-              </button>
-            </div>
-          </div>
-        )}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className={`${contentWidth} px-4 sm:px-6 py-6 sm:py-8`}>
+          {!hasMessages ? (
+            <EmptyState onPick={send} />
+          ) : (
+            <>
+              <MessageList messages={messages} streaming={streaming} />
+              {pendingTools.length > 0 && (
+                <div className="mt-8">
+                  <PendingToolsPanel
+                    pending={pendingTools}
+                    disabled={streaming}
+                    onApprove={approveAll}
+                    onReject={rejectAll}
+                    onEdit={updateToolInput}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <form
@@ -432,189 +344,42 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
           e.preventDefault();
           send(input);
         }}
-        className="border-t border-[var(--border-soft)] p-3 flex items-end gap-2"
+        className="border-t border-[var(--border-soft)] px-3 sm:px-4 py-3 sm:py-4"
       >
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send(input);
+        <div className={`${contentWidth} flex items-end gap-2`}>
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send(input);
+              }
+            }}
+            placeholder={
+              hasPending
+                ? "Confirme ou refuse l'action ci-dessus…"
+                : "Pose ta question…"
             }
-          }}
-          placeholder={pendingTools.length > 0 ? "Confirme ou refuse l'action ci-dessus…" : "Pose ta question…"}
-          rows={1}
-          disabled={streaming || pendingTools.some((t) => t.status === "pending")}
-          className="flex-1 resize-none rounded-lg bg-[var(--bg-card)] border border-[var(--border-soft)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-orange)] max-h-32 disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={streaming || !input.trim() || pendingTools.some((t) => t.status === "pending")}
-          className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--accent-orange)] text-[var(--bg-primary)] disabled:opacity-40 hover:opacity-90"
-        >
-          {streaming ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-        </button>
+            rows={1}
+            disabled={streaming || hasPending}
+            className="flex-1 resize-none rounded-xl bg-[var(--bg-card)] border border-[var(--border-soft)] px-4 py-3 text-[15px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-orange)] disabled:opacity-50 leading-relaxed max-h-40 sm:max-h-48 min-h-[44px]"
+          />
+          <button
+            type="submit"
+            disabled={!canSend}
+            aria-label="Envoyer"
+            className="inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-[var(--accent-orange)] text-[var(--bg-primary)] disabled:opacity-40 hover:opacity-90 transition-opacity shrink-0"
+          >
+            {streaming ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <Send size={18} />
+            )}
+          </button>
+        </div>
       </form>
-    </div>
-  );
-}
-
-function ToolCard({ state }: { state: ToolCallState }) {
-  const label = TOOL_LABELS[state.call.name] ?? state.call.name;
-  return (
-    <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-        {state.status === "executing" && (
-          <Loader2 size={12} className="animate-spin text-[var(--text-tertiary)]" />
-        )}
-        {state.status === "done" && <Check size={12} className="text-[var(--accent-success)]" />}
-        {state.status === "error" && <AlertTriangle size={12} className="text-[var(--accent-danger)]" />}
-        {state.status === "rejected" && <X size={12} className="text-[var(--text-tertiary)]" />}
-      </div>
-      <pre className="text-xs whitespace-pre-wrap bg-[var(--bg-primary)] border border-[var(--border-soft)] rounded p-2 max-h-32 overflow-y-auto font-mono">
-        {JSON.stringify(state.call.input, null, 2)}
-      </pre>
-      {state.result && (
-        <p className="text-xs mt-2 text-[var(--text-secondary)]">{state.result}</p>
-      )}
-    </div>
-  );
-}
-
-// Card custom pour le tool apply_to_company : permet d'éditer le type/mode avant validation.
-function ApplyToCompanyCard({
-  state,
-  onEdit,
-}: {
-  state: ToolCallState;
-  onEdit: (patch: Record<string, unknown>) => void;
-}) {
-  const effectiveInput = (state.editedInput ?? state.call.input) as {
-    url?: string;
-    type?: "stage" | "alternance" | "cdi";
-    dry_run?: boolean;
-    skip_quality_score?: boolean;
-    allow_duplicate?: boolean;
-  };
-  const url = effectiveInput.url ?? "";
-  const type = effectiveInput.type ?? "stage";
-  const dryRun = effectiveInput.dry_run === true;
-  const skipQuality = effectiveInput.skip_quality_score === true;
-  const allowDup = effectiveInput.allow_duplicate === true;
-
-  const readOnly = state.status !== "pending";
-
-  return (
-    <div className="rounded-lg border border-[var(--accent-orange)]/40 bg-[var(--bg-card)] p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-[var(--text-primary)]">
-          🚀 Envoyer une candidature
-        </span>
-        {state.status === "executing" && (
-          <Loader2 size={12} className="animate-spin text-[var(--text-tertiary)]" />
-        )}
-        {state.status === "done" && <Check size={12} className="text-[var(--accent-success)]" />}
-        {state.status === "error" && <AlertTriangle size={12} className="text-[var(--accent-danger)]" />}
-        {state.status === "rejected" && <X size={12} className="text-[var(--text-tertiary)]" />}
-      </div>
-
-      <div className="text-xs text-[var(--text-tertiary)]">Cible</div>
-      <a
-        href={url || "#"}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-[var(--accent-info)] hover:underline break-all block -mt-2"
-      >
-        {url || "(URL manquante)"}
-      </a>
-
-      <div>
-        <div className="text-xs text-[var(--text-tertiary)] mb-1.5">Type de candidature</div>
-        <div className="flex gap-2">
-          {(["stage", "alternance", "cdi"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              disabled={readOnly}
-              onClick={() => onEdit({ type: t })}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:opacity-50 ${
-                type === t
-                  ? "bg-[var(--accent-orange)] text-[var(--bg-primary)] border-[var(--accent-orange)]"
-                  : "bg-[var(--bg-primary)] text-[var(--text-secondary)] border-[var(--border-soft)] hover:bg-[var(--bg-hover)]"
-              }`}
-            >
-              {t === "stage" ? "Stage" : t === "alternance" ? "Alternance" : "CDI"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <div className="text-xs text-[var(--text-tertiary)] mb-1.5">Mode</div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={readOnly}
-            onClick={() => onEdit({ dry_run: false })}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:opacity-50 ${
-              !dryRun
-                ? "bg-[var(--accent-success)] text-[var(--bg-primary)] border-[var(--accent-success)]"
-                : "bg-[var(--bg-primary)] text-[var(--text-secondary)] border-[var(--border-soft)] hover:bg-[var(--bg-hover)]"
-            }`}
-          >
-            Envoyer le mail
-          </button>
-          <button
-            type="button"
-            disabled={readOnly}
-            onClick={() => onEdit({ dry_run: true })}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:opacity-50 ${
-              dryRun
-                ? "bg-[var(--accent-info)] text-[var(--bg-primary)] border-[var(--accent-info)]"
-                : "bg-[var(--bg-primary)] text-[var(--text-secondary)] border-[var(--border-soft)] hover:bg-[var(--bg-hover)]"
-            }`}
-          >
-            Dry-run (preview sans envoi)
-          </button>
-        </div>
-      </div>
-
-      <details className="text-xs">
-        <summary className="cursor-pointer text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]">
-          Options avancées
-        </summary>
-        <div className="mt-2 space-y-1.5 pl-2">
-          <label className="flex items-center gap-2 text-[var(--text-secondary)]">
-            <input
-              type="checkbox"
-              disabled={readOnly}
-              checked={skipQuality}
-              onChange={(e) => onEdit({ skip_quality_score: e.target.checked })}
-              className="accent-[var(--accent-orange)]"
-            />
-            Ignorer le score qualité Gemini (cible déjà validée à la main)
-          </label>
-          <label className="flex items-center gap-2 text-[var(--text-secondary)]">
-            <input
-              type="checkbox"
-              disabled={readOnly}
-              checked={allowDup}
-              onChange={(e) => onEdit({ allow_duplicate: e.target.checked })}
-              className="accent-[var(--accent-orange)]"
-            />
-            Autoriser même si le domaine a déjà été contacté
-          </label>
-        </div>
-      </details>
-
-      {state.result && (
-        <pre className="text-xs whitespace-pre-wrap bg-[var(--bg-primary)] border border-[var(--border-soft)] rounded p-2 max-h-48 overflow-y-auto font-mono text-[var(--text-secondary)]">
-          {state.result}
-        </pre>
-      )}
     </div>
   );
 }

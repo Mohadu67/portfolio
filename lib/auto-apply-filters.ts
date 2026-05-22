@@ -193,3 +193,38 @@ export function pickBestContactEmail(emails: string[], companyUrlOrDomain?: stri
   const best = scored[0];
   return best.accept ? best : null;
 }
+
+/**
+ * Variante permissive de pickBestContactEmail — utilisée UNIQUEMENT en override
+ * explicite utilisateur (allowGenericEmail=true côté apply_to_company).
+ *
+ * Différences avec la version stricte :
+ *  - Accepte les "generic_prefix" (contact@, info@…) tant que le domaine match l'entreprise
+ *  - Refuse toujours blacklist_prefix (noreply, abuse, support…), invalid_format, free_email_domain,
+ *    domain_mismatch (email sur un autre domaine que l'entreprise — la promesse faite à l'IA dans la
+ *    description du tool est "domaine doit match l'entreprise")
+ *  - Pas de seuil 0.5 — retourne le meilleur restant après filtre dur
+ *  - Préfère domain_match > generic_prefix neutre
+ */
+export function pickBestContactEmailLoose(
+  emails: string[],
+  companyUrlOrDomain?: string,
+): EmailScore | null {
+  if (!emails.length) return null;
+  const scored = emails.map((e) => scoreContactEmail(e, companyUrlOrDomain));
+  const eligible = scored.filter((s) =>
+    !s.reasons.includes("blacklist_prefix") &&
+    !s.reasons.includes("invalid_format") &&
+    !s.reasons.includes("free_email_domain") &&
+    !s.reasons.includes("domain_mismatch"),
+  );
+  if (eligible.length === 0) return null;
+  // Sort par : domain_match d'abord, puis score décroissant
+  eligible.sort((a, b) => {
+    const aMatch = a.reasons.includes("domain_match") ? 1 : 0;
+    const bMatch = b.reasons.includes("domain_match") ? 1 : 0;
+    if (aMatch !== bMatch) return bMatch - aMatch;
+    return b.score - a.score;
+  });
+  return eligible[0];
+}

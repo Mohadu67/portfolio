@@ -7,7 +7,7 @@ import { Candidature } from "@/models/Candidature";
 import { getSettingsDoc } from "@/models/Settings";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage, fetchJobDescription, ScrapedJobOffer } from "./web-scraper";
 import { scoreCompanyFit, matchJobOffer, generateLetterProposal } from "./gemini";
-import { pickBestContactEmail, EmailScore } from "./auto-apply-filters";
+import { pickBestContactEmail, pickBestContactEmailLoose, EmailScore } from "./auto-apply-filters";
 import { sendCandidature } from "./email";
 import { generateLettrePDF } from "./pdf-generator";
 import { resolveCVForSend } from "./cvFile";
@@ -399,6 +399,9 @@ export interface ProcessSingleOptions {
   skipQualityScore?: boolean;
   // Type de candidature (défaut: stage)
   candidatureType?: "stage" | "alternance" | "cdi";
+  // Override utilisateur explicite : accepte les emails génériques (contact@, info@) si pas d'email RH trouvé.
+  // Le filtre blacklist (noreply@, abuse@…) reste actif.
+  allowGenericEmail?: boolean;
 }
 
 export async function processSingleCompany(
@@ -461,7 +464,13 @@ export async function processSingleCompany(
     }
 
     // 4. Email whitelist (garde-fou non négociable)
-    const bestEmail = pickBestContactEmail(scraped.emails, cleanUrl);
+    // Si l'utilisateur a explicitement passé allowGenericEmail=true et que la version stricte
+    // ne trouve rien, on retente avec la variante permissive (accepte contact@, info@ tant que
+    // le domaine match l'entreprise ; blacklist noreply/abuse/support reste actif).
+    let bestEmail = pickBestContactEmail(scraped.emails, cleanUrl);
+    if (!bestEmail && opts.allowGenericEmail === true) {
+      bestEmail = pickBestContactEmailLoose(scraped.emails, cleanUrl);
+    }
     if (!bestEmail) {
       decision.skipReason = `aucun email RH valable trouvé. Candidats scrappés : ${scraped.emails.join(", ") || "(aucun)"}`;
       return decision;

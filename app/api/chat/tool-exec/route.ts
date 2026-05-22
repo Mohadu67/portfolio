@@ -303,6 +303,7 @@ export async function POST(request: NextRequest) {
           dryRun: input.dry_run === true,
           skipQualityScore: input.skip_quality_score === true,
           allowDuplicate: input.allow_duplicate === true,
+          allowGenericEmail: input.allow_generic_email === true,
           candidatureType: type,
         });
         const summary = JSON.stringify({
@@ -315,6 +316,9 @@ export async function POST(request: NextRequest) {
           companyReason: decision.companyReason ?? null,
           skipReason: decision.skipReason ?? null,
           error: decision.error ?? null,
+          hint: decision.skipReason?.includes("aucun email RH") && input.allow_generic_email !== true
+            ? "L'utilisateur peut autoriser l'envoi à un email générique (contact@/info@) en relançant apply_to_company avec allow_generic_email: true — demander confirmation explicite avant de retry."
+            : undefined,
         });
         return NextResponse.json({ ok: !decision.error, summary });
       }

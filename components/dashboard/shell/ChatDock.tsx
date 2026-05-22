@@ -15,7 +15,11 @@ export function ChatDock({ open, onClose }: ChatDockProps) {
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={onClose} aria-hidden />
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={onClose}
+          aria-hidden
+        />
       )}
 
       <aside
@@ -25,7 +29,7 @@ export function ChatDock({ open, onClose }: ChatDockProps) {
         aria-hidden={!open}
       >
         <div
-          className="flex items-center justify-between px-4 border-b border-[var(--border-soft)]"
+          className="flex items-center justify-between px-4 border-b border-[var(--border-soft)] shrink-0"
           style={{ height: "var(--topbar-height)" }}
         >
           <div className="flex items-center gap-2">
@@ -34,7 +38,7 @@ export function ChatDock({ open, onClose }: ChatDockProps) {
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]"
+            className="p-2 rounded hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] min-w-[44px] min-h-[44px] inline-flex items-center justify-center"
             aria-label="Fermer"
           >
             <X size={16} />

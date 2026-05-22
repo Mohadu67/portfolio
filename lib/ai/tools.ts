@@ -184,6 +184,10 @@ export const TOOLS: ToolDefinition[] = [
           type: "boolean",
           description: "Forcer même si le domaine a déjà été contacté (rare).",
         },
+        allow_generic_email: {
+          type: "boolean",
+          description: "Si true, autorise l'envoi à un email générique (contact@, info@, hello@, bonjour@) quand aucun email RH nominatif n'est trouvé, à condition que le domaine de l'email match celui de l'entreprise. Ne bypass JAMAIS les emails blacklist (noreply@, abuse@, support@…). À utiliser uniquement après un premier échec, sur insistance explicite de l'utilisateur.",
+        },
       },
       required: ["url"],
     },

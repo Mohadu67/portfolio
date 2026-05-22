@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ICandidature, CandidatureStatut, IAutoReply, IEmailReceived, IEmailLog } from "@/models/Candidature";
 
 // Statuts "après envoi" → on affiche les échanges en priorité, pas la lettre.
-const POST_SEND_STATUTS: CandidatureStatut[] = ["réponse reçue", "entretien", "refus", "acceptée"];
+const POST_SEND_STATUTS: CandidatureStatut[] = ["postulée", "réponse reçue", "entretien", "refus", "acceptée"];
 
 interface TimelineEvent {
   date: Date;

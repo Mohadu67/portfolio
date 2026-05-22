@@ -11,6 +11,23 @@ export interface ToolResult {
   tool_use_id: string;
   content: string;
   is_error?: boolean;
+  // Boutons d'action contextuels affichés sous le message assistant qui suit ce tool result.
+  // Click sur un chip → exécute le tool avec l'input fourni, sans repasser par la card de confirmation.
+  // Le contenu vient du backend (tool-exec response), n'est PAS renvoyé à l'IA dans tool_results.
+  actions?: ToolAction[];
+}
+
+export interface ToolAction {
+  // ID stable pour key React + tracking d'exécution
+  id: string;
+  // Label visible (court, ex : "Envoyer à contact@boite.com")
+  label: string;
+  // Tool à exécuter au click
+  tool: string;
+  // Input du tool
+  input: Record<string, unknown>;
+  // Style visuel : primary (action principale), secondary (alternative), danger (abandon)
+  variant?: "primary" | "secondary" | "danger";
 }
 
 export interface ToolCallState {

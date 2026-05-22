@@ -8,7 +8,7 @@ import { EmptyState } from "./EmptyState";
 import { MessageList } from "./MessageList";
 import { PendingToolsPanel } from "./PendingToolsPanel";
 import { STORAGE_KEY } from "./types";
-import type { Message, ToolCall, ToolCallState, ToolResult } from "./types";
+import type { Message, ToolAction, ToolCall, ToolCallState, ToolResult } from "./types";
 
 interface ChatPanelProps {
   apiKey: string;
@@ -196,6 +196,8 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
       return {
         tool_use_id: state.call.id,
         content: data.summary ?? "OK",
+        // Boutons d'action contextuels (non envoyés à l'IA — affichés uniquement dans l'UI).
+        actions: Array.isArray(data.actions) ? data.actions : undefined,
       };
     } catch (err) {
       return {
@@ -285,6 +287,58 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
     sessionStorage.removeItem(STORAGE_KEY);
   };
 
+  // Click sur un action chip rendu sous le dernier message assistant. Le bouton remplace une
+  // saisie utilisateur "oui envoie à <email>" + un nouveau cycle de confirmation : on synthétise
+  // directement le tool_call comme si l'IA l'avait fait, puis on exécute. Le clic vaut consentement.
+  const handleAction = async (action: ToolAction) => {
+    if (streaming || hasPending) return;
+
+    // Pseudo-tool "__cancel__" : marque visuellement l'abandon, l'IA acquittera.
+    if (action.tool === "__cancel__") {
+      const next: Message[] = [
+        ...messages,
+        { role: "user", content: action.label },
+        { role: "assistant", content: "" },
+      ];
+      setMessages(next);
+      await streamFromMessages(next);
+      return;
+    }
+
+    const callId = `actionchip_${Date.now()}`;
+    const syntheticCall: ToolCall = {
+      id: callId,
+      name: action.tool,
+      input: action.input,
+      requires_confirmation: false,
+    };
+
+    // 1. user message (label du chip) + assistant message portant le tool_call synthétique
+    const baseMsgs: Message[] = [
+      ...messages,
+      { role: "user", content: action.label },
+      { role: "assistant", content: "", tool_calls: [syntheticCall] },
+    ];
+    setMessages(baseMsgs);
+
+    // 2. exécution directe du tool (pas de card de confirmation — le clic suffit)
+    setStreaming(true);
+    const result = await executeTool({ call: syntheticCall, status: "executing" });
+    setStreaming(false);
+
+    if (result.is_error) toast.error(result.content);
+    else toast.success(result.content);
+
+    // 3. tool_results + assistant streaming
+    const next: Message[] = [
+      ...baseMsgs,
+      { role: "user", content: "", tool_results: [result] },
+      { role: "assistant", content: "" },
+    ];
+    setMessages(next);
+    await streamFromMessages(next);
+  };
+
   const hasMessages = messages.length > 0;
   const hasPending = pendingTools.some((t) => t.status === "pending");
   const canSend = !!input.trim() && !streaming && !hasPending;
@@ -322,7 +376,7 @@ export function ChatPanel({ apiKey, variant = "page" }: ChatPanelProps) {
             <EmptyState onPick={send} />
           ) : (
             <>
-              <MessageList messages={messages} streaming={streaming} />
+              <MessageList messages={messages} streaming={streaming} onAction={handleAction} />
               {pendingTools.length > 0 && (
                 <div className="mt-8">
                   <PendingToolsPanel

@@ -326,11 +326,40 @@ export async function POST(request: NextRequest) {
           scrapedEmails: decision.scrapedEmails ?? null,
           hint: emailFailure
             ? (allowGenericEmailUsed
-                ? "Le flag allow_generic_email a déjà été utilisé sans succès. NE propose PAS un autre retry de apply_to_company. À la place : liste les candidats scrapedEmails à l'utilisateur, et propose-lui de créer la candidature à la main via le dashboard /candidatures (ou via update_candidature_notes après une création manuelle) pour saisir l'email choisi. Explique brièvement pourquoi le filtre auto a rejeté (souvent : domaine de l'email ≠ domaine du site)."
+                ? "Le flag allow_generic_email a déjà été utilisé sans succès. NE propose PAS un autre retry de allow_generic_email. À la place : liste les candidats scrapedEmails à l'utilisateur (ils sont aussi affichés en boutons cliquables dans l'UI via le champ actions de la réponse), explique brièvement pourquoi ils ont été rejetés (souvent : domaine de l'email ≠ domaine du site cible), et propose l'utilisation de email_override OU la saisie manuelle via /candidatures."
                 : "L'utilisateur peut autoriser l'envoi à un email générique (contact@/info@) en relançant apply_to_company avec allow_generic_email: true — demander confirmation explicite avant de retry.")
             : undefined,
         });
-        return NextResponse.json({ ok: !decision.error, summary });
+
+        // Action chips : boutons cliquables affichés sous le message assistant qui suit ce tool result.
+        // Génère 1 bouton "Envoyer à <email>" par candidat scrappé quand le flag permissif a déjà été
+        // tenté et qu'il reste des emails à proposer. + bouton "Annuler" pour fermer cette voie.
+        const actions = emailFailure && allowGenericEmailUsed && decision.scrapedEmails?.length
+          ? [
+              ...decision.scrapedEmails.map((email, idx) => ({
+                id: `apply_override_${Date.now()}_${idx}`,
+                label: `Envoyer à ${email}`,
+                tool: "apply_to_company",
+                input: {
+                  url,
+                  type,
+                  email_override: email,
+                  skip_quality_score: input.skip_quality_score === true,
+                  allow_duplicate: input.allow_duplicate === true,
+                },
+                variant: "primary" as const,
+              })),
+              {
+                id: `apply_cancel_${Date.now()}`,
+                label: "Abandonner cette cible",
+                tool: "__cancel__",
+                input: {},
+                variant: "secondary" as const,
+              },
+            ]
+          : undefined;
+
+        return NextResponse.json({ ok: !decision.error, summary, actions });
       }
 
       default:

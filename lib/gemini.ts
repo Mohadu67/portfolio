@@ -354,7 +354,7 @@ export async function classifyAndReply(input: ClassifyAndReplyInput): Promise<Cl
   const raw = await callGeminiNative(
     buildAutoReplyUserPrompt(input),
     AUTO_REPLY_SYSTEM_PROMPT,
-    { model, temperature: 0.5, maxOutputTokens: 1024, jsonMode: true },
+    { model, temperature: 0.5, maxOutputTokens: 4096, jsonMode: true },
   );
 
   let parsed: { category?: string; confidence?: number; reply?: string };

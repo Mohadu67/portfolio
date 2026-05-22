@@ -123,17 +123,17 @@ Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question gé
     }
   }
 
-  // Sliding window: keep last 8 turns. Strip leading orphan functionResponse turns
-  // (Gemini rejects a user turn with functionResponse that isn't preceded by a matching model functionCall).
+  // Sliding window: keep last 8 turns, puis garantir que le premier turn est un user
+  // text turn. Gemini exige : functionCall après (user|functionResponse), functionResponse
+  // après functionCall. Donc on strip jusqu'à trouver un user text turn — ça élimine d'un
+  // coup les orphan functionResponse (user avec funcResp en tête) ET les orphan functionCall
+  // (model turns en tête, qui causent "function call turn comes immediately after...").
   let windowed = contents.slice(-8);
   while (windowed.length > 0) {
     const first = windowed[0];
-    const hasFuncResp = first.parts?.some((p) => "functionResponse" in p);
-    if (first.role === "user" && hasFuncResp) {
-      windowed = windowed.slice(1);
-    } else {
-      break;
-    }
+    const isUserText = first.role === "user" && !first.parts?.some((p) => "functionResponse" in p);
+    if (isUserText) break;
+    windowed = windowed.slice(1);
   }
 
   const last = windowed[windowed.length - 1];

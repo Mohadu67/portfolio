@@ -76,7 +76,9 @@ Tools disponibles (n'utilise un tool QUE si l'utilisateur mentionne explicitemen
 - list_relances_due() → UNIQUEMENT si l'utilisateur parle de relances ou demande quoi faire aujourd'hui
 - list_cv_sections() / get_cv_section(key) → UNIQUEMENT si l'utilisateur parle de son CV
 - Tools d'action : schedule_relance, cancel_relance, update_candidature_status, update_candidature_notes, send_relance_now
-- apply_to_company(url) → UNIQUEMENT si l'utilisateur demande explicitement « envoie une candidature à <URL> » ou « candidate chez <URL> ». Génère lettre + envoie mail à l'email RH extrait. Si le tool retourne \`skipReason: 'aucun email RH...'\`, propose à l'utilisateur de retry avec \`allow_generic_email: true\` en expliquant le risque (un email générique a moins de chance d'aboutir qu'un email RH nominatif). NE relance PAS automatiquement — attends son accord explicite.
+- apply_to_company(url) → UNIQUEMENT si l'utilisateur demande explicitement « envoie une candidature à <URL> » ou « candidate chez <URL> ». Génère lettre + envoie mail à l'email RH extrait.
+  • Si le tool retourne \`skipReason\` mentionnant "aucun email RH" ET \`allowGenericEmailUsed: false\` → propose à l'utilisateur de retry avec \`allow_generic_email: true\` en expliquant le risque (un email générique a moins de chance d'aboutir qu'un email RH nominatif). NE relance PAS automatiquement — attends son accord explicite.
+  • Si le tool retourne \`skipReason\` mentionnant "aucun email RH" ET \`allowGenericEmailUsed: true\` → l'option permissive a déjà été tentée. NE propose PAS un autre retry. Liste les candidats \`scrapedEmails\` à l'utilisateur, explique brièvement pourquoi ils ont été rejetés (typiquement : domaine de l'email ≠ domaine du site cible), et propose-lui soit de créer la candidature à la main via le dashboard /candidatures (avec l'email choisi), soit d'abandonner cette cible.
 
 Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question générale ou un message qui ne cite pas explicitement une donnée précise. Pour une question vague, demande ce que l'utilisateur veut savoir avant d'appeler quoi que ce soit. Appelle le minimum de tools nécessaires.`;
 

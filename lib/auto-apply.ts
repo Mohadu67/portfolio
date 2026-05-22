@@ -28,6 +28,9 @@ interface CandidateDecision {
   companyReason?: string;
   bestOffer?: { title: string; url: string; score: number; reason: string; jobType?: string };
   email?: EmailScore;
+  // Emails scrappés sur le site qui n'ont pas passé le filtre (whitelist strict OU loose).
+  // Sert à l'IA pour proposer une saisie manuelle à l'utilisateur quand le picker échoue.
+  scrapedEmails?: string[];
   decision: "skipped" | "applied" | "would_apply";
   skipReason?: string;
   candidatureId?: string;
@@ -472,7 +475,10 @@ export async function processSingleCompany(
       bestEmail = pickBestContactEmailLoose(scraped.emails, cleanUrl);
     }
     if (!bestEmail) {
-      decision.skipReason = `aucun email RH valable trouvé. Candidats scrappés : ${scraped.emails.join(", ") || "(aucun)"}`;
+      decision.scrapedEmails = scraped.emails;
+      decision.skipReason = opts.allowGenericEmail === true
+        ? `aucun email RH valable même avec allow_generic_email. Candidats scrappés : ${scraped.emails.join(", ") || "(aucun)"}`
+        : `aucun email RH valable trouvé. Candidats scrappés : ${scraped.emails.join(", ") || "(aucun)"}`;
       return decision;
     }
     decision.email = bestEmail;

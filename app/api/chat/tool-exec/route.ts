@@ -306,6 +306,8 @@ export async function POST(request: NextRequest) {
           allowGenericEmail: input.allow_generic_email === true,
           candidatureType: type,
         });
+        const allowGenericEmailUsed = input.allow_generic_email === true;
+        const emailFailure = decision.skipReason?.includes("aucun email RH") ?? false;
         const summary = JSON.stringify({
           decision: decision.decision,
           entreprise: decision.entreprise || decision.domain,
@@ -316,8 +318,12 @@ export async function POST(request: NextRequest) {
           companyReason: decision.companyReason ?? null,
           skipReason: decision.skipReason ?? null,
           error: decision.error ?? null,
-          hint: decision.skipReason?.includes("aucun email RH") && input.allow_generic_email !== true
-            ? "L'utilisateur peut autoriser l'envoi à un email générique (contact@/info@) en relançant apply_to_company avec allow_generic_email: true — demander confirmation explicite avant de retry."
+          allowGenericEmailUsed,
+          scrapedEmails: decision.scrapedEmails ?? null,
+          hint: emailFailure
+            ? (allowGenericEmailUsed
+                ? "Le flag allow_generic_email a déjà été utilisé sans succès. NE propose PAS un autre retry de apply_to_company. À la place : liste les candidats scrapedEmails à l'utilisateur, et propose-lui de créer la candidature à la main via le dashboard /candidatures (ou via update_candidature_notes après une création manuelle) pour saisir l'email choisi. Explique brièvement pourquoi le filtre auto a rejeté (souvent : domaine de l'email ≠ domaine du site)."
+                : "L'utilisateur peut autoriser l'envoi à un email générique (contact@/info@) en relançant apply_to_company avec allow_generic_email: true — demander confirmation explicite avant de retry.")
             : undefined,
         });
         return NextResponse.json({ ok: !decision.error, summary });

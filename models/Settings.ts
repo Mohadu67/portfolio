@@ -21,8 +21,10 @@ export interface ISettings {
     autoApplyEnabled: boolean;
     autoApplyMaxPerDay: number;
     autoApplyMinCompanyScore: number;
+    // Multi-query : une query par ligne. Le pipeline rotate avec weeklyProspectQueryIndex.
     weeklyProspectKeywords: string;
     weeklyProspectLocation: string;
+    weeklyProspectQueryIndex: number;
     lastProspectRunAt?: Date | null;
     lastProspectSummary?: string | null;
   };
@@ -67,6 +69,7 @@ const settingsSchema = new Schema<ISettings>(
       autoApplyMinCompanyScore: { type: Number, default: 0.6 },
       weeklyProspectKeywords: { type: String, default: "entreprise tech Strasbourg" },
       weeklyProspectLocation: { type: String, default: "Strasbourg" },
+      weeklyProspectQueryIndex: { type: Number, default: 0 },
       lastProspectRunAt: { type: Date, default: null },
       lastProspectSummary: { type: String, default: null },
     },

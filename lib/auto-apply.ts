@@ -5,6 +5,7 @@
 import { connectDB } from "./mongodb";
 import { Candidature } from "@/models/Candidature";
 import { getSettingsDoc } from "@/models/Settings";
+import { isProspectSkipFresh, recordProspectSkip, ProspectSkipReason } from "@/models/ProspectedDomain";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage, fetchJobDescription, ScrapedJobOffer } from "./web-scraper";
 import { scoreCompanyFit, matchJobOffer, generateLetterProposal } from "./gemini";
 import { pickBestContactEmail, pickBestContactEmailLoose, EmailScore } from "./auto-apply-filters";
@@ -73,6 +74,17 @@ async function searchTechCompanies(keywords: string, location: string): Promise<
     .filter((r) => r.url.startsWith("http"));
 }
 
+// Parse le champ weeklyProspectKeywords en liste de queries (1 par ligne, ou séparé par |).
+// Retourne au moins 1 entrée (fallback sur valeur par défaut si vide).
+function parseKeywordList(raw: string): string[] {
+  if (!raw || !raw.trim()) return ["entreprise tech Strasbourg"];
+  const lines = raw
+    .split(/[\n|]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return lines.length > 0 ? lines : [raw.trim()];
+}
+
 async function countAutoAppliedSince(sinceMs: number): Promise<number> {
   const since = new Date(Date.now() - sinceMs);
   // Fix : on compte les docs qui ont AU MOINS UN envoi candidature "sent" dans la fenêtre.
@@ -127,13 +139,21 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
   await connectDB();
   const settingsDoc = await getSettingsDoc();
   const auto = settingsDoc.automation;
-  const keywords = opts.keywords ?? auto.weeklyProspectKeywords ?? "entreprise tech Strasbourg";
+  const rawKeywords = opts.keywords ?? auto.weeklyProspectKeywords ?? "entreprise tech Strasbourg";
   const location = opts.location ?? auto.weeklyProspectLocation ?? "";
   const minScore = typeof auto.autoApplyMinCompanyScore === "number" ? auto.autoApplyMinCompanyScore : 0.6;
   const maxPerDay = typeof auto.autoApplyMaxPerDay === "number" ? auto.autoApplyMaxPerDay : 5;
   // Fix : 10 entreprises × (scrape + 5 appels Gemini + envoi SMTP) peut dépasser maxDuration=300s sur Vercel/cron.
   // On réduit le default à 5 pour rester confortablement sous la limite.
   const maxCompanies = opts.maxCompanies ?? 5;
+
+  // Multi-query rotation : si l'utilisateur a configuré plusieurs queries (1 par ligne),
+  // on en pioche une différente à chaque run via weeklyProspectQueryIndex (modulo).
+  // Si une seule query est définie, le comportement reste identique à avant.
+  const queries = opts.keywords ? [opts.keywords] : parseKeywordList(rawKeywords);
+  const currentIndex = typeof auto.weeklyProspectQueryIndex === "number" ? auto.weeklyProspectQueryIndex : 0;
+  const queryIdx = queries.length > 0 ? ((currentIndex % queries.length) + queries.length) % queries.length : 0;
+  const keywords = queries[queryIdx];
 
   // Rate-limit : compter les envois auto des dernières 24h
   let remainingBudget = maxPerDay;
@@ -176,9 +196,20 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
     result.decisions.push(decision);
 
     try {
-      // 2. Dedup by domain
+      // 2a. Dedup par domaine (candidature déjà en DB) — skip silencieux
       if (await alreadyContactedDomain(decision.domain)) {
         decision.skipReason = "déjà contactée (URL/domaine en DB)";
+        result.skipped++;
+        continue;
+      }
+
+      // 2b. Cache des skip précédents (économise scrape + Gemini)
+      // Si le domaine a été évalué récemment et skippé, on évite de re-bouffer du quota.
+      const cachedSkip = await isProspectSkipFresh(decision.domain);
+      if (cachedSkip) {
+        decision.skipReason = `cache: ${cachedSkip.skipReason}${cachedSkip.skipDetail ? ` (${cachedSkip.skipDetail})` : ""} — réévaluable après ${new Date(cachedSkip.nextEvaluateAt).toLocaleDateString("fr-FR")}`;
+        if (cachedSkip.entreprise) decision.entreprise = cachedSkip.entreprise;
+        if (typeof cachedSkip.companyScore === "number") decision.companyScore = cachedSkip.companyScore;
         result.skipped++;
         continue;
       }
@@ -187,6 +218,12 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
       const scraped = await scrapeCompanyWebsite(company.url);
       if (!scraped.aboutText && scraped.emails.length === 0) {
         decision.skipReason = "scrape vide (site inaccessible ou JS-only)";
+        await recordProspectSkip({
+          domain: decision.domain,
+          entreprise: company.name || decision.domain,
+          reason: "scrape_empty",
+          detail: decision.skipReason,
+        });
         result.skipped++;
         continue;
       }
@@ -209,6 +246,14 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
       decision.companyReason = fit.reason;
       if (!fit.isTechRelevant || fit.score < minScore) {
         decision.skipReason = `score qualité trop bas (${fit.score.toFixed(2)} < ${minScore}) — ${fit.reason}`;
+        const reason: ProspectSkipReason = fit.isTechRelevant ? "low_score" : "not_tech";
+        await recordProspectSkip({
+          domain: decision.domain,
+          entreprise: entrepriseName,
+          reason,
+          detail: fit.reason,
+          companyScore: fit.score,
+        });
         result.skipped++;
         continue;
       }
@@ -217,6 +262,13 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
       const bestEmail = pickBestContactEmail(scraped.emails, company.url);
       if (!bestEmail) {
         decision.skipReason = `aucun email valable (candidats: ${scraped.emails.join(", ") || "aucun"})`;
+        await recordProspectSkip({
+          domain: decision.domain,
+          entreprise: entrepriseName,
+          reason: "no_email",
+          detail: decision.skipReason,
+          companyScore: fit.score,
+        });
         result.skipped++;
         continue;
       }
@@ -380,9 +432,13 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
     }
   }
 
-  // Persist summary
+  // Persist summary + avance l'index de query pour le prochain run (rotation).
   settingsDoc.automation.lastProspectRunAt = new Date();
-  settingsDoc.automation.lastProspectSummary = `${result.scanned} scannées · ${result.applied} envoyée(s)${result.wouldApply > 0 ? ` · ${result.wouldApply} dry-run` : ""} · ${result.skipped} skip · ${result.errors.length} erreur(s)`;
+  const queryLabel = queries.length > 1 ? ` · query "${keywords.slice(0, 40)}" (${queryIdx + 1}/${queries.length})` : "";
+  settingsDoc.automation.lastProspectSummary = `${result.scanned} scannées · ${result.applied} envoyée(s)${result.wouldApply > 0 ? ` · ${result.wouldApply} dry-run` : ""} · ${result.skipped} skip · ${result.errors.length} erreur(s)${queryLabel}`;
+  if (!opts.keywords && queries.length > 1) {
+    settingsDoc.automation.weeklyProspectQueryIndex = (queryIdx + 1) % queries.length;
+  }
   await settingsDoc.save();
 
   result.ok = true;

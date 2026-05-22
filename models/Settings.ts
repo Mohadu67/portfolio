@@ -67,7 +67,24 @@ const settingsSchema = new Schema<ISettings>(
       autoApplyEnabled: { type: Boolean, default: false },
       autoApplyMaxPerDay: { type: Number, default: 5 },
       autoApplyMinCompanyScore: { type: Number, default: 0.6 },
-      weeklyProspectKeywords: { type: String, default: "entreprise tech Strasbourg" },
+      weeklyProspectKeywords: {
+        type: String,
+        // Multi-query par défaut (1 ligne = 1 query). Le pipeline rotate à chaque run.
+        // Mix volontaire tech pur + adjacents (assoc digital, PME e-commerce, industrie 4.0...)
+        // pour couvrir toutes les structures susceptibles d'avoir besoin d'un dev junior.
+        default: [
+          "startup tech Strasbourg",
+          "ESN Strasbourg",
+          "agence web Strasbourg",
+          "scale-up Alsace",
+          "PME e-commerce Strasbourg",
+          "industrie 4.0 Alsace",
+          "association numérique Strasbourg",
+          "plateforme SaaS Alsace",
+          "cabinet conseil digital Strasbourg",
+          "organisme formation digital Alsace",
+        ].join("\n"),
+      },
       weeklyProspectLocation: { type: String, default: "Strasbourg" },
       weeklyProspectQueryIndex: { type: Number, default: 0 },
       lastProspectRunAt: { type: Date, default: null },

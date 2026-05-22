@@ -496,14 +496,21 @@ export default function SettingsPage() {
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
               <label className="text-xs text-[var(--text-tertiary)] block mb-1">
-                Mots-clés Google <span className="opacity-70">(1 ligne = 1 query, rotation à chaque run)</span>
+                Mots-clés Google <span className="opacity-70">(1 ligne = 1 query, rotation à chaque run · mixer tech + assoc + PME digital pour élargir)</span>
               </label>
               <textarea
-                rows={3}
+                rows={5}
                 value={settings.automation.weeklyProspectKeywords}
                 onChange={(e) => updateAutoApplyField("weeklyProspectKeywords", e.target.value)}
                 className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm font-mono"
-                placeholder={"startup tech Strasbourg\nESN Alsace\nagence digitale Strasbourg"}
+                placeholder={[
+                  "startup tech Strasbourg",
+                  "ESN Strasbourg",
+                  "agence web Strasbourg",
+                  "PME e-commerce Strasbourg",
+                  "association numérique Alsace",
+                  "industrie 4.0 Alsace",
+                ].join("\n")}
               />
             </div>
             <div>

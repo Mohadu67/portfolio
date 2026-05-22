@@ -332,32 +332,60 @@ export async function POST(request: NextRequest) {
         });
 
         // Action chips : boutons cliquables affichés sous le message assistant qui suit ce tool result.
-        // Génère 1 bouton "Envoyer à <email>" par candidat scrappé quand le flag permissif a déjà été
-        // tenté et qu'il reste des emails à proposer. + bouton "Annuler" pour fermer cette voie.
-        const actions = emailFailure && allowGenericEmailUsed && decision.scrapedEmails?.length
-          ? [
-              ...decision.scrapedEmails.map((email, idx) => ({
-                id: `apply_override_${Date.now()}_${idx}`,
-                label: `Envoyer à ${email}`,
-                tool: "apply_to_company",
-                input: {
-                  url,
-                  type,
-                  email_override: email,
-                  skip_quality_score: input.skip_quality_score === true,
-                  allow_duplicate: input.allow_duplicate === true,
-                },
-                variant: "primary" as const,
-              })),
-              {
-                id: `apply_cancel_${Date.now()}`,
-                label: "Abandonner cette cible",
-                tool: "__cancel__",
-                input: {},
-                variant: "secondary" as const,
-              },
-            ]
-          : undefined;
+        // Évite à l'utilisateur de taper "oui" + repasser une card de confirmation.
+        // - 1er échec (allowGenericEmailUsed=false) : 1 chip "Réessayer en autorisant les emails génériques"
+        // - 2e échec (allowGenericEmailUsed=true) + scrapedEmails : 1 chip "Envoyer à <email>" par candidat
+        // Dans les deux cas, un chip "Abandonner cette cible".
+        const baseInput = {
+          url,
+          type,
+          skip_quality_score: input.skip_quality_score === true,
+          allow_duplicate: input.allow_duplicate === true,
+        };
+        let actions:
+          | {
+              id: string;
+              label: string;
+              tool: string;
+              input: Record<string, unknown>;
+              variant: "primary" | "secondary" | "danger";
+            }[]
+          | undefined;
+        if (emailFailure && !allowGenericEmailUsed) {
+          actions = [
+            {
+              id: `apply_retry_loose_${Date.now()}`,
+              label: "Réessayer en autorisant les emails génériques",
+              tool: "apply_to_company",
+              input: { ...baseInput, allow_generic_email: true },
+              variant: "primary",
+            },
+            {
+              id: `apply_cancel_${Date.now()}`,
+              label: "Abandonner cette cible",
+              tool: "__cancel__",
+              input: {},
+              variant: "secondary",
+            },
+          ];
+        } else if (emailFailure && allowGenericEmailUsed && decision.scrapedEmails?.length) {
+          actions = [
+            ...decision.scrapedEmails.map((email, idx) => ({
+              id: `apply_override_${Date.now()}_${idx}`,
+              label: `Envoyer à ${email}`,
+              tool: "apply_to_company",
+              input: { ...baseInput, email_override: email },
+              variant: "primary" as const,
+            })),
+            {
+              id: `apply_cancel_${Date.now()}`,
+              label: "Abandonner cette cible",
+              tool: "__cancel__",
+              input: {},
+              variant: "secondary",
+            },
+          ];
+        }
 
         return NextResponse.json({ ok: !decision.error, summary, actions });
       }

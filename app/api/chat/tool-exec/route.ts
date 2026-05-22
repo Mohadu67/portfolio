@@ -299,11 +299,15 @@ export async function POST(request: NextRequest) {
         const url = String(input.url ?? "").trim();
         if (!url) return NextResponse.json({ error: "url required" }, { status: 400 });
         const type = (input.type === "alternance" || input.type === "cdi") ? input.type : "stage";
+        const emailOverride = typeof input.email_override === "string" && input.email_override.trim()
+          ? input.email_override.trim()
+          : undefined;
         const decision = await processSingleCompany(url, {
           dryRun: input.dry_run === true,
           skipQualityScore: input.skip_quality_score === true,
           allowDuplicate: input.allow_duplicate === true,
           allowGenericEmail: input.allow_generic_email === true,
+          emailOverride,
           candidatureType: type,
         });
         const allowGenericEmailUsed = input.allow_generic_email === true;

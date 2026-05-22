@@ -82,7 +82,9 @@ export type EmailScoreReason =
   | "domain_mismatch"
   | "generic_prefix"
   | "blacklist_prefix"
-  | "invalid_format";
+  | "invalid_format"
+  // L'utilisateur a saisi l'email à la main via email_override — bypass complet du picker.
+  | "manual_override";
 
 export interface EmailScore {
   email: string;

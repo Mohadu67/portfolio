@@ -188,6 +188,10 @@ export const TOOLS: ToolDefinition[] = [
           type: "boolean",
           description: "Si true, autorise l'envoi à un email générique (contact@, info@, hello@, bonjour@) quand aucun email RH nominatif n'est trouvé, à condition que le domaine de l'email match celui de l'entreprise. Ne bypass JAMAIS les emails blacklist (noreply@, abuse@, support@…). À utiliser uniquement après un premier échec, sur insistance explicite de l'utilisateur.",
         },
+        email_override: {
+          type: "string",
+          description: "Email destinataire saisi explicitement par l'utilisateur — bypass total du picker auto (whitelist + loose). À utiliser quand un email valable a été trouvé mais que le filtre auto le rejette (ex: domaine 'frère' comme strasbourg@etudeplus.org pour le site etudeplusstrasbourg.fr). Ignoré si vide. Validation basique sur le format. Toujours demander confirmation explicite de l'utilisateur avant d'utiliser ce flag.",
+        },
       },
       required: ["url"],
     },

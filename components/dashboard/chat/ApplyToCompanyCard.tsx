@@ -16,12 +16,12 @@ interface ApplyInput {
   skip_quality_score?: boolean;
   allow_duplicate?: boolean;
   allow_generic_email?: boolean;
+  email_override?: string;
 }
 
 // Card custom pour le tool apply_to_company.
 // Permet d'éditer type/mode/options avant validation.
 export function ApplyToCompanyCard({ state, onEdit }: ApplyToCompanyCardProps) {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const effectiveInput = (state.editedInput ?? state.call.input) as ApplyInput;
 
   const url = effectiveInput.url ?? "";
@@ -30,6 +30,12 @@ export function ApplyToCompanyCard({ state, onEdit }: ApplyToCompanyCardProps) {
   const skipQuality = effectiveInput.skip_quality_score === true;
   const allowDup = effectiveInput.allow_duplicate === true;
   const allowGeneric = effectiveInput.allow_generic_email === true;
+  const emailOverride = effectiveInput.email_override ?? "";
+
+  // Auto-ouverture des options avancées si l'IA a pré-rempli un flag avancé (ex : retry
+  // avec allow_generic_email ou email_override) — l'utilisateur doit voir ce que l'IA a choisi.
+  const hasAdvancedPreset = skipQuality || allowDup || allowGeneric || emailOverride.length > 0;
+  const [advancedOpen, setAdvancedOpen] = useState(hasAdvancedPreset);
 
   const readOnly = state.status !== "pending";
 
@@ -162,6 +168,23 @@ export function ApplyToCompanyCard({ state, onEdit }: ApplyToCompanyCardProps) {
                 Autoriser les emails génériques (contact@, info@) si pas d&apos;email RH trouvé
               </span>
             </label>
+            <div className="space-y-1">
+              <label
+                htmlFor={`email-override-${state.call.id}`}
+                className="block text-sm text-[var(--text-secondary)]"
+              >
+                Email destinataire (override) — bypass le picker auto
+              </label>
+              <input
+                id={`email-override-${state.call.id}`}
+                type="email"
+                disabled={readOnly}
+                value={emailOverride}
+                onChange={(e) => onEdit({ email_override: e.target.value })}
+                placeholder="ex: contact@boite.com (laisser vide pour auto)"
+                className="w-full rounded-md border border-[var(--border-soft)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-orange)] disabled:opacity-50"
+              />
+            </div>
           </div>
         )}
       </div>

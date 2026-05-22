@@ -405,6 +405,10 @@ export interface ProcessSingleOptions {
   // Override utilisateur explicite : accepte les emails génériques (contact@, info@) si pas d'email RH trouvé.
   // Le filtre blacklist (noreply@, abuse@…) reste actif.
   allowGenericEmail?: boolean;
+  // Email saisi explicitement par l'utilisateur — bypass complet du picker (whitelist + loose).
+  // Validé uniquement sur le format (regex basique). Utiliser quand l'auto-pick est trop strict
+  // (typiquement : email valide mais sur un domaine "frère" que pickBestContactEmail refuse).
+  emailOverride?: string;
 }
 
 export async function processSingleCompany(
@@ -466,13 +470,30 @@ export async function processSingleCompany(
       }
     }
 
-    // 4. Email whitelist (garde-fou non négociable)
-    // Si l'utilisateur a explicitement passé allowGenericEmail=true et que la version stricte
-    // ne trouve rien, on retente avec la variante permissive (accepte contact@, info@ tant que
-    // le domaine match l'entreprise ; blacklist noreply/abuse/support reste actif).
-    let bestEmail = pickBestContactEmail(scraped.emails, cleanUrl);
-    if (!bestEmail && opts.allowGenericEmail === true) {
-      bestEmail = pickBestContactEmailLoose(scraped.emails, cleanUrl);
+    // 4. Sélection de l'email destinataire
+    // Ordre : 4a. emailOverride utilisateur (bypass total) > 4b. picker strict > 4c. picker loose si allowGenericEmail.
+    let bestEmail: EmailScore | null = null;
+    if (opts.emailOverride && opts.emailOverride.trim()) {
+      const override = opts.emailOverride.trim().toLowerCase();
+      const match = override.match(/^([^@\s]+)@([^@\s]+\.[a-z]{2,})$/);
+      if (!match) {
+        decision.scrapedEmails = scraped.emails;
+        decision.skipReason = `email_override invalide : "${opts.emailOverride}" — format attendu local@domaine.tld`;
+        return decision;
+      }
+      bestEmail = {
+        email: override,
+        score: 1,
+        accept: true,
+        reasons: ["manual_override"],
+        local: match[1],
+        domain: match[2],
+      };
+    } else {
+      bestEmail = pickBestContactEmail(scraped.emails, cleanUrl);
+      if (!bestEmail && opts.allowGenericEmail === true) {
+        bestEmail = pickBestContactEmailLoose(scraped.emails, cleanUrl);
+      }
     }
     if (!bestEmail) {
       decision.scrapedEmails = scraped.emails;

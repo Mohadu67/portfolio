@@ -75,49 +75,32 @@ function portfolioDisplay(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-// Bloc signature (juste sous le corps du mail). Identité claire + lien portfolio.
+// Bloc signature + disclaimer compact (juste sous le corps du mail).
+// Volontairement SANS séparateur "—\n" ni ligne horizontale "─────" : Gmail trim
+// agressivement tout ce qui suit ces patterns reconnus comme signature, surtout sur les
+// replies en milieu de thread mobile. Format compact = ratio body/footer + faible et
+// pas de trigger heuristique → le RH voit toujours la mention IA + le portfolio.
 function agentSignatureText(): string {
-  return `\n—\nAgent Cockpit · pour Mohammed Hamiani\n${PORTFOLIO_URL}`;
+  return `\nAgent Cockpit · pour Mohammed Hamiani · ${PORTFOLIO_URL}`;
 }
 
 function agentSignatureHtml(): string {
   return `
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-collapse:collapse;">
-  <tr>
-    <td style="padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#1f2937;line-height:1.5;">
-      <div style="font-size:14px;font-weight:600;letter-spacing:0.01em;">
-        Agent Cockpit
-        <span style="font-weight:400;color:#6b7280;"> · pour Mohammed Hamiani</span>
-      </div>
-      <div style="margin-top:3px;font-size:13px;">
-        <a href="${PORTFOLIO_URL}" style="color:#ff6b35;text-decoration:none;font-weight:500;">
-          ${portfolioDisplay(PORTFOLIO_URL)}
-        </a>
-      </div>
-    </td>
-  </tr>
-</table>`;
+<div style="margin-top:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:13px;color:#1f2937;line-height:1.5;">
+  <span style="font-weight:600;">Agent Cockpit</span>
+  <span style="color:#6b7280;"> · pour Mohammed Hamiani · </span>
+  <a href="${PORTFOLIO_URL}" style="color:#ff6b35;text-decoration:none;font-weight:500;">${portfolioDisplay(PORTFOLIO_URL)}</a>
+</div>`;
 }
 
-// Footer disclaimer (sous la signature). Assume le côté IA avec un peu d'humour pour
-// que le RH sache à quoi s'attendre et qu'une éventuelle bourde soit pardonnée d'avance.
-const AGENT_FOOTER_TEXT = `
-─────────────────────────────────────
-🤖  Ce message a été rédigé en autonomie par l'Agent Cockpit (IA).
-Si je raconte une bêtise — mea culpa : Mohammed reprend la main et corrige humain-à-humain.
-─────────────────────────────────────`;
+// Disclaimer IA — 1 ligne, pas de cadre type signature. Garde l'essentiel : "c'est un agent
+// IA + Mohammed corrige derrière si besoin".
+const AGENT_FOOTER_TEXT = `🤖 Réponse rédigée par l'agent IA de Mohammed (corrigée humain-à-humain en cas de bourde).`;
 
 const AGENT_FOOTER_HTML = `
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border-collapse:collapse;width:100%;max-width:560px;">
-  <tr>
-    <td style="padding:12px 14px;background:#f9fafb;border-left:3px solid #ff6b35;border-radius:4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:11px;line-height:1.55;color:#6b7280;">
-      <span style="font-size:13px;vertical-align:-1px;">🤖</span>
-      <span style="margin-left:4px;font-style:italic;">
-        Ce message a été rédigé en autonomie par l'Agent Cockpit (IA). Si je raconte une bêtise — <em>mea culpa</em> : Mohammed reprend la main et corrige humain-à-humain.
-      </span>
-    </td>
-  </tr>
-</table>`;
+<div style="margin-top:6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:12px;color:#6b7280;font-style:italic;line-height:1.5;">
+  🤖 Réponse rédigée par l'agent IA de Mohammed (corrigée humain-à-humain en cas de bourde).
+</div>`;
 
 // Send a reply that keeps Gmail threading by setting In-Reply-To + References headers.
 export async function replyInThread(input: ReplyInThreadInput): Promise<ReplyInThreadResult> {

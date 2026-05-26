@@ -92,6 +92,8 @@ function extractEmails(html: string, $?: cheerio.CheerioAPI): string[] {
   const decoded = html
     .replace(/&#0?64;/g, "@")
     .replace(/&#x40;/gi, "@")
+    .replace(/&commat;/gi, "@")
+    .replace(/＠/g, "@") // U+FF20 (fullwidth commercial at)
     .replace(/&#0?46;/g, ".")
     .replace(/&#x2e;/gi, ".")
     .replace(/\[\s*(at|arobase|@)\s*\]/gi, "@")
@@ -106,14 +108,22 @@ function extractEmails(html: string, $?: cheerio.CheerioAPI): string[] {
   collected.push(...matches);
 
   if ($) {
-    // 2. mailto: links — très souvent oublié par le regex full HTML quand l'attribut est encodé
-    $("a[href^='mailto:']").each((_, el) => {
+    // 2. Texte aplati : ramasse les emails splittés par des balises imbriquées (anti-bot fréquent),
+    // typiquement <span>contact</span>@<span>boite.com</span> ou contact<wbr>@<wbr>boite.com.
+    // cheerio `.text()` recolle les nodes texte en ignorant les balises → le regex match.
+    const flatText = $.root().text();
+    const flatMatches = flatText.match(EMAIL_REGEX) || [];
+    collected.push(...flatMatches);
+
+    // 3. mailto: links — case-insensitive sur le scheme (Wix/Wordpress émettent parfois "Mailto:" ou "MAILTO:")
+    $("a[href]").each((_, el) => {
       const href = $(el).attr("href") || "";
+      if (!/^mailto:/i.test(href)) return;
       const raw = href.replace(/^mailto:/i, "").split("?")[0].trim();
       if (raw && EMAIL_VALIDATE_RE.test(raw)) collected.push(raw);
     });
 
-    // 3. Cloudflare email protection : <a class="__cf_email__" data-cfemail="HEX">
+    // 4. Cloudflare email protection : <a class="__cf_email__" data-cfemail="HEX">
     $("[data-cfemail], .__cf_email__").each((_, el) => {
       const hex = $(el).attr("data-cfemail");
       if (!hex) return;
@@ -121,7 +131,7 @@ function extractEmails(html: string, $?: cheerio.CheerioAPI): string[] {
       if (email) collected.push(email);
     });
 
-    // 4. Attributs data-email / data-mail (autres frameworks d'obfuscation)
+    // 5. Attributs data-email / data-mail (autres frameworks d'obfuscation)
     $("[data-email], [data-mail]").each((_, el) => {
       const raw = ($(el).attr("data-email") || $(el).attr("data-mail") || "").trim();
       if (raw && EMAIL_VALIDATE_RE.test(raw)) collected.push(raw);

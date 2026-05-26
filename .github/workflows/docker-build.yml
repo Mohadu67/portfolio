@@ -46,7 +46,9 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        # Pin v6.19.2 : le cache GH Actions est cassé sur le SHA de v5 (même incident upstream que setup-buildx-action).
+        # v6 = bump Node 20, pas de breaking change pour notre usage.
+        uses: docker/build-push-action@v6.19.2
         with:
           context: .
           file: ./Dockerfile

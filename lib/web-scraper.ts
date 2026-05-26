@@ -13,9 +13,12 @@ const EMAIL_VALIDATE_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const PHONE_REGEX = /(?:\+33|0)\s*[1-9](?:[\s.-]*\d{2}){4}/g;
 
 const ABOUT_LINK_PATTERNS = [
-  // About/Company pages
   /\b(about|a-propos|a_propos|apropos|qui-sommes-nous|qui_sommes_nous|notre-histoire|notre-equipe|notre-mission|presentation|l-association|lassociation|notre-association)\b/i,
-  // Contact pages
+];
+
+// Pages contact : utiles pour les emails/téléphones, jamais pour aboutText (sinon on récupère
+// les labels du formulaire — "Nom*, Société*, Email*, Message" — au lieu d'une vraie description).
+const CONTACT_LINK_PATTERNS = [
   /\b(contact|nous-contacter|contactez-nous|get-in-touch)\b/i,
 ];
 
@@ -175,6 +178,10 @@ function findAboutLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
   return findLinksByPatterns($, baseUrl, ABOUT_LINK_PATTERNS);
 }
 
+function findContactLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
+  return findLinksByPatterns($, baseUrl, CONTACT_LINK_PATTERNS);
+}
+
 function findLegalLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
   return findLinksByPatterns($, baseUrl, LEGAL_LINK_PATTERNS);
 }
@@ -208,6 +215,10 @@ function extractDescription($: cheerio.CheerioAPI): string {
 }
 
 function extractAboutText($: cheerio.CheerioAPI): string {
+  // On retire les <form> avant d'extraire les <p> : sinon les labels (« Nom* », « Email* »…)
+  // d'un form de contact ou d'une newsletter embarquée sur la page polluent le texte.
+  $("form").remove();
+
   // Try main content areas
   const selectors = [
     "main", "article", '[role="main"]',
@@ -281,11 +292,12 @@ export async function scrapeCompanyWebsite(url: string): Promise<ScrapedCompanyD
   result.emails = extractEmails(homeHtml, $home);
   result.phones = extractPhones($home.text());
 
-  // 2. Find about/contact and legal links separately
+  // 2. Find about, contact, and legal links separately
   const aboutLinks = findAboutLinks($home, url).slice(0, 3);
+  const contactLinks = findContactLinks($home, url).slice(0, 3);
   const legalLinks = findLegalLinks($home, url).slice(0, 3);
 
-  // 3. Scrape about/contact pages → aboutText + emails
+  // 3. Scrape about pages → aboutText + emails + phones
   if (aboutLinks.length > 0) {
     const aboutResults = await Promise.all(aboutLinks.map(fetchPage));
     for (const pageHtml of aboutResults) {
@@ -300,7 +312,19 @@ export async function scrapeCompanyWebsite(url: string): Promise<ScrapedCompanyD
     }
   }
 
-  // 4. Scrape legal pages → emails only (never use for aboutText)
+  // 4. Scrape contact pages → emails + phones ONLY (jamais aboutText : leur contenu utile
+  // est un formulaire dont les <p> deviennent du bruit "Nom*, Email*, Message" si on l'extrait).
+  if (contactLinks.length > 0) {
+    const contactResults = await Promise.all(contactLinks.map(fetchPage));
+    for (const pageHtml of contactResults) {
+      if (!pageHtml) continue;
+      const $contact = cheerio.load(pageHtml);
+      result.emails.push(...extractEmails(pageHtml, $contact));
+      result.phones.push(...extractPhones($contact.text()));
+    }
+  }
+
+  // 5. Scrape legal pages → emails only (never use for aboutText)
   if (legalLinks.length > 0) {
     const legalResults = await Promise.all(legalLinks.map(fetchPage));
     for (const pageHtml of legalResults) {
@@ -310,7 +334,7 @@ export async function scrapeCompanyWebsite(url: string): Promise<ScrapedCompanyD
     }
   }
 
-  // 5. Fallback: get about text from homepage
+  // 6. Fallback: get about text from homepage
   if (!result.aboutText) {
     result.aboutText = extractAboutText($home);
   }

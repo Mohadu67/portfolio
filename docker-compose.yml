@@ -32,6 +32,7 @@ services:
     environment:
       MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASS:-admin}@mongodb:27017/stage_agent?authSource=admin
       API_SECRET: ${API_SECRET:?API_SECRET requis dans .env}
+      CRON_SECRET: ${CRON_SECRET}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GMAIL_USER: ${GMAIL_USER}

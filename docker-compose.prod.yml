@@ -31,6 +31,7 @@ services:
     environment:
       MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASS:-admin}@mongodb:27017/stage_agent?authSource=admin
       API_SECRET: ${API_SECRET:?API secret required}
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET required for scheduled jobs (weekly-prospect, run-relances, check-inbox)}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GMAIL_USER: ${GMAIL_USER}

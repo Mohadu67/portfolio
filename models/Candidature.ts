@@ -103,6 +103,9 @@ export interface ICandidature {
   statut: CandidatureStatut;
   type: CandidatureType;
   lettre: string | null;
+  // Consignes libres pour orienter la prochaine génération IA (ex: « mentionne mon expérience React »,
+  // « ne parle pas du fast-food »). Vide = comportement par défaut.
+  letterInstruction: string;
   cv: string | null;
   notes: string;
   relance: IRelance | null;
@@ -215,6 +218,7 @@ const candidatureSchema = new Schema<ICandidature>(
       default: "stage",
     },
     lettre: { type: String, default: null },
+    letterInstruction: { type: String, default: "" },
     cv: { type: String, default: null },
     notes: { type: String, default: "" },
     relance: {

@@ -146,6 +146,10 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
   // Fix : 10 entreprises × (scrape + 5 appels Gemini + envoi SMTP) peut dépasser maxDuration=300s sur Vercel/cron.
   // On réduit le default à 5 pour rester confortablement sous la limite.
   const maxCompanies = opts.maxCompanies ?? 5;
+  // Consignes par défaut injectées dans la génération de lettre pour toutes les candidatures auto.
+  // Une instruction au niveau d'une candidature (jamais le cas en auto, mais utile en re-génération manuelle)
+  // override ce défaut.
+  const defaultLetterInstruction = typeof auto.defaultLetterInstruction === "string" ? auto.defaultLetterInstruction : "";
 
   // Multi-query rotation : si l'utilisateur a configuré plusieurs queries (1 par ligne),
   // on en pioche une différente à chaque run via weeklyProspectQueryIndex (modulo).
@@ -322,7 +326,7 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
       // 7. Generate letter (passe le type pour que le 1er paragraphe match stage/alternance/cdi)
       let lettre: string;
       try {
-        lettre = await generateLetterProposal(entrepriseName, scraped.aboutText, poste, candidatureType);
+        lettre = await generateLetterProposal(entrepriseName, scraped.aboutText, poste, candidatureType, defaultLetterInstruction);
         geminiErrorsInRow = 0;
       } catch (geminiErr) {
         geminiErrorsInRow++;
@@ -345,6 +349,7 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
         statut: "lettre générée",
         type: candidatureType,
         lettre,
+        letterInstruction: defaultLetterInstruction,
         notes: `Auto-apply ${new Date().toISOString().slice(0, 10)} — fit ${fit.score.toFixed(2)}${chosenOffer ? `, offer ${offerScore?.score.toFixed(2)}` : " (spontanée)"}`,
         source: "auto-apply",
         date: new Date().toISOString().slice(0, 10),

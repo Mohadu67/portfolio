@@ -30,6 +30,7 @@ export async function PATCH(
     if (body.type) candidature.type = body.type;
     if (body.relance !== undefined) candidature.relance = body.relance;
     if (typeof body.lettre === "string") candidature.lettre = body.lettre;
+    if (typeof body.letterInstruction === "string") candidature.letterInstruction = body.letterInstruction;
     if (typeof body.email === "string") candidature.email = body.email;
 
     if (

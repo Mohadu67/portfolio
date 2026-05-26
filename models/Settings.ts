@@ -27,6 +27,9 @@ export interface ISettings {
     weeklyProspectQueryIndex: number;
     lastProspectRunAt?: Date | null;
     lastProspectSummary?: string | null;
+    // Consignes par défaut injectées dans le prompt de génération de lettre quand l'auto-apply tourne.
+    // Une instruction au niveau d'une candidature override ce défaut. Vide = comportement actuel.
+    defaultLetterInstruction: string;
   };
   search: {
     defaultLocation: string;
@@ -89,6 +92,7 @@ const settingsSchema = new Schema<ISettings>(
       weeklyProspectQueryIndex: { type: Number, default: 0 },
       lastProspectRunAt: { type: Date, default: null },
       lastProspectSummary: { type: String, default: null },
+      defaultLetterInstruction: { type: String, default: "" },
     },
     search: {
       defaultLocation: { type: String, default: "" },

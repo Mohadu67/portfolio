@@ -37,6 +37,7 @@ export function GenerateLetterModal({
 }: GenerateLetterModalProps) {
   const [letterText, setLetterText] = useState("");
   const [type, setType] = useState<"stage" | "alternance" | "cdi">("stage");
+  const [instruction, setInstruction] = useState(candidature?.letterInstruction || "");
   const [improvedLetter, setImprovedLetter] = useState("");
   const [step, setStep] = useState<"write" | "improved" | "review">("write");
   const [loading, setLoading] = useState(false);
@@ -47,6 +48,11 @@ export function GenerateLetterModal({
   const [selectedCvFileId, setSelectedCvFileId] = useState<string>("auto");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewName, setPreviewName] = useState("");
+
+  // Re-sync l'instruction quand la modal s'ouvre pour une autre candidature.
+  useEffect(() => {
+    if (isOpen) setInstruction(candidature?.letterInstruction || "");
+  }, [isOpen, candidature?._id, candidature?.letterInstruction]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -103,6 +109,17 @@ export function GenerateLetterModal({
   const handleGenerateProposal = async () => {
     setGeneratingProposal(true);
     try {
+      // Persiste l'instruction sur la candidature AVANT de générer, pour qu'elle survive à un rechargement
+      // et que les régénérations futures (auto ou manuelles) la réutilisent.
+      const trimmedInstruction = instruction.trim();
+      if (candidature._id && trimmedInstruction !== (candidature.letterInstruction || "").trim()) {
+        await fetch(`/api/candidatures/${candidature._id}`, {
+          method: "PATCH",
+          headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({ letterInstruction: trimmedInstruction }),
+        }).catch(() => { /* non-bloquant : on génère quand même */ });
+      }
+
       const response = await fetch("/api/generate-proposal", {
         method: "POST",
         headers: {
@@ -113,6 +130,8 @@ export function GenerateLetterModal({
           entreprise: candidature.entreprise,
           aboutText: candidature.aboutText || "",
           poste: candidature.poste,
+          type,
+          ...(trimmedInstruction ? { instruction: trimmedInstruction } : {}),
         }),
       });
 
@@ -307,6 +326,23 @@ export function GenerateLetterModal({
                   </div>
                 </motion.div>
 
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }}>
+                  <label className="block text-sm font-semibold text-[var(--text-primary)] mb-2">
+                    Consignes pour l&apos;IA <span className="text-[var(--text-tertiary)] font-normal">(optionnel)</span>
+                  </label>
+                  <textarea
+                    value={instruction}
+                    onChange={(e) => setInstruction(e.target.value)}
+                    rows={2}
+                    maxLength={800}
+                    placeholder="Ex: insiste sur mon expérience React, ne mentionne pas le fast-food, mets en avant l'autonomie..."
+                    className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)]/50 rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-blue)]/60 resize-none"
+                  />
+                  <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                    Ces consignes orientent le paragraphe central. Persistées sur cette candidature pour les régénérations futures.
+                  </p>
+                </motion.div>
+
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
                   <div className="flex items-center justify-between mb-3">
                     <label className="block text-sm font-semibold text-[var(--text-primary)]">
@@ -319,7 +355,7 @@ export function GenerateLetterModal({
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
-                      {generatingProposal ? "Génération..." : "Générer une proposition"}
+                      {generatingProposal ? "Génération..." : instruction.trim() ? "Générer avec consignes" : "Générer une proposition"}
                     </motion.button>
                   </div>
                   <p className="text-xs text-[var(--text-secondary)] mb-3">

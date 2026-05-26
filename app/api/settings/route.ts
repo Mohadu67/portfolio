@@ -69,6 +69,9 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.automation.weeklyProspectLocation === "string") {
         s.automation.weeklyProspectLocation = body.automation.weeklyProspectLocation.trim();
       }
+      if (typeof body.automation.defaultLetterInstruction === "string") {
+        s.automation.defaultLetterInstruction = body.automation.defaultLetterInstruction.replace(/^\s+|\s+$/g, "");
+      }
     }
     if (body.search && typeof body.search === "object") {
       if (typeof body.search.defaultLocation === "string") {

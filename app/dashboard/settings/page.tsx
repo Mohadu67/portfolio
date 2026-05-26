@@ -55,6 +55,7 @@ interface AppSettings {
     weeklyProspectLocation: string;
     lastProspectRunAt?: string | null;
     lastProspectSummary?: string | null;
+    defaultLetterInstruction: string;
   };
   letterTemplate: {
     stage: string;
@@ -544,6 +545,20 @@ export default function SettingsPage() {
                 value={settings.automation.autoApplyMinCompanyScore}
                 onChange={(e) => updateAutoApplyField("autoApplyMinCompanyScore", parseFloat(e.target.value))}
                 className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-[var(--text-tertiary)] block mb-1">
+                Consignes par défaut pour l&apos;IA (lettres auto)
+                <span className="opacity-70"> — orientation appliquée à toutes les lettres générées par l&apos;auto-apply</span>
+              </label>
+              <textarea
+                rows={3}
+                value={settings.automation.defaultLetterInstruction}
+                onChange={(e) => updateAutoApplyField("defaultLetterInstruction", e.target.value)}
+                className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+                placeholder="Ex: insiste sur l'autonomie et la capacité à livrer en solo, ne mentionne pas le fast-food sauf si l'entreprise est dans la food/retail."
+                maxLength={800}
               />
             </div>
           </div>

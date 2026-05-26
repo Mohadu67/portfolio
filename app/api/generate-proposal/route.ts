@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { entreprise, aboutText, poste } = body;
+    const { entreprise, aboutText, poste, type, instruction } = body;
 
     if (!entreprise) {
       return NextResponse.json(
@@ -18,10 +18,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const candidatureType = ["stage", "alternance", "cdi"].includes(type) ? type : undefined;
+    const userInstruction = typeof instruction === "string" ? instruction : undefined;
+
     const lettre = await generateLetterProposal(
       entreprise,
       aboutText || "",
-      poste
+      poste,
+      candidatureType,
+      userInstruction,
     );
 
     return NextResponse.json({

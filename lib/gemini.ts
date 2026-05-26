@@ -1,6 +1,6 @@
 import { getLetterTemplate, splitTemplate, fillTemplate } from "./letter-template";
 
-import { GoogleGenerativeAI, type GenerationConfig } from "@google/generative-ai";
+import { GoogleGenerativeAI, type GenerationConfig, FinishReason } from "@google/generative-ai";
 
 function getGeminiApiKey(): string {
   const key = process.env.GEMINI_API_KEY;
@@ -41,6 +41,19 @@ async function callGeminiNative(
     generationConfig,
   });
   const result = await model.generateContent(userPrompt);
+
+  // gemini-2.5-flash consomme un "thinking budget" sur maxOutputTokens. Si le thinking
+  // bouffe le quota, la sortie utile est tronquée — souvent en plein milieu d'un JSON
+  // (ex: `"reason": "L'`). On détecte explicitement ce cas pour éviter de retourner du texte
+  // partiel qui pète plus loin avec un message d'erreur opaque ("non-JSON response").
+  const finishReason = result.response.candidates?.[0]?.finishReason;
+  if (finishReason === FinishReason.MAX_TOKENS) {
+    const partial = result.response.text().slice(0, 200);
+    throw new Error(
+      `Gemini truncated by MAX_TOKENS (maxOutputTokens=${generationConfig.maxOutputTokens}). ` +
+      `Augmente maxOutputTokens ou raccourcis le prompt. Partial: ${partial}`,
+    );
+  }
   return result.response.text();
 }
 
@@ -383,7 +396,7 @@ export async function classifyAndReply(input: ClassifyAndReplyInput): Promise<Cl
   const raw = await callGeminiNative(
     buildAutoReplyUserPrompt(input),
     AUTO_REPLY_SYSTEM_PROMPT,
-    { model, temperature: 0.5, maxOutputTokens: 4096, jsonMode: true },
+    { model, temperature: 0.5, maxOutputTokens: 8192, jsonMode: true },
   );
 
   let parsed: { category?: string; confidence?: number; reply?: string };
@@ -473,7 +486,7 @@ ${safeAbout || "(aucun texte disponible)"}
 
   const raw = await callGeminiNative(userPrompt, systemPrompt, {
     temperature: 0.3,
-    maxOutputTokens: 1024,
+    maxOutputTokens: 8192,
     jsonMode: true,
   });
   let parsed: { score?: number; isTechRelevant?: boolean; reason?: string };
@@ -540,7 +553,7 @@ ${safeDesc}
 
   const raw = await callGeminiNative(userPrompt, systemPrompt, {
     temperature: 0.3,
-    maxOutputTokens: 1024,
+    maxOutputTokens: 8192,
     jsonMode: true,
   });
   let parsed: { match?: boolean; score?: number; reason?: string; jobType?: string };

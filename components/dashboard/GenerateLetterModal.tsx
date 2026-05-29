@@ -174,6 +174,16 @@ export function GenerateLetterModal({
       setImprovedLetter(data.lettre);
       setStep("improved");
       toast.success("Lettre améliorée!");
+
+      // Sync le parent : l'API a déjà passé le statut à "lettre générée" en DB,
+      // mais sans onUpdate la liste locale reste en "identifiée" et la candidature
+      // n'apparaît pas dans l'onglet "Prêtes à envoyer" si on ferme sans envoyer.
+      if (candidature._id) {
+        await onUpdate(candidature._id, {
+          statut: "lettre générée",
+          lettre: data.lettre,
+        });
+      }
     } catch (error) {
       toast.error("Erreur lors de l'amélioration");
     } finally {

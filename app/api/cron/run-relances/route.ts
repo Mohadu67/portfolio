@@ -27,7 +27,11 @@ export async function POST(request: NextRequest) {
     await connectDB();
     const now = startedAt;
 
+    // Ceinture+bretelles : ne renvoyer une relance QUE si la candidature est encore "postulée".
+    // Si le statut a bougé (réponse reçue, refus, entretien, acceptée) la relance n'a plus lieu d'être,
+    // même si une annulation explicite a foiré quelque part dans le pipeline.
     const due = await Candidature.find({
+      statut: "postulée",
       "relanceHistory.status": "programmée",
       "relanceHistory.scheduledFor": { $lte: now },
       email: { $ne: "" },

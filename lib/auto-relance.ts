@@ -52,3 +52,23 @@ export async function scheduleAutoRelance(
   candidature.relanceHistory = [...(candidature.relanceHistory ?? []), entry];
   return entry;
 }
+
+/**
+ * Passe toutes les relances "programmée" → "annulée" sur la candidature.
+ * Mute le document en mémoire — n'appelle PAS save().
+ * Retourne le nombre de relances annulées.
+ */
+export function cancelPendingRelances(
+  candidature: HydratedDocument<ICandidature>,
+  reason: string
+): number {
+  let cancelled = 0;
+  for (const r of candidature.relanceHistory ?? []) {
+    if (r.status === "programmée") {
+      r.status = "annulée";
+      r.error = reason;
+      cancelled++;
+    }
+  }
+  return cancelled;
+}

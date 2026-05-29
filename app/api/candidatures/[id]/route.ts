@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature, CandidatureStatut } from "@/models/Candidature";
 import { verifyAuth } from "@/lib/auth";
-import { scheduleAutoRelance } from "@/lib/auto-relance";
+import { cancelPendingRelances, scheduleAutoRelance } from "@/lib/auto-relance";
 
 export async function PATCH(
   request: NextRequest,
@@ -39,6 +39,16 @@ export async function PATCH(
       body.skipAutoRelance !== true
     ) {
       await scheduleAutoRelance(candidature);
+    }
+
+    // Quand le statut sort de "postulée" (refus, entretien, acceptée, réponse reçue…),
+    // les relances en attente n'ont plus de raison d'être : on les annule.
+    if (
+      body.statut &&
+      previousStatut === "postulée" &&
+      body.statut !== "postulée"
+    ) {
+      cancelPendingRelances(candidature, `Statut passé à "${body.statut}"`);
     }
 
     await candidature.save();

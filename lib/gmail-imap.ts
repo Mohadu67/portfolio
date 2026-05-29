@@ -1,7 +1,7 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { connectDB } from "./mongodb";
-import { Candidature, ICandidature, IEmailReceived, IAutoReply } from "@/models/Candidature";
+import { Candidature, CandidatureStatut, ICandidature, IEmailReceived, IAutoReply } from "@/models/Candidature";
 import { getSettingsDoc } from "@/models/Settings";
 import { CVSection } from "@/models/CVSection";
 import { sendNotification } from "./notifications";
@@ -249,10 +249,28 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
               // Un autre process a déjà traité ce messageId (race condition évitée), skip silencieusement
               continue;
             }
-            // Update status if currently postulée (séparé pour rester atomique sur le push)
-            if (candDoc.statut === "postulée") {
-              candDoc.statut = "réponse reçue";
-              await candDoc.save();
+            // À tout mail entrant : annuler les relances en attente + bumper postulée → réponse reçue.
+            // updateOne atomique (au lieu de candDoc.save()) pour ne pas écraser un autoReplies poussé
+            // par un sync gmail concurrent entre le findOneAndUpdate ci-dessus et maintenant.
+            const bumpStatut = candDoc.statut === "postulée";
+            await Candidature.updateOne(
+              { _id: candDoc._id },
+              {
+                $set: {
+                  ...(bumpStatut ? { statut: "réponse reçue" } : {}),
+                  "relanceHistory.$[r].status": "annulée",
+                  "relanceHistory.$[r].error": "Réponse reçue de l'entreprise",
+                },
+              },
+              { arrayFilters: [{ "r.status": "programmée" }] }
+            );
+            // Refléter en mémoire pour la suite de la boucle (classify + autoReply)
+            if (bumpStatut) candDoc.statut = "réponse reçue";
+            for (const r of candDoc.relanceHistory ?? []) {
+              if (r.status === "programmée") {
+                r.status = "annulée";
+                r.error = "Réponse reçue de l'entreprise";
+              }
             }
           }
 
@@ -293,6 +311,23 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
                 availability: profileAvailability,
                 calendlyUrl: profileCalendlyUrl,
               });
+
+              // Si l'IA détecte un refus ou un entretien avec confiance suffisante, on fait remonter
+              // le statut au-delà de "réponse reçue". On ne dégrade pas un statut terminal déjà posé
+              // manuellement (refus/acceptée) ni un statut "entretien" déjà en cours.
+              if (!opts.dryRun && cls.confidence >= autoReplyMinConfidence) {
+                const TERMINAL: CandidatureStatut[] = ["refus", "acceptée", "entretien"];
+                let inferredStatut: CandidatureStatut | null = null;
+                if (cls.category === "refus") inferredStatut = "refus";
+                else if (cls.category === "entretien") inferredStatut = "entretien";
+                if (inferredStatut && !TERMINAL.includes(candDoc.statut)) {
+                  await Candidature.updateOne(
+                    { _id: candDoc._id, statut: { $nin: TERMINAL } },
+                    { $set: { statut: inferredStatut } }
+                  );
+                  candDoc.statut = inferredStatut;
+                }
+              }
 
               const shouldSend = cls.confidence >= autoReplyMinConfidence;
               let sentMessageId: string | undefined;

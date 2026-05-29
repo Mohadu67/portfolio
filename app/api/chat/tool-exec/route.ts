@@ -232,6 +232,19 @@ export async function POST(request: NextRequest) {
         if (!STATUTS.includes(statut)) {
           return NextResponse.json({ error: `Invalid status: ${statut}` }, { status: 400 });
         }
+        // Annule en même temps les relances programmée si on sort de "postulée" (atomique).
+        if (statut !== "postulée") {
+          await Candidature.updateOne(
+            { _id: candidature_id, statut: "postulée" },
+            {
+              $set: {
+                "relanceHistory.$[r].status": "annulée",
+                "relanceHistory.$[r].error": `Statut passé à "${statut}"`,
+              },
+            },
+            { arrayFilters: [{ "r.status": "programmée" }] }
+          );
+        }
         const c = await Candidature.findByIdAndUpdate(candidature_id, { statut }, { new: true });
         if (!c) return NextResponse.json({ error: "Not found" }, { status: 404 });
         return NextResponse.json({ ok: true, summary: `Statut de ${c.entreprise} mis à "${statut}"` });

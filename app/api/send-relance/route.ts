@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         candidature.email,
         message,
         templateTitle || "Relance",
-        candidature.type || "stage",
+        candidature.type || "alternance",
         process.env.PROFIL_NOM || "Mohammed Hamiani"
       );
     } catch (err) {

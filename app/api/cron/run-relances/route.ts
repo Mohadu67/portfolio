@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
             candidature.email,
             entry.message,
             entry.templateTitle ?? "Relance",
-            candidature.type ?? "stage",
+            candidature.type ?? "alternance",
             process.env.PROFIL_NOM ?? "Mohammed Hamiani"
           );
           entry.status = "envoyée";

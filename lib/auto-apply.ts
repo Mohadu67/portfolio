@@ -318,7 +318,7 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
       const poste = chosenOffer ? chosenOffer.title : "Candidature spontanée — Développeur fullstack";
       const candidatureType = (offerScore?.jobType === "alternance" || offerScore?.jobType === "cdi")
         ? offerScore.jobType
-        : "stage";
+        : "alternance";
       if (chosenOffer && offerScore) {
         decision.bestOffer = { title: chosenOffer.title, url: chosenOffer.url, score: offerScore.score, reason: offerScore.reason, jobType: offerScore.jobType };
       }
@@ -461,7 +461,7 @@ export interface ProcessSingleOptions {
   allowDuplicate?: boolean;
   // Bypass complet du score qualité Gemini (l'user a déjà jugé que ça l'intéressait)
   skipQualityScore?: boolean;
-  // Type de candidature (défaut: stage)
+  // Type de candidature (défaut: alternance)
   candidatureType?: "stage" | "alternance" | "cdi";
   // Override utilisateur explicite : accepte les emails génériques (contact@, info@) si pas d'email RH trouvé.
   // Le filtre blacklist (noreply@, abuse@…) reste actif.
@@ -477,7 +477,7 @@ export async function processSingleCompany(
   opts: ProcessSingleOptions = {},
 ): Promise<CandidateDecision> {
   await connectDB();
-  const candidatureType = opts.candidatureType ?? "stage";
+  const candidatureType = opts.candidatureType ?? "alternance";
 
   const decision: CandidateDecision = {
     url: inputUrl,

@@ -3,7 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import { CronLog, type ICronLog } from "@/models/CronLog";
 import { verifyAuth } from "@/lib/auth";
 
-const JOB_NAMES = ["run-relances", "check-inbox", "run-saved-queries"] as const;
+const JOB_NAMES = ["run-relances", "check-inbox", "run-saved-queries", "weekly-prospect"] as const;
 
 interface JobStatus {
   name: (typeof JOB_NAMES)[number];
@@ -20,6 +20,7 @@ const STALENESS_THRESHOLD_MINUTES: Record<JobStatus["name"], number> = {
   "run-relances": 30,
   "check-inbox": 60,
   "run-saved-queries": 720, // 12h
+  "weekly-prospect": 10260, // 7j + ~3h de marge
 };
 
 export async function GET(request: NextRequest) {

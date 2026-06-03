@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
 
         const fullMessage = applyVariables(
           message,
-          { entreprise: c.entreprise, poste: c.poste, type: c.type ?? "stage" },
+          { entreprise: c.entreprise, poste: c.poste, type: c.type ?? "alternance" },
           prenom
         );
         await sendRelance(
@@ -277,7 +277,7 @@ export async function POST(request: NextRequest) {
           c.email,
           fullMessage,
           title,
-          c.type ?? "stage",
+          c.type ?? "alternance",
           process.env.PROFIL_NOM ?? "Mohammed Hamiani"
         );
 

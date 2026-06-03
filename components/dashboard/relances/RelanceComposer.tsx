@@ -41,7 +41,7 @@ function applyVariables(template: string, c: ICandidature, prenom: string): stri
   return template
     .replaceAll("{entreprise}", c.entreprise ?? "")
     .replaceAll("{poste}", c.poste ?? "")
-    .replaceAll("{type}", c.type ?? "stage")
+    .replaceAll("{type}", c.type ?? "alternance")
     .replaceAll("{prenom}", prenom);
 }
 

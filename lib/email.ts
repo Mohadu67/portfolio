@@ -155,7 +155,7 @@ export async function sendCandidature(
   email: string,
   letterPdfBuffer: Buffer,
   candidatName: string = "Mohammed Hamiani",
-  type: "stage" | "alternance" | "cdi" = "stage",
+  type: "stage" | "alternance" | "cdi" = "alternance",
   cvOverride?: { buffer: Buffer; filename: string }
 ): Promise<void> {
   const isSpontanee = poste.toLowerCase().includes("spontanée") || poste.toLowerCase().includes("spontanee");
@@ -182,8 +182,7 @@ export async function sendCandidature(
   if (isSpontanee) {
     const typeText =
       type === "cdi" ? "un CDI en développement web" :
-      type === "alternance" ? "une alternance en développement web dès septembre 2026" :
-      "un stage de 3 mois en développement web, avec la possibilité de poursuivre en alternance dès septembre 2026";
+      "une alternance en développement web dès septembre 2026";
 
     emailBody = `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
@@ -258,7 +257,7 @@ export async function sendRelance(
   email: string,
   message: string,
   templateTitle: string,
-  type: "stage" | "alternance" | "cdi" = "stage",
+  type: "stage" | "alternance" | "cdi" = "alternance",
   candidatName: string = "Mohammed Hamiani"
 ): Promise<void> {
   const isSpontanee = poste.toLowerCase().includes("spontanée") || poste.toLowerCase().includes("spontanee");

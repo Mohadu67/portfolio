@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve which CV to attach: explicit cv_file_id > scope match > default in DB > FS fallback
-    const resolvedCV = await resolveCVForSend({ cvFileId: cv_file_id ?? null, type: type || candidature.type || "stage" });
+    const resolvedCV = await resolveCVForSend({ cvFileId: cv_file_id ?? null, type: type || candidature.type || "alternance" });
 
     // Send email with PDF attachments
     const emailSubject = `Candidature - ${candidature.poste} - ${process.env.PROFIL_NOM || "Mohammed Hamiani"}`;
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         email_destinataire,
         letterPdfBuffer,
         process.env.PROFIL_NOM || "Mohammed Hamiani",
-        type || "stage",
+        type || "alternance",
         { buffer: resolvedCV.buffer, filename: resolvedCV.filename }
       );
     } catch (err) {
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     const wasAlreadyPostulee = candidature.statut === "postulée";
     candidature.statut = "postulée";
     candidature.email = email_destinataire;
-    candidature.type = type || "stage";
+    candidature.type = type || "alternance";
     if (!wasAlreadyPostulee) {
       await scheduleAutoRelance(candidature);
     }

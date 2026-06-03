@@ -79,7 +79,7 @@ export function FollowUpModal({
 
   if (!isOpen || !candidature) return null;
 
-  const type = candidature.type || "stage";
+  const type = candidature.type || "alternance";
   const templates = buildTemplates(type);
   const isSpontanee = candidature.poste.toLowerCase().includes("spontanée") || candidature.poste.toLowerCase().includes("spontanee");
 

@@ -15,7 +15,7 @@ Je cherche aujourd'hui un environnement exigeant où je pourrai être rapidement
 Je reste disponible pour un échange.`;
 
 export const DEFAULT_LETTER_TEMPLATES: Record<LetterType, string> = {
-  stage: `Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans et également admis en Master Manager en Ingénierie Informatique, je recherche un stage de 3 mois dès maintenant (validation de mon bachelier CDA), avec la possibilité de poursuivre en alternance dès septembre 2026.
+  stage: `Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans et également admis en Master Manager en Ingénierie Informatique, je recherche une alternance dès la rentrée 2026 (2 jours en entreprise / 1 jour en cours).
 
 ${COMMON_BODY}`,
   alternance: `Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans et également admis en Master Manager en Ingénierie Informatique, je recherche une alternance dès la rentrée 2026 (2 jours en entreprise / 1 jour en cours).

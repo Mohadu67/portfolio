@@ -25,7 +25,7 @@ export function ApplyToCompanyCard({ state, onEdit }: ApplyToCompanyCardProps) {
   const effectiveInput = (state.editedInput ?? state.call.input) as ApplyInput;
 
   const url = effectiveInput.url ?? "";
-  const type = effectiveInput.type ?? "stage";
+  const type = effectiveInput.type ?? "alternance";
   const dryRun = effectiveInput.dry_run === true;
   const skipQuality = effectiveInput.skip_quality_score === true;
   const allowDup = effectiveInput.allow_duplicate === true;

@@ -6,6 +6,7 @@ import { sendRelance } from "@/lib/email";
 import { verifyAuth } from "@/lib/auth";
 import { getTool } from "@/lib/ai/tools";
 import { processSingleCompany } from "@/lib/auto-apply";
+import { runProcessPending } from "@/lib/pending-processor";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -401,6 +402,23 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ ok: !decision.error, summary, actions });
+      }
+
+      case "process_pending_candidatures": {
+        const ids = Array.isArray(input.ids)
+          ? (input.ids as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
+          : undefined;
+        const force = input.force === true;
+        const dryRun = input.dry_run === true;
+        const result = await runProcessPending({ ids, force, dryRun });
+        const summary = JSON.stringify({
+          processed: result.processed,
+          applied: result.applied,
+          skipped: result.skipped,
+          errors: result.errors.slice(0, 10),
+          items: result.items.slice(0, 30),
+        });
+        return NextResponse.json({ ok: result.ok, summary });
       }
 
       default:

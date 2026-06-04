@@ -2,8 +2,9 @@
 // Workflow : SerpAPI → scrape entreprise → score qualité → page recrutement → match annonce
 // → extraction email RH → génération lettre → envoi candidature (avec rate-limit).
 
+import type { HydratedDocument } from "mongoose";
 import { connectDB } from "./mongodb";
-import { Candidature } from "@/models/Candidature";
+import { Candidature, ICandidature, CandidatureType } from "@/models/Candidature";
 import { getSettingsDoc } from "@/models/Settings";
 import { isProspectSkipFresh, recordProspectSkip, ProspectSkipReason } from "@/models/ProspectedDomain";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage, fetchJobDescription, ScrapedJobOffer } from "./web-scraper";
@@ -85,13 +86,12 @@ function parseKeywordList(raw: string): string[] {
   return lines.length > 0 ? lines : [raw.trim()];
 }
 
-async function countAutoAppliedSince(sinceMs: number): Promise<number> {
+export async function countAutoAppliedSince(sinceMs: number): Promise<number> {
   const since = new Date(Date.now() - sinceMs);
-  // Fix : on compte les docs qui ont AU MOINS UN envoi candidature "sent" dans la fenêtre.
-  // L'ancien filtre `created_at >= since` ratait les envois récents sur des docs anciens
-  // (ex: réessai sur une candidature créée il y a 25h), ce qui faisait sauter le rate-limit.
+  // On compte les docs qui ont AU MOINS UN envoi candidature "sent" dans la fenêtre,
+  // peu importe leur source (auto-apply, scraper, manuel). C'est l'envoi qui doit être
+  // rate-limité côté Gmail, pas l'origine du doc — F2/F3 sont des envois automatiques aussi.
   return Candidature.countDocuments({
-    source: "auto-apply",
     emailsSent: { $elemMatch: { type: "candidature", status: "sent", date: { $gte: since } } },
   });
 }
@@ -122,6 +122,253 @@ interface RunOptions {
   location?: string;
   // Hard cap on companies to evaluate this run (defaults to 10)
   maxCompanies?: number;
+}
+
+// ---------- Envoi pur (réutilisé F1/F2/F3) ----------
+// Construit le PDF, envoie le mail, push l'emailLog "sent" ou "failed", programme la relance
+// et notifie. NE gère pas le dryRun : le caller doit le filtrer en amont.
+// Retourne le statut d'envoi pour que le caller mette à jour son résumé.
+
+export interface DispatchResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function dispatchCandidature(
+  candDoc: HydratedDocument<ICandidature>,
+  lettre: string,
+  candidatureType: CandidatureType,
+  notificationSubjectPrefix: string = "[AUTO-APPLY]"
+): Promise<DispatchResult> {
+  const entrepriseName = candDoc.entreprise;
+  const poste = candDoc.poste;
+  const toEmail = candDoc.email;
+  if (!toEmail) return { ok: false, error: "email destinataire vide" };
+
+  try {
+    const letterPdfBuffer = await generateLettrePDF(lettre, entrepriseName, poste);
+    const resolvedCV = await resolveCVForSend({ cvFileId: null, type: candidatureType });
+    await sendCandidature(
+      entrepriseName,
+      poste,
+      toEmail,
+      letterPdfBuffer,
+      process.env.PROFIL_NOM || "Mohammed Hamiani",
+      candidatureType,
+      { buffer: resolvedCV.buffer, filename: resolvedCV.filename }
+    );
+
+    candDoc.emailsSent = [
+      ...(candDoc.emailsSent ?? []),
+      {
+        date: new Date(),
+        to: toEmail,
+        subject: `Candidature - ${poste} - ${process.env.PROFIL_NOM || "Mohammed Hamiani"}`,
+        type: "candidature",
+        status: "sent",
+        error: null,
+      },
+    ];
+    candDoc.statut = "postulée";
+    await scheduleAutoRelance(candDoc);
+    await candDoc.save();
+
+    sendNotification({
+      type: "candidature",
+      candidature: {
+        _id: String(candDoc._id),
+        entreprise: entrepriseName,
+        poste,
+        email: toEmail,
+        statut: "postulée",
+      },
+      emailSubject: `${notificationSubjectPrefix} ${entrepriseName} - ${poste}`,
+    }).catch((e) => console.error("[dispatch] notification failed:", e));
+
+    return { ok: true };
+  } catch (sendErr) {
+    const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+    candDoc.emailsSent = [
+      ...(candDoc.emailsSent ?? []),
+      {
+        date: new Date(),
+        to: toEmail,
+        subject: `Candidature - ${poste}`,
+        type: "candidature",
+        status: "failed",
+        error: msg,
+      },
+    ];
+    await candDoc.save();
+    return { ok: false, error: msg };
+  }
+}
+
+// ---------- Pipeline post-doc (réutilisé F1/F2/F3) ----------
+// Reçoit un Candidature doc déjà créé/persisté et déroule scrape best-effort → score qualité (opt)
+// → pick email (opt) → génération lettre → envoi. Toutes les étapes sont skip-ables via opts
+// pour servir les 3 flux. Mute le doc et le sauve à chaque étape importante.
+
+export interface ApplyToExistingOptions {
+  dryRun?: boolean;
+  // Bypass le scoring Gemini (F2/F3 : on a déjà décidé en amont)
+  skipQualityScore?: boolean;
+  // Re-score Gemini quand l'offre vient d'un scraper externe et qu'on veut la double-check
+  strictQualityScore?: boolean;
+  // Si true, autorise les emails génériques (contact@/hello@) en fallback du picker strict
+  allowGenericEmail?: boolean;
+  // Données déjà scrapées (évite un double scrape quand le caller a déjà fait le boulot)
+  preScraped?: {
+    aboutText: string;
+    description: string;
+    emails: string[];
+    companyName?: string;
+  };
+  // URL alternative à scraper si la candidature n'a pas encore d'aboutText (ex: site officiel résolu)
+  scrapeUrl?: string;
+  // Default letter instruction injectée dans la génération (sauf si la candidature en a une)
+  defaultLetterInstruction?: string;
+  // Préfixe sujet email de notification (pour distinguer F1/F2/F3 dans Gmail)
+  notificationSubjectPrefix?: string;
+}
+
+export interface ApplyToExistingResult {
+  ok: boolean;
+  decision: "skipped" | "applied" | "would_apply";
+  skipReason?: string;
+  error?: string;
+  email?: EmailScore;
+  companyScore?: number;
+  companyReason?: string;
+  bestOffer?: { title: string; url: string; score: number; reason: string; jobType?: string };
+  scrapedEmails?: string[];
+}
+
+export async function applyToExistingCandidature(
+  candDoc: HydratedDocument<ICandidature>,
+  opts: ApplyToExistingOptions = {}
+): Promise<ApplyToExistingResult> {
+  const candidatureType: CandidatureType = candDoc.type ?? "alternance";
+  const entrepriseName = candDoc.entreprise;
+  const result: ApplyToExistingResult = { ok: false, decision: "skipped" };
+
+  // 1. Scrape best-effort si pas de preScraped fourni.
+  let aboutText = candDoc.aboutText ?? "";
+  let description = candDoc.description ?? "";
+  let emails: string[] = [];
+  let companyName: string | undefined;
+
+  if (opts.preScraped) {
+    aboutText = opts.preScraped.aboutText || aboutText;
+    description = opts.preScraped.description || description;
+    emails = opts.preScraped.emails;
+    companyName = opts.preScraped.companyName;
+  } else {
+    const targetUrl = opts.scrapeUrl || candDoc.url;
+    if (targetUrl) {
+      try {
+        const scraped = await scrapeCompanyWebsite(targetUrl);
+        aboutText = scraped.aboutText || aboutText;
+        description = scraped.description || description;
+        emails = scraped.emails;
+        companyName = scraped.companyName;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        result.skipReason = `scrape failed: ${msg}`;
+        candDoc.notes = `${candDoc.notes ?? ""}\n[${new Date().toISOString().slice(0, 10)}] skip auto: ${result.skipReason}`.trim();
+        await candDoc.save();
+        return result;
+      }
+    }
+  }
+
+  if (companyName && !candDoc.entreprise) candDoc.entreprise = companyName;
+  if (aboutText) candDoc.aboutText = aboutText;
+
+  // 2. Score qualité (bypass si skipQualityScore, ou si l'aboutText est trop court hors mode strict)
+  if (!opts.skipQualityScore && (opts.strictQualityScore || aboutText.length >= 100)) {
+    try {
+      const fit = await scoreCompanyFit(entrepriseName, aboutText || description);
+      result.companyScore = fit.score;
+      result.companyReason = fit.reason;
+      const threshold = 0.3;
+      if (fit.score < threshold) {
+        result.skipReason = `score qualité trop bas (${fit.score.toFixed(2)} < ${threshold}) — ${fit.reason}`;
+        candDoc.notes = `${candDoc.notes ?? ""}\n[${new Date().toISOString().slice(0, 10)}] skip auto: ${result.skipReason}`.trim();
+        await candDoc.save();
+        return result;
+      }
+    } catch (geminiErr) {
+      const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+      result.companyReason = `(scoring Gemini échoué : ${msg})`;
+    }
+  }
+
+  // 3. Pick email si pas déjà rempli (F3-A a un email, F2 et F3-B doivent picker).
+  if (!candDoc.email) {
+    let bestEmail = pickBestContactEmail(emails, candDoc.url);
+    if (!bestEmail && opts.allowGenericEmail) {
+      bestEmail = pickBestContactEmailLoose(emails, candDoc.url);
+    }
+    if (!bestEmail) {
+      result.scrapedEmails = emails;
+      result.skipReason = opts.allowGenericEmail
+        ? `aucun email RH valable même avec allow_generic_email. Candidats : ${emails.join(", ") || "(aucun)"}`
+        : `aucun email RH valable. Candidats : ${emails.join(", ") || "(aucun)"}`;
+      candDoc.notes = `${candDoc.notes ?? ""}\n[${new Date().toISOString().slice(0, 10)}] skip auto: ${result.skipReason}`.trim();
+      await candDoc.save();
+      return result;
+    }
+    candDoc.email = bestEmail.email;
+    result.email = bestEmail;
+  }
+
+  // 4. Génération de lettre (sauf si déjà présente).
+  let lettre = candDoc.lettre || "";
+  if (!lettre) {
+    const instruction = (candDoc.letterInstruction && candDoc.letterInstruction.trim())
+      ? candDoc.letterInstruction
+      : (opts.defaultLetterInstruction ?? "");
+    try {
+      lettre = await generateLetterProposal(entrepriseName, aboutText || description, candDoc.poste, candidatureType, instruction);
+    } catch (geminiErr) {
+      const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+      result.error = `Génération lettre échouée : ${msg}`;
+      candDoc.notes = `${candDoc.notes ?? ""}\n[${new Date().toISOString().slice(0, 10)}] erreur génération: ${msg}`.trim();
+      await candDoc.save();
+      return result;
+    }
+    candDoc.lettre = lettre;
+    candDoc.statut = "lettre générée";
+    candDoc.letters = [
+      ...(candDoc.letters ?? []),
+      {
+        version: (candDoc.letters?.length ?? 0) + 1,
+        model: "gemini",
+        content: lettre,
+        generatedAt: new Date(),
+        type: candidatureType,
+      },
+    ];
+    await candDoc.save();
+  }
+
+  // 5. Dry-run
+  if (opts.dryRun) {
+    result.ok = true;
+    result.decision = "would_apply";
+    return result;
+  }
+
+  // 6. Envoi via dispatch
+  const dispatch = await dispatchCandidature(candDoc, lettre, candidatureType, opts.notificationSubjectPrefix ?? "[AUTO-APPLY]");
+  if (!dispatch.ok) {
+    result.error = dispatch.error;
+    return result;
+  }
+  result.ok = true;
+  result.decision = "applied";
+  return result;
 }
 
 export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoApplyRunResult> {
@@ -234,7 +481,7 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
       const entrepriseName = scraped.companyName || company.name || decision.domain;
       decision.entreprise = entrepriseName;
 
-      // 4. Score company fit
+      // 4. Score company fit (seuil hebdo plus strict que applyToExistingCandidature → on garde la logique ici)
       let fit: Awaited<ReturnType<typeof scoreCompanyFit>>;
       try {
         fit = await scoreCompanyFit(entrepriseName, scraped.aboutText || scraped.description);
@@ -316,27 +563,14 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
       }
 
       const poste = chosenOffer ? chosenOffer.title : "Candidature spontanée — Développeur fullstack";
-      const candidatureType = (offerScore?.jobType === "alternance" || offerScore?.jobType === "cdi")
+      const candidatureType: CandidatureType = (offerScore?.jobType === "alternance" || offerScore?.jobType === "cdi")
         ? offerScore.jobType
         : "alternance";
       if (chosenOffer && offerScore) {
         decision.bestOffer = { title: chosenOffer.title, url: chosenOffer.url, score: offerScore.score, reason: offerScore.reason, jobType: offerScore.jobType };
       }
 
-      // 7. Generate letter (passe le type pour que le 1er paragraphe match stage/alternance/cdi)
-      let lettre: string;
-      try {
-        lettre = await generateLetterProposal(entrepriseName, scraped.aboutText, poste, candidatureType, defaultLetterInstruction);
-        geminiErrorsInRow = 0;
-      } catch (geminiErr) {
-        geminiErrorsInRow++;
-        const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
-        decision.error = `Gemini generateLetterProposal failed: ${msg}`;
-        result.errors.push(`${entrepriseName}: Gemini generateLetterProposal failed: ${msg}`);
-        continue;
-      }
-
-      // 8. Create or update Candidature in DB
+      // 7. Create Candidature in DB (sans lettre — applyToExistingCandidature s'en charge)
       const candDoc = await Candidature.create({
         entreprise: entrepriseName,
         poste,
@@ -346,89 +580,46 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
         description: (chosenOffer?.snippet || scraped.description || "").slice(0, 500),
         email: bestEmail.email,
         aboutText: scraped.aboutText,
-        statut: "lettre générée",
+        statut: "identifiée",
         type: candidatureType,
-        lettre,
+        lettre: null,
         letterInstruction: defaultLetterInstruction,
         notes: `Auto-apply ${new Date().toISOString().slice(0, 10)} — fit ${fit.score.toFixed(2)}${chosenOffer ? `, offer ${offerScore?.score.toFixed(2)}` : " (spontanée)"}`,
         source: "auto-apply",
         date: new Date().toISOString().slice(0, 10),
-        letters: [{
-          version: 1,
-          model: "gemini",
-          content: lettre,
-          generatedAt: new Date(),
-          type: candidatureType,
-        }],
+        letters: [],
       });
       decision.candidatureId = String(candDoc._id);
 
-      // 9. Send (or simulate)
-      if (opts.dryRun) {
-        decision.decision = "would_apply";
-        result.wouldApply++;
-        continue;
-      }
+      // 8. Délègue à la pipeline partagée : génère lettre + envoie.
+      // On passe preScraped pour éviter le re-scrape (déjà fait à l'étape 3).
+      const applied = await applyToExistingCandidature(candDoc, {
+        dryRun: opts.dryRun,
+        skipQualityScore: true,
+        allowGenericEmail: false,
+        preScraped: {
+          aboutText: scraped.aboutText,
+          description: scraped.description,
+          emails: scraped.emails,
+          companyName: scraped.companyName,
+        },
+        defaultLetterInstruction,
+        notificationSubjectPrefix: "[AUTO-APPLY]",
+      });
 
-      try {
-        const letterPdfBuffer = await generateLettrePDF(lettre, entrepriseName, poste);
-        const resolvedCV = await resolveCVForSend({ cvFileId: null, type: candidatureType });
-        await sendCandidature(
-          entrepriseName,
-          poste,
-          bestEmail.email,
-          letterPdfBuffer,
-          process.env.PROFIL_NOM || "Mohammed Hamiani",
-          candidatureType,
-          { buffer: resolvedCV.buffer, filename: resolvedCV.filename }
-        );
-
-        candDoc.emailsSent = [
-          ...(candDoc.emailsSent ?? []),
-          {
-            date: new Date(),
-            to: bestEmail.email,
-            subject: `Candidature - ${poste} - ${process.env.PROFIL_NOM || "Mohammed Hamiani"}`,
-            type: "candidature",
-            status: "sent",
-            error: null,
-          },
-        ];
-        candDoc.statut = "postulée";
-        await scheduleAutoRelance(candDoc);
-        await candDoc.save();
-
+      if (applied.decision === "applied") {
         decision.decision = "applied";
         result.applied++;
         remainingBudget--;
-
-        sendNotification({
-          type: "candidature",
-          candidature: {
-            _id: String(candDoc._id),
-            entreprise: entrepriseName,
-            poste,
-            email: bestEmail.email,
-            statut: "postulée",
-          },
-          emailSubject: `[AUTO-APPLY] ${entrepriseName} - ${poste}`,
-        }).catch((e) => console.error("[auto-apply] notification failed:", e));
-      } catch (sendErr) {
-        const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-        decision.error = msg;
-        candDoc.emailsSent = [
-          ...(candDoc.emailsSent ?? []),
-          {
-            date: new Date(),
-            to: bestEmail.email,
-            subject: `Candidature - ${poste}`,
-            type: "candidature",
-            status: "failed",
-            error: msg,
-          },
-        ];
-        await candDoc.save();
-        result.errors.push(`Send failed for ${entrepriseName}: ${msg}`);
+      } else if (applied.decision === "would_apply") {
+        decision.decision = "would_apply";
+        result.wouldApply++;
+      } else {
+        decision.skipReason = applied.skipReason ?? "skip via applyToExistingCandidature";
+        if (applied.error) {
+          decision.error = applied.error;
+          result.errors.push(`${entrepriseName}: ${applied.error}`);
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -477,7 +668,7 @@ export async function processSingleCompany(
   opts: ProcessSingleOptions = {},
 ): Promise<CandidateDecision> {
   await connectDB();
-  const candidatureType = opts.candidatureType ?? "alternance";
+  const candidatureType: CandidatureType = opts.candidatureType ?? "alternance";
 
   const decision: CandidateDecision = {
     url: inputUrl,
@@ -513,26 +704,8 @@ export async function processSingleCompany(
     const entrepriseName = scraped.companyName || decision.domain;
     decision.entreprise = entrepriseName;
 
-    // 3. Score qualité (optionnel — l'user a déjà choisi la cible)
-    if (!opts.skipQualityScore) {
-      try {
-        const fit = await scoreCompanyFit(entrepriseName, scraped.aboutText || scraped.description);
-        decision.companyScore = fit.score;
-        decision.companyReason = fit.reason;
-        // Seuil plus permissif que le hebdo (0.3 au lieu de 0.6) — l'user a explicitement ciblé
-        if (fit.score < 0.3) {
-          decision.skipReason = `score qualité très bas (${fit.score.toFixed(2)}) — ${fit.reason}. Override possible avec skipQualityScore.`;
-          return decision;
-        }
-      } catch (geminiErr) {
-        // Non-bloquant : on continue sans score
-        const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
-        decision.companyReason = `(scoring Gemini échoué : ${msg})`;
-      }
-    }
-
-    // 4. Sélection de l'email destinataire
-    // Ordre : 4a. emailOverride utilisateur (bypass total) > 4b. picker strict > 4c. picker loose si allowGenericEmail.
+    // 3. Sélection d'email (override / strict / loose) — gardée ici parce que la logique override
+    // est spécifique au flow chat (saisie utilisateur explicite).
     let bestEmail: EmailScore | null = null;
     if (opts.emailOverride && opts.emailOverride.trim()) {
       const override = opts.emailOverride.trim().toLowerCase();
@@ -565,18 +738,24 @@ export async function processSingleCompany(
     }
     decision.email = bestEmail;
 
-    // 5. Génération lettre via Gemini
-    const poste = "Candidature spontanée — Développeur fullstack";
-    let lettre: string;
-    try {
-      lettre = await generateLetterProposal(entrepriseName, scraped.aboutText, poste, candidatureType);
-    } catch (geminiErr) {
-      const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
-      decision.error = `Génération lettre échouée : ${msg}`;
-      return decision;
+    // 4. Score qualité optionnel (gardé local — seuil 0.3 vs 0.6 du hebdo).
+    if (!opts.skipQualityScore) {
+      try {
+        const fit = await scoreCompanyFit(entrepriseName, scraped.aboutText || scraped.description);
+        decision.companyScore = fit.score;
+        decision.companyReason = fit.reason;
+        if (fit.score < 0.3) {
+          decision.skipReason = `score qualité très bas (${fit.score.toFixed(2)}) — ${fit.reason}. Override possible avec skipQualityScore.`;
+          return decision;
+        }
+      } catch (geminiErr) {
+        const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+        decision.companyReason = `(scoring Gemini échoué : ${msg})`;
+      }
     }
 
-    // 6. Création Candidature en DB
+    // 5. Création Candidature en DB (statut "identifiée", lettre nulle — applyToExistingCandidature comble).
+    const poste = "Candidature spontanée — Développeur fullstack";
     const candDoc = await Candidature.create({
       entreprise: entrepriseName,
       poste,
@@ -586,84 +765,38 @@ export async function processSingleCompany(
       description: (scraped.description || "").slice(0, 500),
       email: bestEmail.email,
       aboutText: scraped.aboutText,
-      statut: "lettre générée",
+      statut: "identifiée",
       type: candidatureType,
-      lettre,
+      lettre: null,
       notes: `Chat manual ${new Date().toISOString().slice(0, 10)}${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""}`,
       source: "auto-apply",
       date: new Date().toISOString().slice(0, 10),
-      letters: [{
-        version: 1,
-        model: "gemini",
-        content: lettre,
-        generatedAt: new Date(),
-        type: candidatureType,
-      }],
+      letters: [],
     });
     decision.candidatureId = String(candDoc._id);
 
-    // 7. Dry-run ou envoi réel
-    if (opts.dryRun) {
-      decision.decision = "would_apply";
-      return decision;
-    }
+    // 6. Délègue à la pipeline partagée (lettre + envoi). preScraped évite un double scrape.
+    const applied = await applyToExistingCandidature(candDoc, {
+      dryRun: opts.dryRun,
+      skipQualityScore: true,
+      allowGenericEmail: opts.allowGenericEmail,
+      preScraped: {
+        aboutText: scraped.aboutText,
+        description: scraped.description,
+        emails: scraped.emails,
+        companyName: scraped.companyName,
+      },
+      notificationSubjectPrefix: "[CHAT]",
+    });
 
-    try {
-      const letterPdfBuffer = await generateLettrePDF(lettre, entrepriseName, poste);
-      const resolvedCV = await resolveCVForSend({ cvFileId: null, type: candidatureType });
-      await sendCandidature(
-        entrepriseName,
-        poste,
-        bestEmail.email,
-        letterPdfBuffer,
-        process.env.PROFIL_NOM || "Mohammed Hamiani",
-        candidatureType,
-        { buffer: resolvedCV.buffer, filename: resolvedCV.filename },
-      );
-
-      candDoc.emailsSent = [
-        ...(candDoc.emailsSent ?? []),
-        {
-          date: new Date(),
-          to: bestEmail.email,
-          subject: `Candidature - ${poste} - ${process.env.PROFIL_NOM || "Mohammed Hamiani"}`,
-          type: "candidature",
-          status: "sent",
-          error: null,
-        },
-      ];
-      candDoc.statut = "postulée";
-      await scheduleAutoRelance(candDoc);
-      await candDoc.save();
-
+    if (applied.decision === "applied") {
       decision.decision = "applied";
-
-      sendNotification({
-        type: "candidature",
-        candidature: {
-          _id: String(candDoc._id),
-          entreprise: entrepriseName,
-          poste,
-          email: bestEmail.email,
-          statut: "postulée",
-        },
-        emailSubject: `[CHAT] ${entrepriseName} - ${poste}`,
-      }).catch((e) => console.error("[chat-apply] notification failed:", e));
-    } catch (sendErr) {
-      const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-      decision.error = `Envoi échoué : ${msg}`;
-      candDoc.emailsSent = [
-        ...(candDoc.emailsSent ?? []),
-        {
-          date: new Date(),
-          to: bestEmail.email,
-          subject: `Candidature - ${poste}`,
-          type: "candidature",
-          status: "failed",
-          error: msg,
-        },
-      ];
-      await candDoc.save();
+    } else if (applied.decision === "would_apply") {
+      decision.decision = "would_apply";
+    } else {
+      if (applied.skipReason) decision.skipReason = applied.skipReason;
+      if (applied.error) decision.error = applied.error;
+      if (applied.scrapedEmails) decision.scrapedEmails = applied.scrapedEmails;
     }
   } catch (err) {
     decision.error = err instanceof Error ? err.message : String(err);

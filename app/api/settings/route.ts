@@ -72,6 +72,25 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.automation.defaultLetterInstruction === "string") {
         s.automation.defaultLetterInstruction = body.automation.defaultLetterInstruction.replace(/^\s+|\s+$/g, "");
       }
+      if (typeof body.automation.enableOfferSearch === "boolean") {
+        s.automation.enableOfferSearch = body.automation.enableOfferSearch;
+      }
+      if (typeof body.automation.enablePendingProcess === "boolean") {
+        s.automation.enablePendingProcess = body.automation.enablePendingProcess;
+      }
+      if (typeof body.automation.strictQualityScore === "boolean") {
+        s.automation.strictQualityScore = body.automation.strictQualityScore;
+      }
+      if (typeof body.automation.allowGenericEmails === "boolean") {
+        s.automation.allowGenericEmails = body.automation.allowGenericEmails;
+      }
+      if (
+        body.automation.defaultCandidatureType === "stage" ||
+        body.automation.defaultCandidatureType === "alternance" ||
+        body.automation.defaultCandidatureType === "cdi"
+      ) {
+        s.automation.defaultCandidatureType = body.automation.defaultCandidatureType;
+      }
     }
     if (body.search && typeof body.search === "object") {
       if (typeof body.search.defaultLocation === "string") {

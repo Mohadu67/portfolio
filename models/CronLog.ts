@@ -1,6 +1,12 @@
 import { Schema, model, models } from "mongoose";
 
-export type CronJobName = "run-relances" | "check-inbox" | "run-saved-queries" | "weekly-prospect";
+export type CronJobName =
+  | "run-relances"
+  | "check-inbox"
+  | "run-saved-queries"
+  | "weekly-prospect"
+  | "run-offer-search"
+  | "process-pending";
 
 export type CronStatus = "success" | "failed" | "skipped";
 
@@ -21,7 +27,14 @@ const cronLogSchema = new Schema<ICronLog>(
   {
     name: {
       type: String,
-      enum: ["run-relances", "check-inbox", "run-saved-queries", "weekly-prospect"],
+      enum: [
+        "run-relances",
+        "check-inbox",
+        "run-saved-queries",
+        "weekly-prospect",
+        "run-offer-search",
+        "process-pending",
+      ],
       required: true,
       index: true,
     },

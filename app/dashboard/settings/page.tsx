@@ -56,6 +56,15 @@ interface AppSettings {
     lastProspectRunAt?: string | null;
     lastProspectSummary?: string | null;
     defaultLetterInstruction: string;
+    enableOfferSearch: boolean;
+    enablePendingProcess: boolean;
+    strictQualityScore: boolean;
+    allowGenericEmails: boolean;
+    defaultCandidatureType: "stage" | "alternance" | "cdi";
+    lastOfferSearchRunAt?: string | null;
+    lastOfferSearchSummary?: string | null;
+    lastPendingProcessRunAt?: string | null;
+    lastPendingProcessSummary?: string | null;
   };
   letterTemplate: {
     stage: string;
@@ -126,6 +135,7 @@ export default function SettingsPage() {
   const [lastSync, setLastSync] = useState<SyncResult | null>(null);
   const [prospecting, setProspecting] = useState(false);
   const [lastProspect, setLastProspect] = useState<ProspectResult | null>(null);
+  const [processingPending, setProcessingPending] = useState(false);
   const [templateDrafts, setTemplateDrafts] = useState<{ stage: string; alternance: string; cdi: string }>({
     stage: "",
     alternance: "",
@@ -262,6 +272,32 @@ export default function SettingsPage() {
       toast.error(err instanceof Error ? err.message : "Erreur");
     } finally {
       setProspecting(false);
+    }
+  };
+
+  const handleProcessPendingNow = async (force: boolean, dryRun: boolean) => {
+    setProcessingPending(true);
+    try {
+      const res = await fetch(`/api/pending/process`, {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ force, dryRun }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? "Échec");
+      }
+      const data: { processed: number; applied: number; skipped: number; errors: string[] } = await res.json();
+      load();
+      if (data.applied > 0) {
+        toast.success(`${data.applied} envoyée(s) · ${data.skipped} skip · ${data.errors.length} erreur(s)`);
+      } else {
+        toast.info(`${data.processed} traité(s) · ${data.skipped} skip${dryRun ? " (dry-run)" : ""}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setProcessingPending(false);
     }
   };
 
@@ -641,6 +677,120 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+      </section>
+
+      {/* Auto-apply — F2 (recherche d'offres) + F3 (process pending) */}
+      <section className="space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Radar size={16} className="text-[var(--accent-orange)]" />
+          Auto-apply (F2 offres / F3 pending)
+        </h2>
+        <p className="text-xs text-[var(--text-tertiary)]">
+          Active les deux flux automatiques supplémentaires. <strong>F2</strong> : recherche d&apos;offres sur les SavedQueries puis envoi auto.{" "}
+          <strong>F3</strong> : reprend les candidatures statut « identifiée » et tente l&apos;envoi auto (résolution SerpAPI du site officiel, scrape, lettre, envoi).
+          Les deux respectent le rate-limit Gmail partagé.
+        </p>
+
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] divide-y divide-[var(--border-soft)]">
+          <Toggle
+            label="Activer F2 — Recherche d'offres + auto-apply"
+            description="Cron hebdo (lundi 9h05) sur les SavedQueries. Désactivé par défaut."
+            checked={settings.automation.enableOfferSearch}
+            onChange={() => updateAutoApplyField("enableOfferSearch", !settings.automation.enableOfferSearch)}
+          />
+          <Toggle
+            label="Activer F3 — Process pending"
+            description="Cron quotidien sur les candidatures 'identifiée'. Désactivé par défaut."
+            checked={settings.automation.enablePendingProcess}
+            onChange={() => updateAutoApplyField("enablePendingProcess", !settings.automation.enablePendingProcess)}
+          />
+          <Toggle
+            label="Score qualité strict"
+            description="Si activé, re-score Gemini sur chaque candidature avant envoi (F2/F3). Recommandé."
+            checked={settings.automation.strictQualityScore}
+            onChange={() => updateAutoApplyField("strictQualityScore", !settings.automation.strictQualityScore)}
+          />
+          <Toggle
+            label="Autoriser les emails génériques"
+            description="Fallback contact@/hello@/info@ si pickBestContactEmail strict refuse. Le blacklist (noreply@, abuse@) reste actif."
+            checked={settings.automation.allowGenericEmails}
+            onChange={() => updateAutoApplyField("allowGenericEmails", !settings.automation.allowGenericEmails)}
+          />
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-[var(--text-tertiary)] block mb-1">Max envois / jour (cap Gmail)</label>
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={settings.automation.autoApplyMaxPerDay}
+                onChange={(e) => updateAutoApplyField("autoApplyMaxPerDay", Math.max(1, Math.min(30, parseInt(e.target.value, 10) || 1)))}
+                className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+              />
+              <p className="text-[10px] text-[var(--text-tertiary)] mt-1">Plage 1–30. Cap warmup recommandé : 15.</p>
+            </div>
+            <div>
+              <label className="text-xs text-[var(--text-tertiary)] block mb-1">Type de candidature par défaut</label>
+              <select
+                value={settings.automation.defaultCandidatureType}
+                onChange={(e) => updateAutoApplyField("defaultCandidatureType", e.target.value as "stage" | "alternance" | "cdi")}
+                className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+              >
+                <option value="stage">Stage</option>
+                <option value="alternance">Alternance</option>
+                <option value="cdi">CDI</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[var(--text-tertiary)]">
+          <div className="rounded border border-[var(--border-soft)] p-3">
+            <div className="font-medium text-[var(--text-secondary)] mb-1">F2 — Dernier run offres</div>
+            {settings.automation.lastOfferSearchRunAt
+              ? <>
+                  {new Date(settings.automation.lastOfferSearchRunAt).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  <div className="mt-1">{settings.automation.lastOfferSearchSummary}</div>
+                </>
+              : <span>Jamais lancé</span>}
+          </div>
+          <div className="rounded border border-[var(--border-soft)] p-3">
+            <div className="font-medium text-[var(--text-secondary)] mb-1">F3 — Dernier run pending</div>
+            {settings.automation.lastPendingProcessRunAt
+              ? <>
+                  {new Date(settings.automation.lastPendingProcessRunAt).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  <div className="mt-1">{settings.automation.lastPendingProcessSummary}</div>
+                </>
+              : <span>Jamais lancé</span>}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => handleProcessPendingNow(false, true)}
+            disabled={processingPending}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-[var(--border-soft)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50"
+          >
+            {processingPending ? <Loader2 size={14} className="animate-spin" /> : <Radar size={14} />}
+            Test dry-run pending
+          </button>
+          <button
+            onClick={() => {
+              if (!confirm("Traiter toutes les candidatures « identifiée » et envoyer les mails ? Action irréversible.")) return;
+              handleProcessPendingNow(true, false);
+            }}
+            disabled={processingPending || !settings.automation.autoApplyEnabled}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[var(--accent-warning)] text-[var(--bg-primary)] text-sm font-semibold disabled:opacity-50"
+          >
+            Traiter maintenant (force=true)
+          </button>
+          <Link
+            href="/dashboard/recherche"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-[var(--border-soft)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+          >
+            Gérer les SavedQueries (F2)
+          </Link>
+        </div>
       </section>
 
       {/* Mes dispos pour les auto-replies */}

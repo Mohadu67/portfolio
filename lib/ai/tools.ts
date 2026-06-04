@@ -197,6 +197,30 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "process_pending_candidatures",
+    description:
+      "Lance le pipeline F3 (process pending) sur les candidatures statut 'identifiée' : pour chacune, scrape best-effort + résolution SerpAPI si besoin, génère lettre, envoie. Utiliser quand l'utilisateur demande de relancer/traiter les candidatures en attente ou veut vider le backlog. Respecte le rate-limit Gmail global.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Liste optionnelle d'IDs de candidatures à traiter. Si vide → toutes les candidatures statut 'identifiée'.",
+        },
+        force: {
+          type: "boolean",
+          description: "Si true, bypass le seuil aboutText < 100 chars (cas A). Utiliser quand l'utilisateur insiste explicitement.",
+        },
+        dry_run: {
+          type: "boolean",
+          description: "Si true, génère la lettre et choisit l'email mais N'ENVOIE PAS le mail. Utile pour vérifier avant validation.",
+        },
+      },
+    },
+  },
+  {
     name: "send_relance_now",
     description: "Envoie immédiatement une relance par email (si l'email destinataire est connu).",
     requiresConfirmation: true,

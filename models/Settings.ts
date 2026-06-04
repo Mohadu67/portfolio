@@ -30,6 +30,20 @@ export interface ISettings {
     // Consignes par défaut injectées dans le prompt de génération de lettre quand l'auto-apply tourne.
     // Une instruction au niveau d'une candidature override ce défaut. Vide = comportement actuel.
     defaultLetterInstruction: string;
+    // F2 — recherche d'offres + auto-apply : cron lundi 9h05 sur SavedQueries.
+    enableOfferSearch: boolean;
+    // F3 — process pending (candidatures "identifiée") : cron quotidien + bouton dashboard + chat.
+    enablePendingProcess: boolean;
+    // Si true, re-score Gemini sur F2/F3 (sinon on fait confiance au filtre amont).
+    strictQualityScore: boolean;
+    // Fallback contact@/hello@ quand pickBestContactEmail strict refuse.
+    allowGenericEmails: boolean;
+    // Type de candidature utilisé par défaut pour F2/F3 quand l'offre n'en porte pas.
+    defaultCandidatureType: "stage" | "alternance" | "cdi";
+    lastOfferSearchRunAt?: Date | null;
+    lastOfferSearchSummary?: string | null;
+    lastPendingProcessRunAt?: Date | null;
+    lastPendingProcessSummary?: string | null;
   };
   search: {
     defaultLocation: string;
@@ -68,7 +82,9 @@ const settingsSchema = new Schema<ISettings>(
       autoRelanceJ7Enabled: { type: Boolean, default: true },
       autoRelanceDays: { type: Number, default: 7 },
       autoApplyEnabled: { type: Boolean, default: false },
-      autoApplyMaxPerDay: { type: Number, default: 5 },
+      // Cap Gmail warmup : 15/jour pour comptes neufs SMTP sans pénalité de spam.
+      // Mohammed peut monter à 30 quand sa réputation domain est établie (~1 mois).
+      autoApplyMaxPerDay: { type: Number, default: 15 },
       autoApplyMinCompanyScore: { type: Number, default: 0.6 },
       weeklyProspectKeywords: {
         type: String,
@@ -93,6 +109,19 @@ const settingsSchema = new Schema<ISettings>(
       lastProspectRunAt: { type: Date, default: null },
       lastProspectSummary: { type: String, default: null },
       defaultLetterInstruction: { type: String, default: "" },
+      enableOfferSearch: { type: Boolean, default: false },
+      enablePendingProcess: { type: Boolean, default: false },
+      strictQualityScore: { type: Boolean, default: true },
+      allowGenericEmails: { type: Boolean, default: false },
+      defaultCandidatureType: {
+        type: String,
+        enum: ["stage", "alternance", "cdi"],
+        default: "alternance",
+      },
+      lastOfferSearchRunAt: { type: Date, default: null },
+      lastOfferSearchSummary: { type: String, default: null },
+      lastPendingProcessRunAt: { type: Date, default: null },
+      lastPendingProcessSummary: { type: String, default: null },
     },
     search: {
       defaultLocation: { type: String, default: "" },

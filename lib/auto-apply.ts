@@ -305,10 +305,13 @@ export async function applyToExistingCandidature(
   }
 
   // 3. Pick email si pas déjà rempli (F3-A a un email, F2 et F3-B doivent picker).
+  // Note : on score les emails contre le SITE de la boîte (opts.scrapeUrl), pas l'URL de la
+  // candidature (qui peut être un agrégateur Indeed/JSearch → tout serait rejeté par domain_mismatch).
   if (!candDoc.email) {
-    let bestEmail = pickBestContactEmail(emails, candDoc.url);
+    const pickerUrl = opts.scrapeUrl || candDoc.url;
+    let bestEmail = pickBestContactEmail(emails, pickerUrl);
     if (!bestEmail && opts.allowGenericEmail) {
-      bestEmail = pickBestContactEmailLoose(emails, candDoc.url);
+      bestEmail = pickBestContactEmailLoose(emails, pickerUrl);
     }
     if (!bestEmail) {
       result.scrapedEmails = emails;

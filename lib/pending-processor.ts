@@ -191,6 +191,8 @@ export async function runProcessPending(opts: RunProcessPendingOptions = {}): Pr
           skipQualityScore: !strictQualityScore,
           allowGenericEmail,
           preScraped: { aboutText, description, emails, companyName: undefined },
+          // scrapeUrl = site officiel pour scorer le picker (locked.url peut être un agrégateur).
+          scrapeUrl: scrapeTarget ?? undefined,
           defaultLetterInstruction,
           notificationSubjectPrefix: "[PENDING]",
         });

@@ -44,6 +44,39 @@ describe("scoreContactEmail (filtre strict)", () => {
     expect(r.accept).toBe(false);
   });
 
+  it("racine de marque commune malgré suffixe corporatif → domain_match (extia.fr ~ extia-group.com)", () => {
+    const r = scoreContactEmail("jobs@extia.fr", "https://www.extia-group.com");
+    expect(r.reasons).toContain("domain_match");
+    expect(r.reasons).not.toContain("domain_mismatch");
+    expect(r.accept).toBe(true);
+  });
+
+  it("variante de TLD d'une même marque → domain_match (extia.fr ~ extia.com)", () => {
+    const r = scoreContactEmail("rh@extia.fr", "https://extia.com");
+    expect(r.reasons).toContain("domain_match");
+  });
+
+  it("label non délimité distinct → reste domain_mismatch (etudeplus ≠ etudeplusstrasbourg)", () => {
+    const r = scoreContactEmail("contact@etudeplus.org", "https://etudeplusstrasbourg.fr");
+    expect(r.reasons).toContain("domain_mismatch");
+  });
+
+  it("TLD composé : pas de collision sur le suffixe (bar.co.fr ≠ acme.co.uk)", () => {
+    const r = scoreContactEmail("foo@bar.co.fr", "https://acme.co.uk");
+    expect(r.reasons).toContain("domain_mismatch");
+    expect(r.reasons).not.toContain("domain_match");
+  });
+
+  it("résidu de marque trop court (<3) → pas de match (go-group ≠ go-holding)", () => {
+    const r = scoreContactEmail("x@go-group.com", "https://go-holding.fr");
+    expect(r.reasons).toContain("domain_mismatch");
+  });
+
+  it("token nom-commun NON retiré → marques distinctes restent mismatch (data-services ≠ cloud-services)", () => {
+    const r = scoreContactEmail("contact@data-services.com", "https://cloud-services.fr");
+    expect(r.reasons).toContain("domain_mismatch");
+  });
+
   it("invalid_format pour string sans @", () => {
     const r = scoreContactEmail("pasunmail", "https://boite.com");
     expect(r.accept).toBe(false);
@@ -91,6 +124,15 @@ describe("pickBestContactEmailLoose (override allow_generic_email)", () => {
       "https://boite.com",
     );
     expect(r).toBeNull();
+  });
+
+  it("accepte jobs@extia.fr quand le site résolu est extia-group.com (bug F3 backlog)", () => {
+    const r = pickBestContactEmailLoose(
+      ["dpo@extia.fr", "jobs@extia.fr", "contact@extia.fr"],
+      "https://www.extia-group.com",
+    );
+    expect(r?.email).toBe("jobs@extia.fr");
+    expect(r?.reasons).toContain("domain_match");
   });
 
   it("refuse les emails sur domain_mismatch (promesse alignée à la description tool)", () => {

@@ -104,6 +104,38 @@ function normalizeDomain(input: string): string {
     .replace(/\/.*$/, "");
 }
 
+// Suffixes corporatifs/juridiques NON ambigus : une boîte héberge souvent son site sur
+// "extia-group.com" tout en envoyant ses mails depuis "extia.fr". On retire ces tokens
+// pour comparer la RACINE de marque. Volontairement restreint aux formes juridiques et à
+// "group/holding" : on EXCLUT les noms communs (tech, digital, services, conseil, france…)
+// qui collisionneraient deux marques distinctes ("data-services" ≠ "cloud-services").
+const CORPORATE_DOMAIN_TOKENS: ReadonlySet<string> = new Set([
+  "group", "groupe", "holding", "sa", "sas", "sasu", "sarl", "inc", "corp", "llc", "gmbh", "ltd",
+]);
+
+// Labels de suffixe public de 2e niveau : pour ne pas confondre le suffixe avec la marque
+// sur les TLD composés (ex. ".co.uk", ".com.fr", ".asso.fr").
+const SECOND_LEVEL_SUFFIX_LABELS: ReadonlySet<string> = new Set([
+  "co", "com", "org", "net", "gouv", "gov", "asso", "edu", "ac", "tm", "nom", "gob",
+]);
+
+// Racine de marque d'un domaine : label enregistrable (2e niveau, en sautant un éventuel
+// suffixe public composé), découpé sur séparateurs (- _), privé de ses tokens corporatifs.
+//   "extia-group.com" → "extia"   |   "extia.fr" → "extia"   |   "boite.co.uk" → "boite"
+// IMPORTANT : on ne découpe QUE sur séparateurs explicites. Un label non délimité reste
+// intact → "etudeplusstrasbourg.fr" reste "etudeplusstrasbourg" (≠ "etudeplus"), pour ne
+// PAS rapprocher à tort deux entités distinctes.
+function domainBrandKey(domain: string): string {
+  const parts = domain.split(".").filter(Boolean);
+  if (parts.length < 2) return (parts[0] ?? "").replace(/[-_]/g, "");
+  let idx = parts.length - 2;
+  if (idx >= 1 && SECOND_LEVEL_SUFFIX_LABELS.has(parts[idx])) idx -= 1; // saute .co.uk, .com.fr…
+  const sld = parts[idx] ?? "";
+  const tokens = sld.split(/[-_]/).filter((t) => t && !CORPORATE_DOMAIN_TOKENS.has(t));
+  // Si tout a été retiré (domaine = "group.com"), on retombe sur le label brut.
+  return tokens.length ? tokens.join("") : sld.replace(/[-_]/g, "");
+}
+
 function isLikelyNominative(local: string): boolean {
   // prenom.nom, prenom-nom, p.nom, prenomnom (rare)
   if (/^[a-z]{2,}\.[a-z]{2,}$/.test(local)) return true;
@@ -143,10 +175,21 @@ export function scoreContactEmail(email: string, companyUrlOrDomain?: string): E
     const companyDomain = normalizeDomain(companyUrlOrDomain);
     const baseCompany = companyDomain.split(".").slice(-2).join(".");
     const baseEmail = domain.split(".").slice(-2).join(".");
-    if (baseCompany && baseEmail && baseCompany === baseEmail) {
+    // Match si base identique (extia.fr == extia.fr) OU même racine de marque après
+    // retrait des suffixes corporatifs (extia.fr ~ extia-group.com). Couvre aussi les
+    // variantes de TLD d'une même marque (extia.fr ~ extia.com). Garde-fou : on exige une
+    // racine ≥ 3 caractères pour éviter qu'un résidu trop court (ex. "go") collisionne.
+    const companyBrand = domainBrandKey(companyDomain);
+    const emailBrand = domainBrandKey(domain);
+    const sameBrand =
+      !!baseCompany &&
+      !!baseEmail &&
+      (baseCompany === baseEmail ||
+        (companyBrand.length >= 3 && companyBrand === emailBrand));
+    if (sameBrand) {
       reasons.push("domain_match");
       score += 0.25;
-    } else if (baseCompany && baseEmail && baseCompany !== baseEmail) {
+    } else if (baseCompany && baseEmail) {
       reasons.push("domain_mismatch");
       score -= 0.2;
       // Domain mismatch : email sur un autre domaine que le site de l'entreprise.

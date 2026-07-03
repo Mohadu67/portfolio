@@ -219,7 +219,15 @@ export function formatToolResult(tool: string, result: ToolRunResult): string {
   }
   if (tool === "process_pending_candidatures") {
     const d = safeParseSummary(summary);
-    return `✅ Traitement terminé : ${d.applied ?? 0} envoyée(s), ${d.skipped ?? 0} skip, ${Array.isArray(d.errors) ? d.errors.length : 0} erreur(s) sur ${d.processed ?? 0} traitée(s).`;
+    const applied = Number(d.applied ?? 0);
+    const errors = Array.isArray(d.errors) ? (d.errors as string[]) : [];
+    const items = Array.isArray(d.items) ? (d.items as Array<{ skipReason?: string; error?: string }>) : [];
+    if (applied === 0) {
+      // Rien envoyé : donner le POURQUOI (budget saturé, skip…) au lieu d'un faux air de succès.
+      const reason = errors[0] ?? items.find((i) => i.skipReason || i.error)?.skipReason ?? items.find((i) => i.error)?.error;
+      return `⚠️ Rien n'a été envoyé${reason ? ` : ${String(reason).slice(0, 200)}` : "."}`;
+    }
+    return `✅ Traitement terminé : ${applied} envoyée(s), ${d.skipped ?? 0} skip, ${errors.length} erreur(s) sur ${d.processed ?? 0} traitée(s).`;
   }
   // Les autres actions renvoient déjà des summaries humains ("Relance programmée chez X…").
   return `✅ ${summary || "Fait."}`;
@@ -390,9 +398,15 @@ export async function handleIncomingTelegramText(
     conversation: { $each: newMessages, $slice: -2 * CONVERSATION_WINDOW },
   };
   if (proposals.length > 0) {
+    // Purge des actions décidées > 7 j avant le push : le $slice ne doit pas évincer des
+    // propositions encore actives au profit de vieilles entrées consommées.
+    await TelegramState.updateOne(
+      { chatId },
+      { $pull: { pendingActions: { status: { $ne: "pending" }, decidedAt: { $lt: new Date(Date.now() - 7 * 86_400_000) } } } }
+    ).catch(() => {});
     push.pendingActions = {
       $each: proposals.map((p) => ({ ...p, status: "pending" as const, createdAt: new Date(), decidedAt: null })),
-      $slice: -20,
+      $slice: -30,
     };
   }
   await TelegramState.updateOne({ chatId }, { $push: push });
@@ -454,23 +468,38 @@ export async function confirmTelegramAction(token: string, approve: boolean): Pr
 
   if (!approve) {
     if (action.origin === "prospection" && action.candidatureId) {
-      // « Ignorer » une cible de prospection : on retire la candidature auto-créée et on
-      // blackliste le domaine côté cache prospect (elle ne sera plus proposée pendant 1 an).
-      const cand = await Candidature.findByIdAndDelete(action.candidatureId)
+      // « Ignorer » une cible de prospection : suppression UNIQUEMENT si la candidature est
+      // encore « identifiée » — si elle a évolué entre-temps (envoyée, travaillée à la main),
+      // on ne détruit pas d'historique réel.
+      const cand = await Candidature.findOneAndDelete({ _id: action.candidatureId, statut: "identifiée" })
         .lean<ICandidature | null>()
         .catch(() => null);
-      if (cand?.url && !cand.url.startsWith("manual:")) {
+      if (!cand) {
+        await appendModelNote(state.chatId, `Cible ignorée mais candidature déjà traitée/modifiée, conservée : ${action.label}`);
+        return {
+          outcome: "cancelled",
+          label: action.label,
+          resultText: "ℹ️ Cette candidature a évolué entre-temps (déjà envoyée ou modifiée) — je l'ai laissée en place, patron.",
+        };
+      }
+      // Blacklist sur le domaine RACINE stocké à la proposition (l'url de la candidature
+      // peut pointer un ATS externe — la blacklister raterait la cible au prochain run).
+      const domain = action.domain || (() => {
         try {
-          const domain = new URL(cand.url).hostname.replace(/^www\./, "");
-          await recordProspectSkip({
-            domain,
-            entreprise: cand.entreprise,
-            reason: "user_ignored",
-            detail: "Ignorée via Telegram (prospection interactive)",
-          });
+          return cand.url && !cand.url.startsWith("manual:")
+            ? new URL(cand.url).hostname.replace(/^www\./, "")
+            : null;
         } catch {
-          /* URL non parsable — pas de blacklist domaine */
+          return null;
         }
+      })();
+      if (domain) {
+        await recordProspectSkip({
+          domain,
+          entreprise: cand.entreprise,
+          reason: "user_ignored",
+          detail: "Ignorée via Telegram (prospection interactive)",
+        }).catch(() => {});
       }
       await appendModelNote(state.chatId, `Cible de prospection ignorée par l'utilisateur : ${action.label}`);
       return { outcome: "cancelled", label: action.label };

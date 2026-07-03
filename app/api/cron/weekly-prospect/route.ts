@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       processed: result.scanned,
       succeeded: result.applied,
       failed: result.errors.length,
-      summary: `${result.applied} envoyée(s), ${result.wouldApply} dry-run, ${result.skipped} skip sur ${result.scanned} scannées`,
+      summary: `${result.applied} envoyée(s), ${result.proposed} proposée(s) Telegram, ${result.wouldApply} dry-run, ${result.skipped} skip sur ${result.scanned} scannées`,
       error: result.errors[0] ?? null,
     });
     return NextResponse.json(result);

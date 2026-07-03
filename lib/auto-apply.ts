@@ -610,6 +610,12 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
         const chatId = String(process.env.TELEGRAM_CHAT_ID);
         await getTelegramState(chatId);
         const token = randomBytes(12).toString("hex");
+        // Purge des actions décidées > 7 j AVANT le push : sans ça le $slice évincerait
+        // des propositions encore actives au profit de vieilles entrées consommées.
+        await TelegramState.updateOne(
+          { chatId },
+          { $pull: { pendingActions: { status: { $ne: "pending" }, decidedAt: { $lt: new Date(Date.now() - 7 * 86_400_000) } } } }
+        );
         await TelegramState.updateOne(
           { chatId },
           {
@@ -624,11 +630,14 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
                     status: "pending",
                     origin: "prospection",
                     candidatureId: String(candDoc._id),
+                    // Domaine racine du SITE de la boîte (pas l'URL de l'offre, qui peut
+                    // être un ATS externe) — utilisé par la blacklist du ❌.
+                    domain: decision.domain,
                     createdAt: new Date(),
                     decidedAt: null,
                   },
                 ],
-                $slice: -20,
+                $slice: -30,
               },
             },
           }
@@ -645,12 +654,21 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
           ``,
           `Je candidate ?`,
         ].join("\n");
-        await sendTelegramMessageWithButtons(recap, [
-          [
-            { text: "✅ Candidater", callback_data: `act:ok:${token}` },
-            { text: "❌ Ignorer", callback_data: `act:no:${token}` },
-          ],
-        ]);
+        try {
+          await sendTelegramMessageWithButtons(recap, [
+            [
+              { text: "✅ Candidater", callback_data: `act:ok:${token}` },
+              { text: "❌ Ignorer", callback_data: `act:no:${token}` },
+            ],
+          ]);
+        } catch (tgErr) {
+          // Message jamais parti : on nettoie l'action ET la candidature (proposition jamais
+          // vue → le prochain run re-proposera la cible), sinon action fantôme + candidature
+          // orpheline dans le backlog.
+          await TelegramState.updateOne({ chatId }, { $pull: { pendingActions: { token } } }).catch(() => {});
+          await Candidature.deleteOne({ _id: candDoc._id, statut: "identifiée" }).catch(() => {});
+          throw tgErr;
+        }
         decision.decision = "proposed";
         result.proposed++;
         continue;

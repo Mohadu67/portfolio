@@ -17,6 +17,9 @@ export interface ITelegramPendingAction {
   // weekly-prospect (le ❌ supprime alors la candidature auto-créée + blackliste le domaine).
   origin: "agent" | "prospection";
   candidatureId?: string | null;
+  // Domaine racine de la cible (prospection) — pour la blacklist user_ignored. Stocké à la
+  // création car l'url de la candidature peut pointer un ATS externe ou un sous-domaine.
+  domain?: string | null;
   createdAt: Date;
   decidedAt?: Date | null;
 }
@@ -58,6 +61,7 @@ const pendingActionSchema = new Schema<ITelegramPendingAction>(
     status: { type: String, enum: ["pending", "confirmed", "cancelled"], default: "pending" },
     origin: { type: String, enum: ["agent", "prospection"], default: "agent" },
     candidatureId: { type: String, default: null },
+    domain: { type: String, default: null },
     createdAt: { type: Date, default: () => new Date() },
     decidedAt: { type: Date, default: null },
   },

@@ -156,6 +156,7 @@ export async function POST(request: NextRequest) {
         if (messageId) {
           await appendDecisionToMessage(messageId, currentText, "❌ Annulée.").catch(() => {});
         }
+        if (res.resultText) await sendTelegramMessage(res.resultText).catch(() => {});
       } else if (res.outcome === "executed") {
         await answerCallbackQuery(cb.id, "✅ Exécutée").catch(() => {});
         if (messageId) {

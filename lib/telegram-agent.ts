@@ -127,7 +127,6 @@ export function formatToolResult(tool: string, result: ToolRunResult): string {
 }
 
 // Message vocal : transcription Gemini (audio natif) puis même boucle agent que le texte.
-// On renvoie d'abord la transcription pour que l'utilisateur vérifie ce qui a été compris.
 export async function handleIncomingTelegramVoice(
   chatId: string,
   fileId: string,
@@ -167,7 +166,6 @@ export async function handleIncomingTelegramVoice(
     return;
   }
 
-  await sendTelegramMessage(`🎤 J'ai compris : « ${transcription.slice(0, 3000)} »`);
   await handleIncomingTelegramText(chatId, transcription);
 }
 

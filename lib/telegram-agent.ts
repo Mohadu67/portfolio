@@ -6,6 +6,7 @@ import { randomBytes } from "crypto";
 import { GoogleGenerativeAI, type Content, type Part } from "@google/generative-ai";
 import { connectDB } from "./mongodb";
 import { Candidature, ICandidature } from "@/models/Candidature";
+import { AgentMemory, IAgentMemory } from "@/models/AgentMemory";
 import { getTelegramState, ITelegramPendingAction, TelegramState } from "@/models/TelegramState";
 import { buildContextLite } from "./ai/context";
 import { toolsForGemini, getTool } from "./ai/tools";
@@ -109,12 +110,32 @@ async function synthesizeSpeechWav(text: string): Promise<Buffer | null> {
   }
 }
 
+async function buildMemoryBlock(): Promise<string> {
+  try {
+    const facts = await AgentMemory.find().sort({ category: 1, created_at: 1 }).lean<IAgentMemory[]>();
+    if (facts.length === 0) return "";
+    const byCategory = new Map<string, string[]>();
+    for (const f of facts) {
+      const list = byCategory.get(f.category) ?? [];
+      list.push(f.fact);
+      byCategory.set(f.category, list);
+    }
+    const lines = [...byCategory.entries()].map(([cat, fs]) => `[${cat}] ${fs.join(" · ")}`);
+    return `\n\nCE QUE TU SAIS DU PATRON (mémoire persistante — appuie chaque conseil dessus) :\n${lines.join("\n")}`;
+  } catch {
+    return "";
+  }
+}
+
 async function buildSystemPrompt(): Promise<string> {
   const lite = await buildContextLite();
   const profileName = lite.profileName ?? process.env.PROFIL_NOM ?? "Mohammed Hamiani";
-  return `Tu es l'assistant personnel de ${profileName} (développeur fullstack en recherche d'alternance), joignable sur Telegram. Tu communiques en français, direct, factuel. Phrases courtes, pas de blabla, pas de markdown (texte brut Telegram : pas de **, pas de #, tirets simples pour les listes).
+  const memoryBlock = await buildMemoryBlock();
+  return `Tu es le compagnon de route et conseiller carrière personnel de ${profileName}, joignable sur Telegram. Tu n'es pas un chatbot générique : tu le connais (bloc mémoire ci-dessous), tu suis sa recherche d'alternance comme un coach — opinionated, bienveillant mais franc, orienté résultats. Tu adaptes chaque conseil à SON profil, son école, son parcours et ses préférences. Tu communiques en français, direct, factuel. Phrases courtes, pas de blabla, pas de markdown (texte brut Telegram : pas de **, pas de #, tirets simples pour les listes).
 
-Tu t'adresses TOUJOURS à l'utilisateur en l'appelant « mon maître » — dans chaque réponse, texte comme vocal (ex. « Oui mon maître », « Voici tes réponses reçues, mon maître »). Naturel et fluide, sans en faire des tonnes : une occurrence par message suffit.
+Tu appelles l'utilisateur « patron » — de temps en temps, pas à chaque message (environ un message sur deux ou trois, aux moments naturels : salutation, bonne nouvelle, confirmation). Ex. « Salut patron », « C'est envoyé, patron. ». Jamais « mon maître », jamais son prénom.
+
+MÉMOIRE PROACTIVE : dès que la conversation révèle une info personnelle DURABLE (école intégrée, dates, rythme d'alternance, préférences de boîtes, traits de personnalité, objectifs, événements de parcours), appelle remember_fact SANS qu'on te le demande — puis continue ta réponse normalement. Si une info clé pour bien le conseiller te manque (école, date de démarrage, rythme), pose UNE question courte au moment naturel, pas un interrogatoire. list_memory / forget_fact pour consulter et corriger.${memoryBlock}
 
 Brièveté : 1 phrase plutôt que 3. Pas d'introduction ni de conclusion bavarde. N'annonce pas ce que tu vas faire — fais-le.
 

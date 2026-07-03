@@ -66,6 +66,42 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "remember_fact",
+    description:
+      "Mémorise durablement un fait sur l'utilisateur (identité, parcours, école, personnalité, préférences, objectifs). À appeler PROACTIVEMENT dès que l'utilisateur révèle une info personnelle durable (« je rentre à l'école X », « je préfère les petites boîtes », « j'ai eu mon titre CDA »). Ne pas mémoriser l'éphémère (humeur du jour, question ponctuelle). Le fait doit être une phrase autonome et factuelle.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          enum: ["identite", "parcours", "ecole", "personnalite", "preferences", "objectifs", "autre"],
+          description: "Catégorie du fait",
+        },
+        fact: { type: "string", description: "Le fait, formulé en une phrase autonome (ex: « Intègre l'école Epitech Strasbourg en septembre 2026, rythme 3 semaines entreprise / 1 semaine école »)" },
+      },
+      required: ["category", "fact"],
+    },
+  },
+  {
+    name: "forget_fact",
+    description: "Supprime un fait mémorisé devenu faux ou indésirable. Utiliser l'_id retourné par list_memory.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        fact_id: { type: "string", description: "_id du fait à supprimer (via list_memory)" },
+      },
+      required: ["fact_id"],
+    },
+  },
+  {
+    name: "list_memory",
+    description: "Liste tout ce que l'agent sait de l'utilisateur (mémoire persistante, avec _id et catégorie). Utiliser quand l'utilisateur demande « qu'est-ce que tu sais sur moi ? » ou avant de corriger/supprimer un fait.",
+    requiresConfirmation: false,
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "research_company",
     description:
       "Enquête sur une entreprise : résout son site officiel (SerpAPI), scrape sa présentation et sa page carrières (offres d'emploi publiées), score son adéquation avec le profil (Gemini), et vérifie si elle a déjà été contactée. À utiliser quand l'utilisateur parle d'une boîte : « c'est quoi X ? », « est-ce que X a des postes ? », « tu penses quoi de X ? ». Lecture seule — propose ensuite apply_to_company si pertinent.",

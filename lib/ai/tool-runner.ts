@@ -12,6 +12,7 @@ import { getSettings } from "@/models/Settings";
 import { resolveCompanyWebsite } from "@/lib/serpapi-resolve";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage } from "@/lib/web-scraper";
 import { scoreCompanyFit } from "@/lib/gemini";
+import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, AgentMemoryCategory } from "@/models/AgentMemory";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -202,6 +203,47 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       return ok({ ok: true, summary: JSON.stringify({ count: items.length, items }) });
     }
 
+    case "remember_fact": {
+      const fact = String(input.fact ?? "").trim();
+      if (!fact || fact.length < 5) return fail(400, "fact trop court");
+      const category = AGENT_MEMORY_CATEGORIES.includes(input.category as AgentMemoryCategory)
+        ? (input.category as AgentMemoryCategory)
+        : "autre";
+      // Dédup souple : même fait normalisé → update de la catégorie/timestamp, pas de doublon.
+      const normalized = normalizeFact(fact);
+      const existingFacts = await AgentMemory.find({}, { fact: 1 }).lean<IAgentMemory[]>();
+      const dup = existingFacts.find((f) => normalizeFact(f.fact) === normalized);
+      if (dup) {
+        return ok({ ok: true, summary: `Déjà mémorisé : « ${fact} »` });
+      }
+      // Cap : garder au max 150 faits (les plus récents).
+      const count = await AgentMemory.countDocuments();
+      if (count >= 150) {
+        const oldest = await AgentMemory.findOne().sort({ updated_at: 1 });
+        if (oldest) await AgentMemory.deleteOne({ _id: oldest._id });
+      }
+      await AgentMemory.create({ category, fact, source: "user" });
+      return ok({ ok: true, summary: `Mémorisé [${category}] : « ${fact} »` });
+    }
+
+    case "forget_fact": {
+      const id = String(input.fact_id ?? "");
+      const doc = await AgentMemory.findByIdAndDelete(id).lean<IAgentMemory | null>();
+      if (!doc) return fail(404, "Fait introuvable (utilise list_memory pour l'_id)");
+      return ok({ ok: true, summary: `Oublié : « ${doc.fact} »` });
+    }
+
+    case "list_memory": {
+      const facts = await AgentMemory.find().sort({ category: 1, created_at: 1 }).lean<IAgentMemory[]>();
+      return ok({
+        ok: true,
+        summary: JSON.stringify({
+          count: facts.length,
+          facts: facts.map((f) => ({ _id: String(f._id), category: f.category, fact: f.fact })),
+        }),
+      });
+    }
+
     case "research_company": {
       const entreprise = String(input.entreprise ?? "").trim();
       const inputUrl = typeof input.url === "string" && input.url.trim() ? input.url.trim() : null;
@@ -214,7 +256,17 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         try {
           site = await resolveCompanyWebsite(entreprise, localisation);
         } catch (err) {
-          return fail(500, `Résolution du site échouée : ${err instanceof Error ? err.message : err}`);
+          // Quota SerpAPI épuisé ou API down : on dégrade au lieu d'échouer — l'agent
+          // demande l'URL du site et rappelle le tool avec.
+          const msg = err instanceof Error ? err.message : String(err);
+          return ok({
+            ok: true,
+            summary: JSON.stringify({
+              entreprise,
+              site: null,
+              note: `Résolution automatique du site impossible (${msg.slice(0, 120)}). Demande à l'utilisateur l'URL du site officiel de ${entreprise} puis rappelle research_company avec le paramètre url.`,
+            }),
+          });
         }
       }
       if (!site) {

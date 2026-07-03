@@ -6,7 +6,7 @@ import {
   escapeTelegramHtml,
   type ApprovalRequestInput,
 } from "@/lib/telegram";
-import { formatToolResult, pcmToWav } from "@/lib/telegram-agent";
+import { formatToolResult, pcmToWav, safeParseSummary } from "@/lib/telegram-agent";
 import { buildCandidatureSearchFilter } from "@/lib/ai/tool-runner";
 
 const baseInput: ApprovalRequestInput = {
@@ -212,6 +212,21 @@ describe("buildCandidatureSearchFilter", () => {
     expect(matches(short, { entreprise: "Orano", poste: "Ingénieur" })).toBe(true);
     expect(matches(short, { entreprise: "Divalto", poste: "Dév TS" })).toBe(false);
     expect(buildCandidatureSearchFilter("  ")).toBeNull();
+  });
+});
+
+describe("safeParseSummary", () => {
+  it("enveloppe les tableaux nus (functionResponse.response doit être un objet)", () => {
+    const r = safeParseSummary(JSON.stringify([{ key: "profile" }, { key: "skills" }]));
+    expect(Array.isArray(r)).toBe(false);
+    expect(Array.isArray(r.result)).toBe(true);
+  });
+
+  it("objet → tel quel, scalaire/texte → { result }", () => {
+    expect(safeParseSummary('{"count":2}')).toEqual({ count: 2 });
+    expect(safeParseSummary("42")).toEqual({ result: 42 });
+    expect(safeParseSummary("Relance programmée")).toEqual({ result: "Relance programmée" });
+    expect(safeParseSummary(undefined)).toEqual({ result: "" });
   });
 });
 

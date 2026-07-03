@@ -159,10 +159,13 @@ Date du jour : ${new Date().toLocaleDateString("fr-FR", { weekday: "long", day: 
 Contexte : ${lite.summary}.`;
 }
 
-function safeParseSummary(summary: string | undefined): Record<string, unknown> {
+export function safeParseSummary(summary: string | undefined): Record<string, unknown> {
   if (!summary) return { result: "" };
   try {
     const parsed = JSON.parse(summary);
+    // Un tableau nu ferait 400 côté Gemini : functionResponse.response doit être un
+    // OBJET proto Struct ("Proto field is not repeating, cannot start").
+    if (Array.isArray(parsed)) return { result: parsed };
     return typeof parsed === "object" && parsed !== null
       ? (parsed as Record<string, unknown>)
       : { result: parsed };

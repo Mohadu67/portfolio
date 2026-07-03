@@ -119,9 +119,14 @@ Règle absolue : NE JAMAIS appeler un tool pour une salutation, une question gé
         } else {
           try {
             const parsed = JSON.parse(tr.content);
-            response = typeof parsed === "object" && parsed !== null
-              ? (parsed as Record<string, unknown>)
-              : { result: parsed };
+            // Tableau nu → 400 Gemini (functionResponse.response doit être un objet Struct).
+            if (Array.isArray(parsed)) {
+              response = { result: parsed };
+            } else {
+              response = typeof parsed === "object" && parsed !== null
+                ? (parsed as Record<string, unknown>)
+                : { result: parsed };
+            }
           } catch {
             response = { result: tr.content };
           }

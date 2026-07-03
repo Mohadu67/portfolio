@@ -14,6 +14,7 @@ import {
   sendTelegramMessage,
   sendTelegramMessageWithButtons,
   sendTelegramChatAction,
+  sendTelegramAudio,
   getTelegramFileAsBase64,
 } from "./telegram";
 
@@ -42,6 +43,70 @@ export const TELEGRAM_HELP_TEXT = [
 
 // Durée max d'un vocal accepté — protège le quota Gemini et évite les transcriptions fleuve.
 const MAX_VOICE_SECONDS = 300;
+
+// Réponse vocale (talkie-walkie) : au-delà, la synthèse devient longue et pénible à écouter
+// → fallback texte.
+const MAX_TTS_CHARS = 1500;
+const TTS_MODEL = process.env.TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
+const TTS_VOICE = process.env.TTS_VOICE ?? "Kore";
+
+// Enveloppe un flux PCM 16-bit little-endian dans un header WAV standard (44 octets).
+// Gemini TTS renvoie du PCM brut 24 kHz mono — Telegram a besoin d'un conteneur.
+export function pcmToWav(pcm: Buffer, sampleRate = 24_000, channels = 1, bitsPerSample = 16): Buffer {
+  const byteRate = (sampleRate * channels * bitsPerSample) / 8;
+  const blockAlign = (channels * bitsPerSample) / 8;
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); // PCM non compressé
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+// Synthèse vocale via l'API REST Gemini TTS (le SDK installé ne connaît pas encore
+// responseModalities/speechConfig). null en cas d'échec → l'appelant retombe sur le texte.
+async function synthesizeSpeechWav(text: string): Promise<Buffer | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || !text.trim()) return null;
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: TTS_VOICE } } },
+          },
+        }),
+      }
+    );
+    if (!res.ok) {
+      console.error("[telegram tts]", res.status, (await res.text().catch(() => "")).slice(0, 300));
+      return null;
+    }
+    const data = (await res.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
+    };
+    const b64 = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data;
+    if (!b64) return null;
+    return pcmToWav(Buffer.from(b64, "base64"));
+  } catch (err) {
+    console.error("[telegram tts]", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
 
 async function buildSystemPrompt(): Promise<string> {
   const lite = await buildContextLite();
@@ -166,11 +231,17 @@ export async function handleIncomingTelegramVoice(
     return;
   }
 
-  await handleIncomingTelegramText(chatId, transcription);
+  await handleIncomingTelegramText(chatId, transcription, { voiceReply: true });
 }
 
 // Boucle agent : Gemini + tools. Lecture directe, action → bouton de confirmation.
-export async function handleIncomingTelegramText(chatId: string, text: string): Promise<void> {
+// opts.voiceReply : répondre en vocal (TTS) — utilisé quand l'entrée était un vocal
+// (mode talkie-walkie). Fallback texte si la synthèse échoue ou si la réponse est longue.
+export async function handleIncomingTelegramText(
+  chatId: string,
+  text: string,
+  opts: { voiceReply?: boolean } = {}
+): Promise<void> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     await sendTelegramMessage("⚠️ GEMINI_API_KEY non configuré côté serveur — je ne peux pas réfléchir.");
@@ -282,7 +353,21 @@ export async function handleIncomingTelegramText(chatId: string, text: string): 
   await state.save();
 
   if (finalText.trim()) {
-    await sendTelegramMessage(finalText.trim());
+    const reply = finalText.trim();
+    let spoken = false;
+    if (opts.voiceReply && reply.length <= MAX_TTS_CHARS) {
+      await sendTelegramChatAction("record_voice").catch(() => {});
+      const wav = await synthesizeSpeechWav(reply);
+      if (wav) {
+        try {
+          await sendTelegramAudio(wav, "reponse.wav", reply);
+          spoken = true;
+        } catch (err) {
+          console.error("[telegram tts send]", err instanceof Error ? err.message : err);
+        }
+      }
+    }
+    if (!spoken) await sendTelegramMessage(reply);
   } else if (proposals.length === 0) {
     await sendTelegramMessage("Je n'ai pas de réponse — reformule ou tape /aide.");
   }

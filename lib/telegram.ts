@@ -215,6 +215,25 @@ export async function getTelegramFileAsBase64(
   return { base64: buf.toString("base64"), sizeBytes: buf.byteLength };
 }
 
+// Envoie un fichier audio (WAV/MP3…) via sendAudio (multipart). Affiché avec un lecteur
+// dans le chat ; caption optionnelle (max 1024 chars côté Telegram).
+export async function sendTelegramAudio(
+  audio: Buffer,
+  filename: string,
+  caption?: string
+): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) throw new Error("TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID manquant");
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  form.append("audio", new Blob([new Uint8Array(audio)], { type: "audio/wav" }), filename);
+  if (caption) form.append("caption", caption.slice(0, 1024));
+  const res = await fetch(`${API_BASE}/bot${token}/sendAudio`, { method: "POST", body: form });
+  const data = (await res.json()) as { ok: boolean; description?: string };
+  if (!data.ok) throw new Error(`Telegram sendAudio failed: ${data.description ?? res.status}`);
+}
+
 export interface ParsedActionCallback {
   approve: boolean;
   token: string;

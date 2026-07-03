@@ -6,7 +6,7 @@ import {
   escapeTelegramHtml,
   type ApprovalRequestInput,
 } from "@/lib/telegram";
-import { formatToolResult } from "@/lib/telegram-agent";
+import { formatToolResult, pcmToWav } from "@/lib/telegram-agent";
 
 const baseInput: ApprovalRequestInput = {
   approvalToken: "a1b2c3d4e5f6a1b2c3d4e5f6",
@@ -174,5 +174,22 @@ describe("formatToolResult", () => {
       body: { ok: true, summary: "Relance programmée chez Extia pour le 06/07/2026 09:00" },
     });
     expect(txt).toBe("✅ Relance programmée chez Extia pour le 06/07/2026 09:00");
+  });
+});
+
+describe("pcmToWav", () => {
+  it("produit un header WAV valide (RIFF/WAVE, tailles, 24 kHz mono 16-bit)", () => {
+    const pcm = Buffer.alloc(4800); // 100 ms à 24 kHz 16-bit mono
+    const wav = pcmToWav(pcm);
+    expect(wav.length).toBe(44 + 4800);
+    expect(wav.toString("ascii", 0, 4)).toBe("RIFF");
+    expect(wav.readUInt32LE(4)).toBe(36 + 4800);
+    expect(wav.toString("ascii", 8, 12)).toBe("WAVE");
+    expect(wav.readUInt16LE(20)).toBe(1); // PCM
+    expect(wav.readUInt16LE(22)).toBe(1); // mono
+    expect(wav.readUInt32LE(24)).toBe(24_000);
+    expect(wav.readUInt16LE(34)).toBe(16); // bits/sample
+    expect(wav.toString("ascii", 36, 40)).toBe("data");
+    expect(wav.readUInt32LE(40)).toBe(4800);
   });
 });

@@ -13,7 +13,7 @@ import { resolveCompanyWebsite } from "@/lib/serpapi-resolve";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage } from "@/lib/web-scraper";
 import { scoreCompanyFit } from "@/lib/gemini";
 import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, AgentMemoryCategory } from "@/models/AgentMemory";
-import { getTelegramState } from "@/models/TelegramState";
+import { getTelegramState, TelegramState } from "@/models/TelegramState";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -38,7 +38,13 @@ function accentInsensitivePattern(s: string): string {
 // libellé — une recherche substring d'un bloc ne matche aucun champ.
 export function buildCandidatureSearchFilter(search: string): Record<string, unknown> | null {
   const tokens = search.trim().split(/\s+/).filter((t) => t.length >= 2);
-  if (tokens.length === 0) return null;
+  // Aucun token exploitable (ex. "R") → fallback substring sur la chaîne brute plutôt que
+  // de renvoyer la liste NON filtrée comme si c'étaient des résultats.
+  if (tokens.length === 0) {
+    const raw = search.trim();
+    if (!raw) return null;
+    tokens.push(raw);
+  }
   return {
     $and: tokens.map((t) => {
       const rx = new RegExp(accentInsensitivePattern(t), "i");
@@ -212,12 +218,20 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       if (!message) return fail(400, "message requis");
       const chatId = process.env.TELEGRAM_CHAT_ID;
       if (!chatId) return fail(500, "TELEGRAM_CHAT_ID non configuré");
-      const state = await getTelegramState(chatId);
-      state.reminders = [
-        ...(state.reminders ?? []).filter((r: { sent: boolean }) => !r.sent).slice(-30),
-        { message, dueAt: when, sent: false, createdAt: new Date() },
-      ];
-      await state.save();
+      await getTelegramState(chatId); // garantit l'existence du doc
+      // $push atomique (pas de réécriture du tableau : un pulse concurrent pourrait avoir
+      // marqué un rappel sent entre-temps — le réécrire le ressusciterait).
+      await TelegramState.updateOne(
+        { chatId },
+        {
+          $push: {
+            reminders: {
+              $each: [{ message, dueAt: when, sent: false, createdAt: new Date() }],
+              $slice: -40,
+            },
+          },
+        }
+      );
       return ok({
         ok: true,
         summary: `Rappel programmé pour le ${when.toLocaleString("fr-FR", { timeZone: "Europe/Paris" })} : « ${message.slice(0, 120)} »`,
@@ -267,7 +281,9 @@ export async function executeTool(toolName: string, input: Record<string, unknow
 
     case "research_company": {
       const entreprise = String(input.entreprise ?? "").trim();
-      const inputUrl = typeof input.url === "string" && input.url.trim() ? input.url.trim() : null;
+      // Normalise le schéma : Gemini passe parfois "divalto.fr" nu → new URL() throw plus bas.
+      const rawUrl = typeof input.url === "string" ? input.url.trim() : "";
+      const inputUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`) : null;
       const localisation = String(input.localisation ?? "").trim() || "Strasbourg";
       if (!entreprise && !inputUrl) return fail(400, "entreprise ou url requis");
 
@@ -332,7 +348,12 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       }
 
       // 5. Déjà dans le pipeline ?
-      const domain = new URL(site).hostname.replace(/^www\./, "");
+      let domain: string;
+      try {
+        domain = new URL(site).hostname.replace(/^www\./, "");
+      } catch {
+        return fail(400, `URL invalide : ${site}`);
+      }
       const existing = await Candidature.findOne(
         {
           $or: [
@@ -393,32 +414,38 @@ export async function executeTool(toolName: string, input: Record<string, unknow
     }
 
     case "resend_pending_approval": {
-      // Ré-émet le message Telegram (avec boutons ✅/❌) d'une auto-réponse pending.
+      // Ré-émet le message Telegram (avec boutons ✅/❌) de TOUTES les auto-réponses pending
+      // de la candidature (il peut y en avoir plusieurs : une par mail entrant).
       const id = String(input.candidature_id);
       const c = await Candidature.findById(id).lean<ICandidature | null>();
       if (!c) return fail(404, "Candidature not found");
-      const pending = (c.autoReplies ?? []).find((a) => a.approvalStatus === "pending" && a.approvalToken);
-      if (!pending || !pending.approvalToken) {
+      const pendings = (c.autoReplies ?? []).filter((a) => a.approvalStatus === "pending" && a.approvalToken);
+      if (pendings.length === 0) {
         return fail(404, "Aucune auto-réponse en attente pour cette candidature");
       }
-      const inbound = (c.emailsReceived ?? []).find(
-        (e) => !!pending.inboundMessageId && e.messageId === pending.inboundMessageId
-      );
       const settings = await getSettings();
-      await sendAutoReplyApprovalRequest({
-        approvalToken: pending.approvalToken,
-        entreprise: c.entreprise,
-        poste: c.poste,
-        from: inbound?.from ?? "(inconnu)",
-        fromName: inbound?.fromName,
-        subject: inbound?.subject ?? "(sans sujet)",
-        inboundExcerpt: inbound?.snippet || inbound?.bodyText || "",
-        category: pending.category,
-        confidence: pending.confidence,
-        minConfidence: settings.gmail.autoReplyMinConfidence ?? 0.7,
-        reply: pending.reply,
+      for (const pending of pendings) {
+        const inbound = (c.emailsReceived ?? []).find(
+          (e) => !!pending.inboundMessageId && e.messageId === pending.inboundMessageId
+        );
+        await sendAutoReplyApprovalRequest({
+          approvalToken: String(pending.approvalToken),
+          entreprise: c.entreprise,
+          poste: c.poste,
+          from: inbound?.from ?? "(inconnu)",
+          fromName: inbound?.fromName,
+          subject: inbound?.subject ?? "(sans sujet)",
+          inboundExcerpt: inbound?.snippet || inbound?.bodyText || "",
+          category: pending.category,
+          confidence: pending.confidence,
+          minConfidence: settings.gmail.autoReplyMinConfidence ?? 0.7,
+          reply: pending.reply,
+        });
+      }
+      return ok({
+        ok: true,
+        summary: `${pendings.length} demande(s) d'approbation renvoyée(s) sur Telegram pour ${c.entreprise}`,
       });
-      return ok({ ok: true, summary: `Demande d'approbation renvoyée sur Telegram pour ${c.entreprise}` });
     }
 
     case "list_cv_sections": {

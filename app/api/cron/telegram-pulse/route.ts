@@ -48,8 +48,17 @@ async function deliverDueReminders(chatId: string): Promise<number> {
       { arrayFilters: [{ "r.sent": false, "r.dueAt": r.dueAt, "r.message": r.message }] }
     );
     if (claim.modifiedCount !== 1) continue;
-    await sendTelegramMessage(`⏰ Rappel, patron :\n${r.message}`).catch(() => {});
-    delivered++;
+    try {
+      await sendTelegramMessage(`⏰ Rappel, patron :\n${r.message}`);
+      delivered++;
+    } catch {
+      // Échec d'envoi : on rend le claim pour que le prochain pulse retente.
+      await TelegramState.updateOne(
+        { chatId },
+        { $set: { "reminders.$[r].sent": false } },
+        { arrayFilters: [{ "r.sent": true, "r.dueAt": r.dueAt, "r.message": r.message }] }
+      ).catch(() => {});
+    }
   }
   return delivered;
 }
@@ -57,7 +66,7 @@ async function deliverDueReminders(chatId: string): Promise<number> {
 interface BriefingData {
   enRetard: Array<{ entreprise: string; poste: string; daysLate: number }>;
   aujourdhui: Array<{ entreprise: string; heure: string }>;
-  pendingApprovals: Array<{ entreprise: string; ageHours: number; candidatureId: string }>;
+  pendingApprovals: Array<{ entreprise: string; ageHours: number; candidatureId: string; approvalToken: string | null }>;
   reponses24h: Array<{ entreprise: string; subject: string }>;
   backlogIdentifiees: number;
   stagnantes: number;
@@ -121,6 +130,7 @@ async function collectBriefing(): Promise<BriefingData> {
         entreprise: c.entreprise,
         ageHours: Math.floor((now - new Date(a.date).getTime()) / 3_600_000),
         candidatureId: String(c._id),
+        approvalToken: a.approvalToken ?? null,
       });
     }
     for (const e of c.emailsReceived ?? []) {
@@ -158,13 +168,18 @@ function composeBriefing(d: BriefingData): string {
 
 // Re-envoie les boutons ✅/❌ des validations en attente depuis plus de 24 h (1×/jour via le briefing).
 async function resendOldApprovals(pending: BriefingData["pendingApprovals"]): Promise<number> {
-  const old = pending.filter((p) => p.ageHours >= 24);
+  // Ciblage par approvalToken exact : une candidature peut porter PLUSIEURS pendings
+  // (un par mail entrant) — chercher "le premier pending" en renverrait un en boucle
+  // et n'atteindrait jamais les autres.
+  const old = pending.filter((p) => p.ageHours >= 24 && p.approvalToken);
   let resent = 0;
   const settings = await getSettings();
   for (const p of old.slice(0, 5)) {
     const c = await Candidature.findById(p.candidatureId).lean<ICandidature | null>();
     if (!c) continue;
-    const a = (c.autoReplies ?? []).find((x) => x.approvalStatus === "pending" && x.approvalToken);
+    const a = (c.autoReplies ?? []).find(
+      (x) => x.approvalStatus === "pending" && x.approvalToken === p.approvalToken
+    );
     if (!a?.approvalToken) continue;
     const inbound = (c.emailsReceived ?? []).find(
       (e) => !!a.inboundMessageId && e.messageId === a.inboundMessageId
@@ -216,10 +231,20 @@ export async function POST(request: NextRequest) {
         { $set: { lastBriefingDate: dateKey } }
       );
       if (claim.modifiedCount === 1) {
-        const data = await collectBriefing();
-        await sendTelegramMessage(composeBriefing(data));
-        approvalsResent = await resendOldApprovals(data.pendingApprovals);
-        briefingSent = true;
+        try {
+          const data = await collectBriefing();
+          await sendTelegramMessage(composeBriefing(data));
+          approvalsResent = await resendOldApprovals(data.pendingApprovals);
+          briefingSent = true;
+        } catch (err) {
+          // Échec après le claim : on le rend pour que le passage de 8h30 retente,
+          // sinon le briefing du jour est silencieusement perdu.
+          await TelegramState.updateOne(
+            { chatId, lastBriefingDate: dateKey },
+            { $set: { lastBriefingDate: null } }
+          ).catch(() => {});
+          throw err;
+        }
       }
     }
 

@@ -154,7 +154,7 @@ Si l'utilisateur demande « ce qui est en attente » de validation Telegram → 
 
 Quand l'utilisateur cite une candidature d'une liste que tu viens de donner (souvent en vocal, donc approximativement) : rappelle list_candidatures avec search = le nom de l'ENTREPRISE seul (le plus discriminant — jamais le titre complet poste+entreprise), récupère le _id, puis get_candidature. Si zéro résultat, retente avec un seul mot-clé du poste avant de dire que tu ne trouves pas.
 
-Date du jour : ${new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
+Date du jour : ${new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" })}.
 Contexte : ${lite.summary}.`;
 }
 
@@ -375,24 +375,26 @@ export async function handleIncomingTelegramText(
     await sendTelegramChatAction("typing").catch(() => {});
   }
 
-  // Persister les propositions avant d'envoyer les boutons (le tap peut arriver vite).
-  if (proposals.length > 0) {
-    const kept = (state.pendingActions ?? []).filter(
-      (a: ITelegramPendingAction) => a.status === "pending"
-    ).slice(-9);
-    state.pendingActions = [
-      ...kept,
-      ...proposals.map((p) => ({ ...p, status: "pending" as const, createdAt: new Date(), decidedAt: null })),
-    ];
-  }
-  state.conversation = [
-    ...(state.conversation ?? []),
+  // Persistance ATOMIQUE ($push + $slice) — jamais de réécriture des tableaux entiers :
+  // deux messages traités en parallèle (webhook fire-and-forget) feraient du last-writer-wins
+  // et pourraient ressusciter une pendingAction déjà confirmée (double exécution) ou effacer
+  // des tours de conversation.
+  const newMessages = [
     { role: "user" as const, text, at: new Date() },
     // Max 3 digests par tour pour ne pas noyer le dialogue dans la fenêtre glissante.
     ...toolDigests.slice(-3).map((d) => ({ role: "model" as const, text: d, at: new Date() })),
     ...(finalText.trim() ? [{ role: "model" as const, text: finalText.trim(), at: new Date() }] : []),
-  ].slice(-2 * CONVERSATION_WINDOW);
-  await state.save();
+  ];
+  const push: Record<string, unknown> = {
+    conversation: { $each: newMessages, $slice: -2 * CONVERSATION_WINDOW },
+  };
+  if (proposals.length > 0) {
+    push.pendingActions = {
+      $each: proposals.map((p) => ({ ...p, status: "pending" as const, createdAt: new Date(), decidedAt: null })),
+      $slice: -20,
+    };
+  }
+  await TelegramState.updateOne({ chatId }, { $push: push });
 
   if (finalText.trim()) {
     const reply = finalText.trim();

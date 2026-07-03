@@ -205,8 +205,12 @@ describe("buildCandidatureSearchFilter", () => {
     expect(matches(filter, { entreprise: "Expectra", poste: "Développeur Logiciel - CDI" })).toBe(false);
   });
 
-  it("ignore les tokens trop courts et retourne null si rien d'exploitable", () => {
-    expect(buildCandidatureSearchFilter("à -")).toBeNull();
+  it("recherche trop courte → fallback substring (jamais de liste non filtrée), vide → null", () => {
+    // "R" ne doit PAS retourner null (null = pas de filtre = tout matche) mais un filtre substring.
+    const short = buildCandidatureSearchFilter("R");
+    expect(short).not.toBeNull();
+    expect(matches(short, { entreprise: "Orano", poste: "Ingénieur" })).toBe(true);
+    expect(matches(short, { entreprise: "Divalto", poste: "Dév TS" })).toBe(false);
     expect(buildCandidatureSearchFilter("  ")).toBeNull();
   });
 });

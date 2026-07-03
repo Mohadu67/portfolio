@@ -150,7 +150,9 @@ export async function runProcessPending(opts: RunProcessPendingOptions = {}): Pr
         // Si locked.url pointe vers le site de l'entreprise (pas un agrégateur), on l'utilise.
         // Heuristique : si l'URL contient linkedin.com / indeed.com / etc., on résout via SerpAPI.
         const url = locked.url || "";
-        const looksLikeAggregator = /linkedin\.com|indeed\.com|welcometothejungle|hellowork|jobteaser|francetravail|pole-emploi|adzuna|monster\.fr|apec\.fr/i.test(url);
+        // manual:// = placeholder des ajouts manuels sans annonce : non scrapable, on force
+        // la résolution SerpAPI comme pour un agrégateur.
+        const looksLikeAggregator = /linkedin\.com|indeed\.com|welcometothejungle|hellowork|jobteaser|francetravail|pole-emploi|adzuna|monster\.fr|apec\.fr/i.test(url) || url.startsWith("manual:");
         if (url && !looksLikeAggregator) {
           scrapeTarget = url;
         } else {

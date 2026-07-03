@@ -228,7 +228,8 @@ const candidatureSchema = new Schema<ICandidature>(
     type: {
       type: String,
       enum: ["stage", "alternance", "cdi"],
-      default: "stage",
+      // Aligné sur le pivot alternance (cf. settings defaultCandidatureType et POST /api/candidatures).
+      default: "alternance",
     },
     lettre: { type: String, default: null },
     letterInstruction: { type: String, default: "" },

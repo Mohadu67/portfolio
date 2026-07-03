@@ -52,6 +52,8 @@ services:
       PROFIL_PORTFOLIO_URL: ${PROFIL_PORTFOLIO_URL:-https://hamiani.mohammed.harmonith.fr}
       NODE_ENV: production
       PORT: 3000
+      # Frontières de journée (relances "aujourd'hui/en retard", briefing) en heure locale.
+      TZ: Europe/Paris
     depends_on:
       mongodb:
         condition: service_healthy

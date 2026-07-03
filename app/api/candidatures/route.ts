@@ -10,19 +10,22 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { entreprise, poste, plateforme, localisation, url, description, email, aboutText, statut, date } = body;
+    const { entreprise, poste, plateforme, localisation, url, description, email, aboutText, statut, date, type, lettre } = body;
 
-    if (!entreprise || !url) {
-      return NextResponse.json(
-        { error: "entreprise and url are required" },
-        { status: 400 }
-      );
+    if (!entreprise) {
+      return NextResponse.json({ error: "entreprise is required" }, { status: 400 });
     }
 
     await connectDB();
 
+    // Ajout manuel sans annonce : le schéma exige une url unique → placeholder "manual://".
+    const cleanUrl = typeof url === "string" && url.trim() ? url.trim() : null;
+    const finalUrl =
+      cleanUrl ??
+      `manual://${String(entreprise).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "candidature"}-${Date.now()}`;
+
     // Check for duplicate
-    const existing = await Candidature.findOne({ url });
+    const existing = await Candidature.findOne({ url: finalUrl });
     if (existing) {
       return NextResponse.json(
         { error: "Une candidature avec cette URL existe déjà", details: "duplicate", candidature: existing },
@@ -30,19 +33,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const finalType = type === "stage" || type === "alternance" || type === "cdi" ? type : "alternance";
+    // Lettre fournie à la création (flux manuel « j'ai déjà le contact ») → directement
+    // prête à envoyer, versionnée comme une lettre manuelle.
+    const cleanLettre = typeof lettre === "string" && lettre.trim() ? lettre.trim() : null;
+
     const candidature = await Candidature.create({
       entreprise,
       poste: poste || "Candidature spontanée",
       plateforme: plateforme || "Web",
       localisation: localisation || "",
-      url,
+      url: finalUrl,
       description: (description || "").substring(0, 500),
       email: email || "",
       aboutText: aboutText || "",
-      statut: statut || "identifiée",
-      lettre: null,
+      statut: statut || (cleanLettre ? "lettre générée" : "identifiée"),
+      type: finalType,
+      lettre: cleanLettre,
+      letters: cleanLettre
+        ? [{ version: 1, model: "manual", content: cleanLettre, generatedAt: new Date(), type: finalType }]
+        : [],
       cv: null,
       notes: "",
+      source: "manual",
       date: date || new Date().toISOString().split("T")[0],
     });
 

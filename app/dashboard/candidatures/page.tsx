@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion, MotionConfig, type Variants } from "framer-motion";
-import { AlertTriangle, Inbox, RefreshCw, Search, SearchX, X } from "lucide-react";
+import { AlertTriangle, Inbox, Plus, RefreshCw, Search, SearchX, X } from "lucide-react";
 import { useApiKey } from "@/lib/contexts/AuthContext";
 import { useDashboardData } from "@/lib/hooks/useDashboardData";
 import { PipelineFilters } from "@/components/dashboard/candidatures/PipelineFilters";
+import { AddCandidatureModal } from "@/components/dashboard/candidatures/AddCandidatureModal";
 import { CandidatureRow } from "@/components/dashboard/candidatures/CandidatureRow";
 import { PIPELINE_ORDER, SECTION_LABEL, STATUS_CSS_VAR } from "@/components/dashboard/candidatures/status";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -35,10 +36,9 @@ function compare(a: ICandidature, b: ICandidature, key: SortKey): number {
   }
 }
 
-// Stagger léger : perceptible sans ralentir la lecture des longues listes.
-const listContainer: Variants = {
-  animate: { transition: { staggerChildren: 0.03 } },
-};
+// Chaque ligne anime son entrée indépendamment (pas de stagger par variants parent :
+// un enfant monté après le premier rendu — ex. ajout manuel — resterait bloqué à
+// opacity 0, le parent ne re-propage pas son état "animate").
 const listItem: Variants = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
@@ -53,6 +53,7 @@ export default function CandidaturesPage() {
   const [sortKey, setSortKey] = useState<SortKey>("activity");
   const [selected, setSelected] = useState<ICandidature | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   const reload = () => {
     setLoading(true);
@@ -131,12 +132,20 @@ export default function CandidaturesPage() {
             </p>
             <h1 className="text-3xl font-bold text-[var(--text-primary)]">Mes candidatures</h1>
           </div>
-          <Link
-            href="/dashboard/recherche"
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent-orange)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] transition-opacity hover:opacity-90"
-          >
-            <Search size={14} /> Trouver des offres
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAdd(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:border-[var(--accent-orange)]"
+            >
+              <Plus size={14} /> Ajouter
+            </button>
+            <Link
+              href="/dashboard/recherche"
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent-orange)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] transition-opacity hover:opacity-90"
+            >
+              <Search size={14} /> Trouver des offres
+            </Link>
+          </div>
         </header>
 
         {/* Filtres pipeline */}
@@ -258,14 +267,9 @@ export default function CandidaturesPage() {
                     {section.items.length}
                   </span>
                 </div>
-                <motion.div
-                  className="space-y-2"
-                  variants={listContainer}
-                  initial="initial"
-                  animate="animate"
-                >
+                <div className="space-y-2">
                   {section.items.map((c) => (
-                    <motion.div key={String(c._id)} variants={listItem}>
+                    <motion.div key={String(c._id)} variants={listItem} initial="initial" animate="animate">
                       <CandidatureRow
                         candidature={c}
                         onGenerateLetter={openModal("generate")}
@@ -275,11 +279,18 @@ export default function CandidaturesPage() {
                       />
                     </motion.div>
                   ))}
-                </motion.div>
+                </div>
               </section>
             ))}
           </div>
         )}
+
+        <AddCandidatureModal
+          isOpen={showAdd}
+          onClose={() => setShowAdd(false)}
+          apiKey={apiKey}
+          onCreated={() => data.load()}
+        />
 
         {current && (
           <>

@@ -61,6 +61,7 @@ interface AppSettings {
     enablePendingProcess: boolean;
     strictQualityScore: boolean;
     allowGenericEmails: boolean;
+    prospectInteractive: boolean;
     defaultCandidatureType: "stage" | "alternance" | "cdi";
     lastOfferSearchRunAt?: string | null;
     lastOfferSearchSummary?: string | null;
@@ -536,6 +537,12 @@ export default function SettingsPage() {
             description="Le cron VPS lance le pipeline une fois par semaine (lundi 9h). Désactivé = aucune candidature envoyée."
             checked={settings.automation.autoApplyEnabled}
             onChange={toggleAutoApply}
+          />
+          <Toggle
+            label="Prospection interactive (Telegram)"
+            description="Les cibles trouvées te sont proposées sur Telegram avec boutons ✅ Candidater / ❌ Ignorer, au lieu d'être candidatées automatiquement. Nécessite le bot Telegram configuré."
+            checked={settings.automation.prospectInteractive}
+            onChange={() => updateAutoApplyField("prospectInteractive", !settings.automation.prospectInteractive)}
           />
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">

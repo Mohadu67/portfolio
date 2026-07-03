@@ -44,6 +44,10 @@ export interface ISettings {
     allowGenericEmails: boolean;
     // Type de candidature utilisé par défaut pour F2/F3 quand l'offre n'en porte pas.
     defaultCandidatureType: "stage" | "alternance" | "cdi";
+    // Prospection interactive : les cibles du weekly-prospect sont proposées sur Telegram
+    // (boutons Candidater/Ignorer) au lieu d'être candidatées automatiquement.
+    // Ne s'active que si Telegram est configuré — sinon fallback envoi auto.
+    prospectInteractive: boolean;
     lastOfferSearchRunAt?: Date | null;
     lastOfferSearchSummary?: string | null;
     lastPendingProcessRunAt?: Date | null;
@@ -123,6 +127,7 @@ const settingsSchema = new Schema<ISettings>(
         enum: ["stage", "alternance", "cdi"],
         default: "alternance",
       },
+      prospectInteractive: { type: Boolean, default: true },
       lastOfferSearchRunAt: { type: Date, default: null },
       lastOfferSearchSummary: { type: String, default: null },
       lastPendingProcessRunAt: { type: Date, default: null },

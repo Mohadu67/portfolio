@@ -7,6 +7,7 @@ import { GoogleGenerativeAI, type Content, type Part } from "@google/generative-
 import { connectDB } from "./mongodb";
 import { Candidature, ICandidature } from "@/models/Candidature";
 import { AgentMemory, IAgentMemory } from "@/models/AgentMemory";
+import { recordProspectSkip } from "@/models/ProspectedDomain";
 import { getTelegramState, ITelegramPendingAction, TelegramState } from "@/models/TelegramState";
 import { buildContextLite } from "./ai/context";
 import { toolsForGemini, getTool } from "./ai/tools";
@@ -298,7 +299,7 @@ export async function handleIncomingTelegramText(
   });
 
   let finalText = "";
-  const proposals: Array<Pick<ITelegramPendingAction, "token" | "tool" | "input" | "label">> = [];
+  const proposals: Array<Pick<ITelegramPendingAction, "token" | "tool" | "input" | "label" | "origin">> = [];
   // Digests des tools de lecture exécutés : persistés dans la mémoire de conversation pour
   // que les tours suivants disposent des VRAIES données (noms, _id) — sans ça le modèle
   // « se souvient » qu'une liste existe mais pas de son contenu, et invente.
@@ -339,7 +340,7 @@ export async function handleIncomingTelegramText(
       if (def.requiresConfirmation) {
         const token = randomBytes(12).toString("hex");
         const label = await describeAction(fc.name, args);
-        proposals.push({ token, tool: fc.name, input: args, label });
+        proposals.push({ token, tool: fc.name, input: args, label, origin: "agent" as const });
         responseParts.push({
           functionResponse: {
             name: fc.name,
@@ -452,6 +453,28 @@ export async function confirmTelegramAction(token: string, approve: boolean): Pr
   if (!action) return { outcome: "already_done" };
 
   if (!approve) {
+    if (action.origin === "prospection" && action.candidatureId) {
+      // « Ignorer » une cible de prospection : on retire la candidature auto-créée et on
+      // blackliste le domaine côté cache prospect (elle ne sera plus proposée pendant 1 an).
+      const cand = await Candidature.findByIdAndDelete(action.candidatureId)
+        .lean<ICandidature | null>()
+        .catch(() => null);
+      if (cand?.url && !cand.url.startsWith("manual:")) {
+        try {
+          const domain = new URL(cand.url).hostname.replace(/^www\./, "");
+          await recordProspectSkip({
+            domain,
+            entreprise: cand.entreprise,
+            reason: "user_ignored",
+            detail: "Ignorée via Telegram (prospection interactive)",
+          });
+        } catch {
+          /* URL non parsable — pas de blacklist domaine */
+        }
+      }
+      await appendModelNote(state.chatId, `Cible de prospection ignorée par l'utilisateur : ${action.label}`);
+      return { outcome: "cancelled", label: action.label };
+    }
     await appendModelNote(state.chatId, `Action annulée par l'utilisateur : ${action.label}`);
     return { outcome: "cancelled", label: action.label };
   }

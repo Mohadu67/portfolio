@@ -87,6 +87,9 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.automation.allowGenericEmails === "boolean") {
         s.automation.allowGenericEmails = body.automation.allowGenericEmails;
       }
+      if (typeof body.automation.prospectInteractive === "boolean") {
+        s.automation.prospectInteractive = body.automation.prospectInteractive;
+      }
       if (
         body.automation.defaultCandidatureType === "stage" ||
         body.automation.defaultCandidatureType === "alternance" ||

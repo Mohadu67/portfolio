@@ -13,6 +13,10 @@ export interface ITelegramPendingAction {
   input: Record<string, unknown>;
   label: string;
   status: TelegramActionStatus;
+  // "agent" = proposée par l'agent conversationnel ; "prospection" = cible du cron
+  // weekly-prospect (le ❌ supprime alors la candidature auto-créée + blackliste le domaine).
+  origin: "agent" | "prospection";
+  candidatureId?: string | null;
   createdAt: Date;
   decidedAt?: Date | null;
 }
@@ -52,6 +56,8 @@ const pendingActionSchema = new Schema<ITelegramPendingAction>(
     input: { type: Schema.Types.Mixed, default: {} },
     label: { type: String, default: "" },
     status: { type: String, enum: ["pending", "confirmed", "cancelled"], default: "pending" },
+    origin: { type: String, enum: ["agent", "prospection"], default: "agent" },
+    candidatureId: { type: String, default: null },
     createdAt: { type: Date, default: () => new Date() },
     decidedAt: { type: Date, default: null },
   },

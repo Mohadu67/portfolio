@@ -2,8 +2,11 @@
 // Workflow : SerpAPI → scrape entreprise → score qualité → page recrutement → match annonce
 // → extraction email RH → génération lettre → envoi candidature (avec rate-limit).
 
+import { randomBytes } from "crypto";
 import type { HydratedDocument } from "mongoose";
 import { connectDB } from "./mongodb";
+import { TelegramState, getTelegramState } from "@/models/TelegramState";
+import { isTelegramConfigured, sendTelegramMessageWithButtons } from "./telegram";
 import { Candidature, ICandidature, CandidatureType } from "@/models/Candidature";
 import { getSettingsDoc } from "@/models/Settings";
 import { isProspectSkipFresh, recordProspectSkip, ProspectSkipReason } from "@/models/ProspectedDomain";
@@ -33,7 +36,7 @@ interface CandidateDecision {
   // Emails scrappés sur le site qui n'ont pas passé le filtre (whitelist strict OU loose).
   // Sert à l'IA pour proposer une saisie manuelle à l'utilisateur quand le picker échoue.
   scrapedEmails?: string[];
-  decision: "skipped" | "applied" | "would_apply";
+  decision: "skipped" | "applied" | "would_apply" | "proposed";
   skipReason?: string;
   candidatureId?: string;
   error?: string;
@@ -45,6 +48,8 @@ export interface AutoApplyRunResult {
   scanned: number;
   applied: number;
   wouldApply: number;
+  // Mode interactif : cibles proposées sur Telegram (boutons Candidater/Ignorer), rien d'envoyé.
+  proposed: number;
   skipped: number;
   errors: string[];
   decisions: CandidateDecision[];
@@ -381,6 +386,7 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
     scanned: 0,
     applied: 0,
     wouldApply: 0,
+    proposed: 0,
     skipped: 0,
     errors: [],
     decisions: [],
@@ -400,6 +406,9 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
   // Une instruction au niveau d'une candidature (jamais le cas en auto, mais utile en re-génération manuelle)
   // override ce défaut.
   const defaultLetterInstruction = typeof auto.defaultLetterInstruction === "string" ? auto.defaultLetterInstruction : "";
+  // Prospection interactive : proposer chaque cible sur Telegram (Candidater/Ignorer) au lieu
+  // d'envoyer directement. Fallback envoi auto si Telegram absent ou dry-run.
+  const interactive = auto.prospectInteractive !== false && isTelegramConfigured() && !opts.dryRun;
 
   // Multi-query rotation : si l'utilisateur a configuré plusieurs queries (1 par ligne),
   // on en pioche une différente à chaque run via weeklyProspectQueryIndex (modulo).
@@ -594,6 +603,59 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
       });
       decision.candidatureId = String(candDoc._id);
 
+      // 8-bis. Mode interactif : la candidature reste « identifiée », on la propose sur
+      // Telegram. ✅ → process_pending_candidatures ciblé (lettre + envoi, via le flux de
+      // confirmation de l'agent) ; ❌ → suppression + blacklist du domaine (user_ignored).
+      if (interactive) {
+        const chatId = String(process.env.TELEGRAM_CHAT_ID);
+        await getTelegramState(chatId);
+        const token = randomBytes(12).toString("hex");
+        await TelegramState.updateOne(
+          { chatId },
+          {
+            $push: {
+              pendingActions: {
+                $each: [
+                  {
+                    token,
+                    tool: "process_pending_candidatures",
+                    input: { ids: [String(candDoc._id)], force: true },
+                    label: `Candidater chez ${entrepriseName} — ${poste}`,
+                    status: "pending",
+                    origin: "prospection",
+                    candidatureId: String(candDoc._id),
+                    createdAt: new Date(),
+                    decidedAt: null,
+                  },
+                ],
+                $slice: -20,
+              },
+            },
+          }
+        );
+        const recap = [
+          `🎯 Nouvelle cible, patron : ${entrepriseName}`,
+          `Poste : ${poste}`,
+          `Score fit : ${fit.score.toFixed(2)} — ${fit.reason.slice(0, 180)}`,
+          ...(chosenOffer && offerScore
+            ? [`Offre repérée : ${chosenOffer.title} (match ${offerScore.score.toFixed(2)})`]
+            : ["Candidature spontanée (pas d'offre publiée repérée)"]),
+          `Email cible : ${bestEmail.email}`,
+          `Site : ${company.url}`,
+          ``,
+          `Je candidate ?`,
+        ].join("\n");
+        await sendTelegramMessageWithButtons(recap, [
+          [
+            { text: "✅ Candidater", callback_data: `act:ok:${token}` },
+            { text: "❌ Ignorer", callback_data: `act:no:${token}` },
+          ],
+        ]);
+        decision.decision = "proposed";
+        result.proposed++;
+        continue;
+      }
+
       // 8. Délègue à la pipeline partagée : génère lettre + envoie.
       // On passe preScraped pour éviter le re-scrape (déjà fait à l'étape 3).
       const applied = await applyToExistingCandidature(candDoc, {
@@ -634,7 +696,7 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
   // Persist summary + avance l'index de query pour le prochain run (rotation).
   settingsDoc.automation.lastProspectRunAt = new Date();
   const queryLabel = queries.length > 1 ? ` · query "${keywords.slice(0, 40)}" (${queryIdx + 1}/${queries.length})` : "";
-  settingsDoc.automation.lastProspectSummary = `${result.scanned} scannées · ${result.applied} envoyée(s)${result.wouldApply > 0 ? ` · ${result.wouldApply} dry-run` : ""} · ${result.skipped} skip · ${result.errors.length} erreur(s)${queryLabel}`;
+  settingsDoc.automation.lastProspectSummary = `${result.scanned} scannées · ${result.applied} envoyée(s)${result.proposed > 0 ? ` · ${result.proposed} proposée(s) sur Telegram` : ""}${result.wouldApply > 0 ? ` · ${result.wouldApply} dry-run` : ""} · ${result.skipped} skip · ${result.errors.length} erreur(s)${queryLabel}`;
   if (!opts.keywords && queries.length > 1) {
     settingsDoc.automation.weeklyProspectQueryIndex = (queryIdx + 1) % queries.length;
   }

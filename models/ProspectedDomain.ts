@@ -13,6 +13,8 @@ export type ProspectSkipReason =
   | "not_tech"
   | "no_email"
   | "send_failed"
+  // Cible refusée explicitement via le bouton « Ignorer » Telegram (prospection interactive).
+  | "user_ignored"
   | "other";
 
 export interface IProspectedDomain {
@@ -34,7 +36,7 @@ const prospectedDomainSchema = new Schema<IProspectedDomain>(
     nextEvaluateAt: { type: Date, required: true, index: true },
     skipReason: {
       type: String,
-      enum: ["scrape_empty", "low_score", "not_tech", "no_email", "send_failed", "other"],
+      enum: ["scrape_empty", "low_score", "not_tech", "no_email", "send_failed", "user_ignored", "other"],
       required: true,
     },
     skipDetail: { type: String, default: null },
@@ -54,6 +56,7 @@ const TTL_DAYS_BY_REASON: Record<ProspectSkipReason, number> = {
   send_failed: 7,
   low_score: 90,
   not_tech: 90,
+  user_ignored: 365,
   other: 30,
 };
 

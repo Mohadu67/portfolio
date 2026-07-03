@@ -119,6 +119,9 @@ Confirmation des actions : quand tu appelles un tool d'action (schedule_relance,
 
 Les tools de lecture (list_candidatures, get_candidature, list_relances_due, list_pending_approvals, resend_pending_approval, list_cv_sections, get_cv_section) s'exécutent immédiatement — utilise-les librement quand la question porte sur les données.
 
+RÈGLE ANTI-INVENTION (critique) : ne cite JAMAIS de noms d'entreprises, de postes, de chiffres ou de dates qui ne viennent pas d'un résultat de tool. Si la donnée demandée n'apparaît ni dans un résultat de tool du tour courant, ni dans une ligne « [résultat …] » de l'historique, appelle le tool — ne complète JAMAIS de mémoire. Inventer une liste est une faute grave.
+L'historique peut contenir des lignes « [résultat <tool>] {…} » : ce sont les vraies données de tes appels précédents (avec les _id). Réutilise-les pour les questions de suivi (« détail du 2e », « celle d'Orano »…).
+
 Si l'utilisateur demande « ce qui est en attente » de validation Telegram → list_pending_approvals, puis propose resend_pending_approval pour renvoyer les boutons d'une réponse précise.
 
 Quand l'utilisateur cite une candidature d'une liste que tu viens de donner (souvent en vocal, donc approximativement) : rappelle list_candidatures avec search = le nom de l'ENTREPRISE seul (le plus discriminant — jamais le titre complet poste+entreprise), récupère le _id, puis get_candidature. Si zéro résultat, retente avec un seul mot-clé du poste avant de dire que tu ne trouves pas.
@@ -268,6 +271,10 @@ export async function handleIncomingTelegramText(
 
   let finalText = "";
   const proposals: Array<Pick<ITelegramPendingAction, "token" | "tool" | "input" | "label">> = [];
+  // Digests des tools de lecture exécutés : persistés dans la mémoire de conversation pour
+  // que les tours suivants disposent des VRAIES données (noms, _id) — sans ça le modèle
+  // « se souvient » qu'une liste existe mais pas de son contenu, et invente.
+  const toolDigests: string[] = [];
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const result = await model.generateContent({ contents });
@@ -323,6 +330,9 @@ export async function handleIncomingTelegramText(
               response: r.body.error ? { error: r.body.error } : safeParseSummary(r.body.summary),
             },
           });
+          if (!r.body.error && r.body.summary) {
+            toolDigests.push(`[résultat ${fc.name}] ${r.body.summary.slice(0, 1000)}`);
+          }
         } catch (err) {
           responseParts.push({
             functionResponse: {
@@ -350,6 +360,8 @@ export async function handleIncomingTelegramText(
   state.conversation = [
     ...(state.conversation ?? []),
     { role: "user" as const, text, at: new Date() },
+    // Max 3 digests par tour pour ne pas noyer le dialogue dans la fenêtre glissante.
+    ...toolDigests.slice(-3).map((d) => ({ role: "model" as const, text: d, at: new Date() })),
     ...(finalText.trim() ? [{ role: "model" as const, text: finalText.trim(), at: new Date() }] : []),
   ].slice(-2 * CONVERSATION_WINDOW);
   await state.save();

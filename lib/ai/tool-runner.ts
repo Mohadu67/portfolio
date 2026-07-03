@@ -505,9 +505,11 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       const statut = String(input.statut) as CandidatureStatut;
       if (!STATUTS.includes(statut)) return fail(400, `Invalid status: ${statut}`);
       // Annule en même temps les relances programmée si on sort de "postulée" (atomique).
+      // Guard $exists : les vieux docs sans champ relanceHistory feraient planter l'update
+      // arrayFilters ("The path 'relanceHistory' must exist…") — rien à annuler chez eux.
       if (statut !== "postulée") {
         await Candidature.updateOne(
-          { _id: candidature_id, statut: "postulée" },
+          { _id: candidature_id, statut: "postulée", relanceHistory: { $exists: true } },
           {
             $set: {
               "relanceHistory.$[r].status": "annulée",

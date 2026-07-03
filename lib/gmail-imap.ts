@@ -312,11 +312,15 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
             // updateOne atomique (au lieu de candDoc.save()) pour ne pas écraser un autoReplies poussé
             // par un sync gmail concurrent entre le findOneAndUpdate ci-dessus et maintenant.
             const bumpStatut = candDoc.statut === "postulée";
+            if (bumpStatut) {
+              await Candidature.updateOne({ _id: candDoc._id }, { $set: { statut: "réponse reçue" } });
+            }
+            // Guard $exists : les vieux docs sans champ relanceHistory feraient planter
+            // l'update arrayFilters — et il n'y a alors rien à annuler.
             await Candidature.updateOne(
-              { _id: candDoc._id },
+              { _id: candDoc._id, relanceHistory: { $exists: true } },
               {
                 $set: {
-                  ...(bumpStatut ? { statut: "réponse reçue" } : {}),
                   "relanceHistory.$[r].status": "annulée",
                   "relanceHistory.$[r].error": "Réponse reçue de l'entreprise",
                 },

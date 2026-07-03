@@ -43,6 +43,9 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.gmail.autoReplyEnabled === "boolean") {
         s.gmail.autoReplyEnabled = body.gmail.autoReplyEnabled;
       }
+      if (typeof body.gmail.telegramApprovalEnabled === "boolean") {
+        s.gmail.telegramApprovalEnabled = body.gmail.telegramApprovalEnabled;
+      }
       if (typeof body.gmail.autoReplyMinConfidence === "number" && body.gmail.autoReplyMinConfidence >= 0 && body.gmail.autoReplyMinConfidence <= 1) {
         s.gmail.autoReplyMinConfidence = body.gmail.autoReplyMinConfidence;
       }

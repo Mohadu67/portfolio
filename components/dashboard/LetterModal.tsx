@@ -357,9 +357,13 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
   const a = event.payload as IAutoReply;
   const sentBadge = a.sent
     ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-400">✓ envoyée</span>
-    : a.error
-      ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400">✗ échec</span>
-      : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--bg-secondary)] text-[var(--text-tertiary)]">skip (confiance)</span>;
+    : a.approvalStatus === "pending"
+      ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/15 text-sky-400">⏳ attente Telegram</span>
+      : a.approvalStatus === "rejected"
+        ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400">✗ rejetée</span>
+        : a.error
+          ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400">✗ échec</span>
+          : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--bg-secondary)] text-[var(--text-tertiary)]">skip (confiance)</span>;
 
   return (
     <div className="rounded-lg border border-[var(--accent-orange)]/30 bg-[var(--accent-orange)]/5 p-3">

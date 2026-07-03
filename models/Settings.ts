@@ -12,6 +12,10 @@ export interface ISettings {
     autoArchiveResponses: boolean;
     autoReplyEnabled: boolean;
     autoReplyMinConfidence: number;
+    // Validation humaine avant envoi : chaque réponse préparée par l'IA part sur Telegram
+    // (boutons ✅/❌) au lieu d'être envoyée directement. Ne s'active que si TELEGRAM_BOT_TOKEN
+    // + TELEGRAM_CHAT_ID sont configurés — sinon fallback envoi direct.
+    telegramApprovalEnabled: boolean;
     lastSyncAt?: Date | null;
     lastSyncSummary?: string | null;
   };
@@ -75,6 +79,7 @@ const settingsSchema = new Schema<ISettings>(
       autoArchiveResponses: { type: Boolean, default: false },
       autoReplyEnabled: { type: Boolean, default: false },
       autoReplyMinConfidence: { type: Number, default: 0.7 },
+      telegramApprovalEnabled: { type: Boolean, default: true },
       lastSyncAt: { type: Date, default: null },
       lastSyncSummary: { type: String, default: null },
     },

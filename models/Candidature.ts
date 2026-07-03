@@ -77,6 +77,10 @@ export type AutoReplyCategory =
   | "autre"
   | "uncategorized";
 
+// Validation humaine via Telegram : "auto" = envoi direct sans validation (mode historique),
+// "pending" = message Telegram envoyé, en attente de décision, "approved"/"rejected" = décision prise.
+export type AutoReplyApprovalStatus = "auto" | "pending" | "approved" | "rejected";
+
 export interface IAutoReply {
   date: Date;
   inboundMessageId?: string;
@@ -88,6 +92,11 @@ export interface IAutoReply {
   error?: string | null;
   model: string;
   dryRun?: boolean;
+  approvalStatus?: AutoReplyApprovalStatus;
+  // Token opaque porté par les boutons Telegram (callback_data) pour retrouver cette entrée.
+  approvalToken?: string | null;
+  telegramMessageId?: number | null;
+  approvalDecidedAt?: Date | null;
 }
 
 export interface ICandidature {
@@ -193,6 +202,10 @@ const autoReplySchema = new Schema<IAutoReply>(
     error: { type: String, default: null },
     model: { type: String, required: true },
     dryRun: { type: Boolean, default: false },
+    approvalStatus: { type: String, enum: ["auto", "pending", "approved", "rejected"], default: "auto" },
+    approvalToken: { type: String, default: null },
+    telegramMessageId: { type: Number, default: null },
+    approvalDecidedAt: { type: Date, default: null },
   },
   { _id: false }
 );
@@ -246,5 +259,6 @@ candidatureSchema.index({ entreprise: 1 });
 candidatureSchema.index({ email: 1 });
 candidatureSchema.index({ "relanceHistory.scheduledFor": 1, "relanceHistory.status": 1 });
 candidatureSchema.index({ "emailsReceived.messageId": 1 });
+candidatureSchema.index({ "autoReplies.approvalToken": 1 });
 
 export const Candidature = models.Candidature || model<ICandidature>("Candidature", candidatureSchema);

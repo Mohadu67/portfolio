@@ -1,0 +1,154 @@
+// Client Bot API Telegram pour la validation humaine des réponses auto (human-in-the-loop).
+// Config par env : TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (+ TELEGRAM_WEBHOOK_SECRET côté webhook).
+// Sans ces vars, isTelegramConfigured() = false et le sync retombe sur l'envoi direct historique.
+// Setup complet : docs/TELEGRAM-APPROVAL.md
+
+import { withRetry } from "./retry";
+
+const API_BASE = "https://api.telegram.org";
+
+// Telegram limite un message à 4096 chars. On borne extrait + réponse pour garder de la marge
+// pour l'en-tête et ne jamais dépasser.
+const MAX_EXCERPT_CHARS = 600;
+const MAX_REPLY_CHARS = 2500;
+
+export function isTelegramConfigured(): boolean {
+  return !!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID;
+}
+
+interface TelegramApiResponse<T> {
+  ok: boolean;
+  result?: T;
+  description?: string;
+}
+
+async function tgCall<T>(method: string, payload: Record<string, unknown>): Promise<T> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN manquant");
+  return withRetry(
+    async () => {
+      const res = await fetch(`${API_BASE}/bot${token}/${method}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as TelegramApiResponse<T>;
+      if (!data.ok) throw new Error(`Telegram ${method} failed: ${data.description ?? res.status}`);
+      return data.result as T;
+    },
+    {
+      retries: 2,
+      baseDelayMs: 1000,
+      // Les 4xx Telegram (bad request, message trop vieux…) ne se résolvent pas en réessayant.
+      shouldRetry: (err) => !(err instanceof Error && /failed: (400|401|403)/.test(err.message)),
+    }
+  );
+}
+
+export function escapeTelegramHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function truncate(s: string, max: number): string {
+  const clean = s.trim();
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+export interface ApprovalRequestInput {
+  approvalToken: string;
+  entreprise: string;
+  poste: string;
+  from: string;
+  fromName?: string;
+  subject: string;
+  inboundExcerpt: string;
+  category: string;
+  confidence: number;
+  minConfidence: number;
+  reply: string;
+}
+
+// Corps du message d'approbation (HTML Telegram). Exporté pur pour être testable.
+export function buildApprovalMessage(input: ApprovalRequestInput): string {
+  const pct = Math.round(input.confidence * 100);
+  const lowConfidence = input.confidence < input.minConfidence;
+  const sender = input.fromName ? `${input.fromName} — ${input.from}` : input.from;
+  const lines = [
+    `📬 <b>Réponse reçue — ${escapeTelegramHtml(input.entreprise)}</b>`,
+    `<i>${escapeTelegramHtml(input.poste)}</i>`,
+    ``,
+    `<b>De :</b> ${escapeTelegramHtml(sender)}`,
+    `<b>Sujet :</b> ${escapeTelegramHtml(input.subject)}`,
+    `<b>Catégorie :</b> ${escapeTelegramHtml(input.category)} (confiance ${pct}%${lowConfidence ? " ⚠️ sous le seuil" : ""})`,
+    ``,
+    `<b>📥 Leur message :</b>`,
+    `<blockquote>${escapeTelegramHtml(truncate(input.inboundExcerpt, MAX_EXCERPT_CHARS))}</blockquote>`,
+    ``,
+    `<b>🤖 Réponse préparée :</b>`,
+    `<blockquote>${escapeTelegramHtml(truncate(input.reply, MAX_REPLY_CHARS))}</blockquote>`,
+    ``,
+    `J'envoie ?`,
+  ];
+  return lines.join("\n");
+}
+
+// Envoie la demande d'approbation avec boutons inline. Retourne le message_id Telegram
+// (permet d'éditer le message après décision).
+export async function sendAutoReplyApprovalRequest(input: ApprovalRequestInput): Promise<number> {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) throw new Error("TELEGRAM_CHAT_ID manquant");
+  const msg = await tgCall<{ message_id: number }>("sendMessage", {
+    chat_id: chatId,
+    text: buildApprovalMessage(input),
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "✅ Envoyer", callback_data: `ar:ok:${input.approvalToken}` },
+          { text: "❌ Rejeter", callback_data: `ar:no:${input.approvalToken}` },
+        ],
+      ],
+    },
+  });
+  return msg.message_id;
+}
+
+export interface ParsedApprovalCallback {
+  action: "approve" | "reject";
+  token: string;
+}
+
+// callback_data des boutons : "ar:ok:<token>" / "ar:no:<token>" (max 64 bytes côté Telegram).
+export function parseApprovalCallback(data: string): ParsedApprovalCallback | null {
+  const m = data.match(/^ar:(ok|no):([a-f0-9]{8,64})$/);
+  if (!m) return null;
+  return { action: m[1] === "ok" ? "approve" : "reject", token: m[2] };
+}
+
+// Accusé du tap sur un bouton (fait disparaître le spinner côté client Telegram).
+export async function answerCallbackQuery(callbackQueryId: string, text?: string, showAlert = false): Promise<void> {
+  await tgCall("answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    ...(text ? { text: text.slice(0, 200), show_alert: showAlert } : {}),
+  });
+}
+
+// Édite le message d'approbation après décision (texte brut, boutons retirés car
+// reply_markup omis). currentText = texte rendu du message d'origine (cb.message.text).
+export async function appendDecisionToMessage(messageId: number, currentText: string, decisionLine: string): Promise<void> {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) throw new Error("TELEGRAM_CHAT_ID manquant");
+  const base = truncate(currentText, 4096 - decisionLine.length - 8);
+  await tgCall("editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text: `${base}\n\n${decisionLine}`,
+  });
+}
+
+// Notification simple (sans boutons) — utilitaire générique.
+export async function sendTelegramMessage(text: string): Promise<void> {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) throw new Error("TELEGRAM_CHAT_ID manquant");
+  await tgCall("sendMessage", { chat_id: chatId, text: text.slice(0, 4096) });
+}

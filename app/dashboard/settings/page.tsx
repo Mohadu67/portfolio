@@ -42,6 +42,7 @@ interface AppSettings {
     autoArchiveResponses: boolean;
     autoReplyEnabled: boolean;
     autoReplyMinConfidence: number;
+    telegramApprovalEnabled: boolean;
     lastSyncAt?: string | null;
     lastSyncSummary?: string | null;
   };
@@ -195,7 +196,7 @@ export default function SettingsPage() {
     });
   };
 
-  const toggleGmail = (key: "inboxSyncEnabled" | "autoArchiveResponses" | "autoReplyEnabled") => {
+  const toggleGmail = (key: "inboxSyncEnabled" | "autoArchiveResponses" | "autoReplyEnabled" | "telegramApprovalEnabled") => {
     if (!settings) return;
     updateSettings({ gmail: { ...settings.gmail, [key]: !settings.gmail[key] } });
   };
@@ -429,6 +430,12 @@ export default function SettingsPage() {
             description="Gemini classifie chaque réponse reçue et envoie automatiquement un message dans le thread. ⚠️ Action irréversible."
             checked={settings.gmail.autoReplyEnabled}
             onChange={() => toggleGmail("autoReplyEnabled")}
+          />
+          <Toggle
+            label="Validation Telegram avant envoi"
+            description="Chaque réponse préparée par l'IA t'est envoyée sur Telegram (boutons ✅/❌) — rien ne part sans ton accord. Nécessite TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID côté serveur."
+            checked={settings.gmail.telegramApprovalEnabled}
+            onChange={() => toggleGmail("telegramApprovalEnabled")}
           />
           <div className="p-4 flex items-center justify-between gap-4">
             <div>

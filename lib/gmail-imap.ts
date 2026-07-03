@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { connectDB } from "./mongodb";
@@ -7,6 +8,7 @@ import { CVSection } from "@/models/CVSection";
 import { sendNotification } from "./notifications";
 import { classifyAndReply } from "./gemini";
 import { replyInThread } from "./email";
+import { isTelegramConfigured, sendAutoReplyApprovalRequest } from "./telegram";
 import {
   buildCandidatureEmailIndex,
   findCandidatureForSender,
@@ -41,6 +43,7 @@ interface SyncResult {
   archived: number;
   autoReplied: number;
   autoReplySkipped: number;
+  autoReplyPending: number;
   errors: string[];
   matchedDetails: Array<{
     candidatureId: string;
@@ -51,6 +54,7 @@ interface SyncResult {
       category: string;
       confidence: number;
       sent: boolean;
+      pendingApproval?: boolean;
       error?: string;
     };
   }>;
@@ -64,6 +68,7 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
     archived: 0,
     autoReplied: 0,
     autoReplySkipped: 0,
+    autoReplyPending: 0,
     errors: [],
     matchedDetails: [],
   };
@@ -82,6 +87,9 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
   const autoReplyMinConfidence = typeof settingsDoc.gmail.autoReplyMinConfidence === "number"
     ? settingsDoc.gmail.autoReplyMinConfidence
     : 0.7;
+  // Human-in-the-loop : si Telegram est configuré (env) + activé (settings), AUCUNE réponse
+  // ne part directement — tout passe par une demande d'approbation Telegram (boutons ✅/❌).
+  const telegramApproval = settingsDoc.gmail.telegramApprovalEnabled !== false && isTelegramConfigured();
   const profileAvailability = settingsDoc.profile?.availability ?? "";
   // Calendly url is read from the CVSection "contact" — single source of truth (no duplicate).
   let profileCalendlyUrl = "";
@@ -332,8 +340,76 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
               const shouldSend = cls.confidence >= autoReplyMinConfidence;
               let sentMessageId: string | undefined;
               let sendError: string | undefined;
+              let pendingApproval = false;
 
-              if (shouldSend && !opts.dryRun) {
+              if (telegramApproval && !opts.dryRun) {
+                // ---------- Validation Telegram avant envoi ----------
+                // TOUTES les réponses préparées passent par l'approbation (même sous le seuil de
+                // confiance : c'est l'humain qui tranche, le score est affiché à titre indicatif).
+                // Claim atomique identique au chemin direct : on push l'entrée "pending" seulement
+                // si aucune autoReply n'existe pour cet inboundMessageId.
+                const approvalToken = randomBytes(12).toString("hex");
+                const claim = await Candidature.updateOne(
+                  {
+                    _id: candDoc._id,
+                    "autoReplies.inboundMessageId": { $ne: matched.messageId },
+                  },
+                  {
+                    $push: {
+                      autoReplies: {
+                        date: new Date(),
+                        inboundMessageId: matched.messageId,
+                        category: cls.category,
+                        confidence: cls.confidence,
+                        reply: cls.reply,
+                        sent: false,
+                        sentMessageId: undefined,
+                        error: null,
+                        model: cls.model,
+                        dryRun: false,
+                        approvalStatus: "pending",
+                        approvalToken,
+                      },
+                    },
+                  }
+                );
+                if (claim.modifiedCount !== 1) {
+                  // Une autre exécution a déjà claim cet inbound, skip pour éviter le doublon Telegram.
+                  continue;
+                }
+
+                try {
+                  const telegramMessageId = await sendAutoReplyApprovalRequest({
+                    approvalToken,
+                    entreprise: candDoc.entreprise,
+                    poste: candDoc.poste,
+                    from: matched.from,
+                    fromName: matched.fromName,
+                    subject: matched.subject,
+                    inboundExcerpt: matched.snippet || matched.bodyText,
+                    category: cls.category,
+                    confidence: cls.confidence,
+                    minConfidence: autoReplyMinConfidence,
+                    reply: cls.reply,
+                  });
+                  await Candidature.updateOne(
+                    { _id: candDoc._id, "autoReplies.approvalToken": approvalToken },
+                    { $set: { "autoReplies.$.telegramMessageId": telegramMessageId } }
+                  );
+                  result.autoReplyPending++;
+                  pendingApproval = true;
+                } catch (tgErr) {
+                  // Message Telegram jamais parti → personne ne pourra approuver. On retire l'entrée
+                  // pending (aucun envoi n'a eu lieu, le claim était à nous) pour que le prochain
+                  // sync retente la demande d'approbation.
+                  await Candidature.updateOne(
+                    { _id: candDoc._id },
+                    { $pull: { autoReplies: { approvalToken } } }
+                  );
+                  sendError = tgErr instanceof Error ? tgErr.message : String(tgErr);
+                  result.errors.push(`Telegram approval request failed for ${candDoc.entreprise}: ${sendError}`);
+                }
+              } else if (shouldSend && !opts.dryRun) {
                 // Idempotence atomique sur le push d'autoReply : on push UNIQUEMENT si aucune autoReply
                 // n'existe encore pour cet inboundMessageId. modifiedCount === 1 → on est propriétaire de l'envoi.
                 if (matched.messageId) {
@@ -424,6 +500,7 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
                 category: cls.category,
                 confidence: cls.confidence,
                 sent: !!sentMessageId,
+                pendingApproval: pendingApproval || undefined,
                 error: sendError,
               };
             } catch (classifyErr) {
@@ -487,7 +564,7 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
   // Update settings with last sync info
   if (!opts.dryRun) {
     settingsDoc.gmail.lastSyncAt = new Date();
-    settingsDoc.gmail.lastSyncSummary = `${result.matched} match${result.matched > 1 ? "s" : ""} sur ${result.scanned} non lus${result.archived > 0 ? `, ${result.archived} archivé(s)` : ""}${result.autoReplied > 0 ? `, ${result.autoReplied} auto-réponse(s)` : ""}${result.autoReplySkipped > 0 ? `, ${result.autoReplySkipped} skip (confiance)` : ""}${result.errors.length ? `, ${result.errors.length} erreur(s)` : ""}`;
+    settingsDoc.gmail.lastSyncSummary = `${result.matched} match${result.matched > 1 ? "s" : ""} sur ${result.scanned} non lus${result.archived > 0 ? `, ${result.archived} archivé(s)` : ""}${result.autoReplied > 0 ? `, ${result.autoReplied} auto-réponse(s)` : ""}${result.autoReplyPending > 0 ? `, ${result.autoReplyPending} en attente Telegram` : ""}${result.autoReplySkipped > 0 ? `, ${result.autoReplySkipped} skip (confiance)` : ""}${result.errors.length ? `, ${result.errors.length} erreur(s)` : ""}`;
     await settingsDoc.save();
   }
 

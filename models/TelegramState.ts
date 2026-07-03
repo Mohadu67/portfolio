@@ -23,12 +23,24 @@ export interface ITelegramMessage {
   at: Date;
 }
 
+// Rappel one-shot programmé par l'agent (« rappelle-moi de préparer l'entretien lundi »).
+// Livré par le cron telegram-pulse (toutes les 30 min).
+export interface ITelegramReminder {
+  message: string;
+  dueAt: Date;
+  sent: boolean;
+  createdAt: Date;
+}
+
 export interface ITelegramState {
   _id?: string;
   chatId: string;
   conversation: ITelegramMessage[];
   pendingActions: ITelegramPendingAction[];
   processedUpdateIds: number[];
+  reminders: ITelegramReminder[];
+  // Date (YYYY-MM-DD, Europe/Paris) du dernier briefing quotidien envoyé — dédup du cron.
+  lastBriefingDate?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -55,12 +67,24 @@ const messageSchema = new Schema<ITelegramMessage>(
   { _id: false }
 );
 
+const reminderSchema = new Schema<ITelegramReminder>(
+  {
+    message: { type: String, required: true },
+    dueAt: { type: Date, required: true },
+    sent: { type: Boolean, default: false },
+    createdAt: { type: Date, default: () => new Date() },
+  },
+  { _id: false }
+);
+
 const telegramStateSchema = new Schema<ITelegramState>(
   {
     chatId: { type: String, required: true, unique: true },
     conversation: { type: [messageSchema], default: [] },
     pendingActions: { type: [pendingActionSchema], default: [] },
     processedUpdateIds: { type: [Number], default: [] },
+    reminders: { type: [reminderSchema], default: [] },
+    lastBriefingDate: { type: String, default: null },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } }
 );

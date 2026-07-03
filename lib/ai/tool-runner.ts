@@ -13,6 +13,7 @@ import { resolveCompanyWebsite } from "@/lib/serpapi-resolve";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage } from "@/lib/web-scraper";
 import { scoreCompanyFit } from "@/lib/gemini";
 import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, AgentMemoryCategory } from "@/models/AgentMemory";
+import { getTelegramState } from "@/models/TelegramState";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -201,6 +202,26 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       }
       items.sort((a, b) => String(a.scheduledFor).localeCompare(String(b.scheduledFor)));
       return ok({ ok: true, summary: JSON.stringify({ count: items.length, items }) });
+    }
+
+    case "schedule_telegram_reminder": {
+      const when = new Date(String(input.when ?? ""));
+      const message = String(input.message ?? "").trim();
+      if (Number.isNaN(when.getTime())) return fail(400, "Date invalide (ISO 8601 attendu)");
+      if (when.getTime() < Date.now() - 60_000) return fail(400, "La date du rappel est déjà passée");
+      if (!message) return fail(400, "message requis");
+      const chatId = process.env.TELEGRAM_CHAT_ID;
+      if (!chatId) return fail(500, "TELEGRAM_CHAT_ID non configuré");
+      const state = await getTelegramState(chatId);
+      state.reminders = [
+        ...(state.reminders ?? []).filter((r: { sent: boolean }) => !r.sent).slice(-30),
+        { message, dueAt: when, sent: false, createdAt: new Date() },
+      ];
+      await state.save();
+      return ok({
+        ok: true,
+        summary: `Rappel programmé pour le ${when.toLocaleString("fr-FR", { timeZone: "Europe/Paris" })} : « ${message.slice(0, 120)} »`,
+      });
     }
 
     case "remember_fact": {

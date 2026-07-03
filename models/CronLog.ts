@@ -6,7 +6,8 @@ export type CronJobName =
   | "run-saved-queries"
   | "weekly-prospect"
   | "run-offer-search"
-  | "process-pending";
+  | "process-pending"
+  | "telegram-pulse";
 
 export type CronStatus = "success" | "failed" | "skipped";
 
@@ -34,6 +35,7 @@ const cronLogSchema = new Schema<ICronLog>(
         "weekly-prospect",
         "run-offer-search",
         "process-pending",
+        "telegram-pulse",
       ],
       required: true,
       index: true,

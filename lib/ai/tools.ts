@@ -66,6 +66,20 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "schedule_telegram_reminder",
+    description:
+      "Programme un rappel Telegram one-shot (message envoyé à l'heure dite, à ±30 min près). Pour « rappelle-moi de préparer l'entretien lundi », le suivi d'un événement, une échéance. Ce n'est PAS une relance email (pour ça : schedule_relance).",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        when: { type: "string", description: "Date/heure ISO 8601 du rappel (ex: 2026-07-06T18:00:00+02:00)" },
+        message: { type: "string", description: "Texte du rappel (contextualisé : entreprise, quoi préparer…)" },
+      },
+      required: ["when", "message"],
+    },
+  },
+  {
     name: "remember_fact",
     description:
       "Mémorise durablement un fait sur l'utilisateur (identité, parcours, école, personnalité, préférences, objectifs). À appeler PROACTIVEMENT dès que l'utilisateur révèle une info personnelle durable (« je rentre à l'école X », « je préfère les petites boîtes », « j'ai eu mon titre CDA »). Ne pas mémoriser l'éphémère (humeur du jour, question ponctuelle). Le fait doit être une phrase autonome et factuelle.",

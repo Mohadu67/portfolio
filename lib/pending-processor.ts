@@ -12,6 +12,7 @@
 // — si null retourné, un autre worker est passé, skip.
 
 import { connectDB } from "./mongodb";
+import { TelegramState, ITelegramPendingAction } from "@/models/TelegramState";
 import { Candidature } from "@/models/Candidature";
 import { getSettingsDoc } from "@/models/Settings";
 import { scrapeCompanyWebsite } from "./web-scraper";
@@ -108,6 +109,24 @@ export async function runProcessPending(opts: RunProcessPendingOptions = {}): Pr
   const filter: Record<string, unknown> = { statut: "identifiée" };
   if (opts.ids && opts.ids.length > 0) {
     filter._id = { $in: opts.ids };
+  } else {
+    // Exclut les cibles de la prospection interactive en attente de décision Telegram
+    // (boutons Candidater/Ignorer) : sans ça, le cron quotidien les enverrait tout seul
+    // et contournerait le gate humain. Une fois décidées, elles sortent de l'exclusion
+    // (✅ → traitées par ids explicites, ❌ → supprimées).
+    try {
+      const states = await TelegramState.find(
+        { pendingActions: { $elemMatch: { origin: "prospection", status: "pending" } } },
+        { pendingActions: 1 }
+      ).lean<Array<{ pendingActions?: ITelegramPendingAction[] }>>();
+      const excluded = states
+        .flatMap((s) => s.pendingActions ?? [])
+        .filter((a) => a.origin === "prospection" && a.status === "pending" && a.candidatureId)
+        .map((a) => String(a.candidatureId));
+      if (excluded.length > 0) filter._id = { $nin: excluded };
+    } catch {
+      /* best effort — en cas d'échec on préfère traiter (comportement historique) */
+    }
   }
   const docs = await Candidature.find(filter, { _id: 1 }).lean<{ _id: unknown }[]>();
   const candidateIds = docs.map((d) => String(d._id));

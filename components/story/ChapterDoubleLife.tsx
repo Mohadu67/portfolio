@@ -98,8 +98,9 @@ export function ChapterDoubleLife({ story }: Props) {
             <span>stackoverflow</span>
           </div>
 
-          {/* Faux code en background */}
-          <pre className="pointer-events-none absolute right-0 bottom-0 select-none p-8 font-[var(--font-jetbrains)] text-[10px] leading-relaxed text-white/[0.04] md:text-xs">
+          {/* Faux code en background — masqué sur mobile : lisible sur écrans OLED malgré
+              l'opacité, et il chevauche le contenu de la section. */}
+          <pre className="pointer-events-none absolute right-0 bottom-0 hidden select-none p-8 font-[var(--font-jetbrains)] leading-relaxed text-white/[0.04] md:block md:text-xs">
 {`function dreamBig() {
   while (night) {
     learn();

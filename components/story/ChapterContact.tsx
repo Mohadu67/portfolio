@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -269,15 +269,25 @@ export function ChapterContact({ profile, contact, socials, story }: Props) {
         className="mt-24 font-[var(--font-fraunces)] text-[clamp(2.5rem,11vw,11rem)] font-extralight leading-[0.95] tracking-tight text-white/90"
         style={{ perspective: "1000px" }}
       >
-        {profile.name.split("").map((char, i) => (
-          <span
-            key={i}
-            data-final-letter
-            className="inline-block"
-            style={{ transformStyle: "preserve-3d" }}
-          >
-            {char === " " ? " " : char}
-          </span>
+        {/* Chaque lettre est un inline-block (animation 3D) → sans regroupement par mot,
+            le navigateur peut couper au milieu d'un mot sur mobile (le « I » final passait
+            à la ligne). whitespace-nowrap par mot = coupures uniquement entre les mots. */}
+        {profile.name.split(" ").map((word, wi, words) => (
+          <Fragment key={wi}>
+            <span className="inline-block whitespace-nowrap">
+              {word.split("").map((char, i) => (
+                <span
+                  key={i}
+                  data-final-letter
+                  className="inline-block"
+                  style={{ transformStyle: "preserve-3d" }}
+                >
+                  {char}
+                </span>
+              ))}
+            </span>
+            {wi < words.length - 1 ? " " : null}
+          </Fragment>
         ))}
       </h3>
 

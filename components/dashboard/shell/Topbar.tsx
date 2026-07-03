@@ -18,8 +18,10 @@ const TITLES: Record<string, string> = {
 
 function deriveTitle(pathname: string): string {
   if (TITLES[pathname]) return TITLES[pathname];
-  // /dashboard/candidatures/[id] etc.
-  for (const [prefix, label] of Object.entries(TITLES)) {
+  // /dashboard/candidatures/[id] etc. — préfixe le plus long d'abord, sinon
+  // "/dashboard" gagne toujours et les sous-pages affichent "War Room".
+  const entries = Object.entries(TITLES).sort((a, b) => b[0].length - a[0].length);
+  for (const [prefix, label] of entries) {
     if (pathname.startsWith(prefix + "/")) return label;
   }
   return "Dashboard";

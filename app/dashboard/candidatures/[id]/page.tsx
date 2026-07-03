@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { useApiKey } from "@/lib/contexts/AuthContext";
 import { RelanceComposer } from "@/components/dashboard/relances/RelanceComposer";
+import { ExchangeTimeline } from "@/components/dashboard/candidatures/ExchangeTimeline";
 import type { ICandidature, CandidatureStatut, RelanceStatus, IRelanceLog } from "@/models/Candidature";
 
 const STATUS_LABELS: Record<CandidatureStatut, string> = {
@@ -245,8 +246,13 @@ export default function CandidatureDetailPage({ params }: Params) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column: lettres + emails */}
+        {/* Left column: échanges + lettres + emails */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Échanges : envois, réponses RH, auto-réponses IA (validation Telegram incluse) */}
+          <section className="rounded-2xl border border-[var(--border-soft)] bg-[var(--bg-card)] p-5">
+            <ExchangeTimeline candidature={candidature} letter={candidature.lettre ?? ""} />
+          </section>
+
           {/* Lettre actuelle */}
           {candidature.lettre && (
             <section className="rounded-2xl border border-[var(--border-soft)] bg-[var(--bg-card)] p-5">

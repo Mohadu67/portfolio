@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion, MotionConfig, type Variants } from "framer-motion";
-import { Inbox, Search, SearchX, X } from "lucide-react";
+import { AlertTriangle, Inbox, RefreshCw, Search, SearchX, X } from "lucide-react";
 import { useApiKey } from "@/lib/contexts/AuthContext";
 import { useDashboardData } from "@/lib/hooks/useDashboardData";
 import { PipelineFilters } from "@/components/dashboard/candidatures/PipelineFilters";
@@ -54,8 +54,13 @@ export default function CandidaturesPage() {
   const [selected, setSelected] = useState<ICandidature | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
 
-  useEffect(() => {
+  const reload = () => {
+    setLoading(true);
     data.load().finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -68,6 +73,24 @@ export default function CandidaturesPage() {
     setSelected(c);
     setModal(kind);
   };
+
+  // Version fraîche de la candidature sélectionnée : après un load() déclenché par une
+  // mutation dans un modal, l'objet capturé au clic est périmé (timeline vide juste après
+  // envoi, etc.) — on repasse toujours la version courante du store aux modals.
+  const current = useMemo(
+    () =>
+      selected
+        ? data.candidatures.find((c) => String(c._id) === String(selected._id)) ?? selected
+        : null,
+    [selected, data.candidatures]
+  );
+
+  // Identité stable : RelanceComposer reset ses champs sur changement de `mode` — un objet
+  // inline recréé à chaque render effacerait le brouillon en cours de frappe.
+  const composerMode = useMemo(
+    () => (current ? { kind: "create" as const, candidature: current } : null),
+    [current]
+  );
 
   const visible = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -104,7 +127,7 @@ export default function CandidaturesPage() {
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--accent-orange)]">
-              Pipeline · {data.total} candidature{data.total > 1 ? "s" : ""}
+              Pipeline{!loading && ` · ${data.total} candidature${data.total > 1 ? "s" : ""}`}
             </p>
             <h1 className="text-3xl font-bold text-[var(--text-primary)]">Mes candidatures</h1>
           </div>
@@ -172,7 +195,7 @@ export default function CandidaturesPage() {
 
         {/* Liste groupée par étape */}
         {loading ? (
-          <div className="space-y-2" aria-hidden>
+          <div className="space-y-2" role="status" aria-label="Chargement des candidatures">
             {Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={i}
@@ -180,6 +203,20 @@ export default function CandidaturesPage() {
               />
             ))}
           </div>
+        ) : data.loadError && data.candidatures.length === 0 ? (
+          <EmptyState
+            icon={AlertTriangle}
+            title="Impossible de charger le pipeline"
+            description={`Le chargement a échoué (${data.loadError}). Vérifie la connexion au serveur puis réessaie.`}
+            action={
+              <button
+                onClick={reload}
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:border-[var(--accent-orange)]"
+              >
+                <RefreshCw size={14} /> Réessayer
+              </button>
+            }
+          />
         ) : data.candidatures.length === 0 ? (
           <EmptyState
             icon={Inbox}
@@ -244,10 +281,10 @@ export default function CandidaturesPage() {
           </div>
         )}
 
-        {selected && (
+        {current && (
           <>
             <GenerateLetterModal
-              candidature={selected}
+              candidature={current}
               isOpen={modal === "generate"}
               onClose={closeModal}
               apiKey={apiKey}
@@ -256,13 +293,13 @@ export default function CandidaturesPage() {
             />
             <RelanceComposer
               open={modal === "followup"}
-              mode={{ kind: "create", candidature: selected }}
+              mode={composerMode}
               apiKey={apiKey}
               onClose={closeModal}
               onSaved={data.load}
             />
             <LetterModal
-              candidature={selected}
+              candidature={current}
               isOpen={modal === "letter"}
               onClose={closeModal}
               apiKey={apiKey}

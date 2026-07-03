@@ -18,7 +18,7 @@ export function PipelineFilters({ stats, total, active, onChange }: PipelineFilt
       <button
         onClick={() => onChange(null)}
         aria-pressed={active === null}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
           active === null
             ? "border-[var(--accent-orange)] text-[var(--accent-orange)] bg-[var(--accent-orange)]/10"
             : "border-[var(--border-soft)] text-[var(--text-secondary)] hover:border-[var(--border-focus)] hover:text-[var(--text-primary)]"
@@ -36,7 +36,7 @@ export function PipelineFilters({ stats, total, active, onChange }: PipelineFilt
             key={status}
             onClick={() => onChange(isActive ? null : status)}
             aria-pressed={isActive}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
               isActive
                 ? STATUS_CHIP_ACTIVE[status]
                 : `border-[var(--border-soft)] hover:border-[var(--border-focus)] ${

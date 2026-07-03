@@ -15,11 +15,16 @@ interface CandidatureRowProps {
   onDelete: (id: string) => Promise<void>;
 }
 
+function startOfDay(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
 function relativeDay(value: Date | string | undefined): string {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  // Jours calendaires locaux (pas des fenêtres de 24 h) : hier 23 h → « hier » dès minuit.
+  const days = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86_400_000);
   if (days <= 0) return "auj.";
   if (days === 1) return "hier";
   if (days < 30) return `${days} j`;
@@ -53,6 +58,7 @@ export function CandidatureRow({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const relance = nextRelanceDate(c);
+  const relanceOverdue = relance !== null && relance.getTime() < startOfDay(new Date());
   const pendingApproval = (c.autoReplies ?? []).some((a) => a.approvalStatus === "pending");
 
   const handleDelete = async () => {
@@ -82,6 +88,7 @@ export function CandidatureRow({
       <div className="min-w-0 flex-1">
         <Link
           href={`/dashboard/candidatures/${c._id}`}
+          aria-label={`${c.poste} — ${c.entreprise}`}
           className="focus:outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-[var(--border-focus)]"
         >
           <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{c.poste}</p>
@@ -89,20 +96,40 @@ export function CandidatureRow({
         <p className="mt-0.5 truncate text-xs text-[var(--text-tertiary)]">{meta}</p>
       </div>
 
-      {/* Signaux (masqués sur mobile pour garder la ligne lisible) */}
-      <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+      {/* Signaux — badges complets dès sm, icônes seules sur mobile */}
+      <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
         {pendingApproval && (
           <span className="inline-flex items-center gap-1 rounded-md bg-sky-500/10 px-2 py-1 text-[11px] font-medium text-sky-400">
             <Hourglass size={11} /> Validation Telegram
           </span>
         )}
         {relance && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-[var(--accent-warning)]/10 px-2 py-1 text-[11px] font-medium text-[var(--accent-warning)]">
+          <span
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium ${
+              relanceOverdue
+                ? "bg-[var(--accent-danger)]/10 text-[var(--accent-danger)]"
+                : "bg-[var(--accent-warning)]/10 text-[var(--accent-warning)]"
+            }`}
+          >
             <Clock size={11} />
-            Relance {relance.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+            {relanceOverdue
+              ? "Relance en retard"
+              : `Relance ${relance.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`}
           </span>
         )}
       </div>
+      {(pendingApproval || relance) && (
+        <div className="flex sm:hidden items-center gap-1.5 flex-shrink-0">
+          {pendingApproval && <Hourglass size={13} className="text-sky-400" aria-label="Validation Telegram en attente" />}
+          {relance && (
+            <Clock
+              size={13}
+              className={relanceOverdue ? "text-[var(--accent-danger)]" : "text-[var(--accent-warning)]"}
+              aria-label={relanceOverdue ? "Relance en retard" : "Relance programmée"}
+            />
+          )}
+        </div>
+      )}
 
       <span className="hidden sm:block w-12 flex-shrink-0 text-right text-xs tabular-nums text-[var(--text-tertiary)]">
         {relativeDay(c.updated_at)}
@@ -113,7 +140,7 @@ export function CandidatureRow({
         {c.statut === "identifiée" && (
           <button
             onClick={() => onGenerateLetter(c)}
-            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--accent-blue)]/15 px-2.5 text-xs font-medium text-[var(--accent-blue)] transition-colors hover:bg-[var(--accent-blue)]/25"
+            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--accent-blue)]/15 px-2.5 text-xs font-medium text-[var(--accent-blue)] transition-colors hover:bg-[var(--accent-blue)]/25"
           >
             <FileText size={13} /> Lettre
           </button>
@@ -121,7 +148,7 @@ export function CandidatureRow({
         {c.statut === "lettre générée" && (
           <button
             onClick={() => onOpenLetter(c)}
-            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--accent-success)]/15 px-2.5 text-xs font-medium text-[var(--accent-success)] transition-colors hover:bg-[var(--accent-success)]/25"
+            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--accent-success)]/15 px-2.5 text-xs font-medium text-[var(--accent-success)] transition-colors hover:bg-[var(--accent-success)]/25"
           >
             <Send size={13} /> Envoyer
           </button>
@@ -129,7 +156,7 @@ export function CandidatureRow({
         {c.statut === "postulée" && (
           <button
             onClick={() => onFollowUp(c)}
-            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--accent-orange)]/15 px-2.5 text-xs font-medium text-[var(--accent-orange)] transition-colors hover:bg-[var(--accent-orange)]/25"
+            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--accent-orange)]/15 px-2.5 text-xs font-medium text-[var(--accent-orange)] transition-colors hover:bg-[var(--accent-orange)]/25"
           >
             <Clock size={13} /> {relance ? "Gérer" : "Relancer"}
           </button>
@@ -139,7 +166,7 @@ export function CandidatureRow({
           disabled={isDeleting}
           aria-label={`Supprimer ${c.entreprise}`}
           title="Supprimer"
-          className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-danger)]/10 hover:text-[var(--accent-danger)] disabled:opacity-50"
+          className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-danger)]/10 hover:text-[var(--accent-danger)] disabled:opacity-50"
         >
           <Trash2 size={14} />
         </button>

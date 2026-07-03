@@ -8,6 +8,7 @@ export function useDashboardData(apiKey: string) {
   const [candidatures, setCandidatures] = useState<ICandidature[]>([]);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchProgress, setSearchProgress] = useState(0);
 
@@ -20,8 +21,11 @@ export function useDashboardData(apiKey: string) {
       setCandidatures(data.candidatures);
       setStats(data.stats);
       setTotal(data.total);
+      setLoadError(null);
     } catch (err) {
+      // Exposé via loadError pour que les pages distinguent « vide » de « échec de chargement ».
       console.error("[useDashboardData] load:", err);
+      setLoadError(err instanceof Error ? err.message : "Erreur de chargement");
     }
   }, [apiKey]);
 
@@ -127,6 +131,7 @@ export function useDashboardData(apiKey: string) {
     candidatures,
     stats,
     total,
+    loadError,
     searching,
     searchProgress,
     load,

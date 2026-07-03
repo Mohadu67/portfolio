@@ -2,7 +2,9 @@
 
 ## Parler au bot (agent IA)
 
-Le bot répond aussi aux **messages texte** avec les mêmes tools que le Chat IA du dashboard :
+Le bot répond aux **messages texte et aux vocaux 🎤** (transcription Gemini native, un accusé
+« J'ai compris : … » précède la réponse ; max 5 min par vocal) avec les mêmes tools que le
+Chat IA du dashboard :
 
 - « qu'est-ce qui est en attente de validation ? » → liste les auto-réponses pending, peut
   renvoyer les boutons ✅/❌ d'une réponse précise

@@ -14,6 +14,7 @@ import {
   sendTelegramMessage,
   sendTelegramMessageWithButtons,
   sendTelegramChatAction,
+  getTelegramFileAsBase64,
 } from "./telegram";
 
 const MODEL = process.env.CHAT_MODEL ?? "gemini-2.5-flash";
@@ -27,7 +28,7 @@ function getGenAI(apiKey: string): GoogleGenerativeAI {
 }
 
 export const TELEGRAM_HELP_TEXT = [
-  "🤖 Agent Cockpit — parle-moi normalement :",
+  "🤖 Agent Cockpit — parle-moi normalement (texte ou vocal 🎤) :",
   "",
   "• « qu'est-ce qui est en attente de validation ? »",
   "• « liste mes candidatures postulées »",
@@ -38,6 +39,9 @@ export const TELEGRAM_HELP_TEXT = [
   "Les actions sensibles (envois, modifications) te demandent toujours confirmation par boutons ✅/❌.",
   "/aide — ce message",
 ].join("\n");
+
+// Durée max d'un vocal accepté — protège le quota Gemini et évite les transcriptions fleuve.
+const MAX_VOICE_SECONDS = 300;
 
 async function buildSystemPrompt(): Promise<string> {
   const lite = await buildContextLite();
@@ -120,6 +124,51 @@ export function formatToolResult(tool: string, result: ToolRunResult): string {
   }
   // Les autres actions renvoient déjà des summaries humains ("Relance programmée chez X…").
   return `✅ ${summary || "Fait."}`;
+}
+
+// Message vocal : transcription Gemini (audio natif) puis même boucle agent que le texte.
+// On renvoie d'abord la transcription pour que l'utilisateur vérifie ce qui a été compris.
+export async function handleIncomingTelegramVoice(
+  chatId: string,
+  fileId: string,
+  durationSeconds: number | undefined,
+  mimeType: string | undefined
+): Promise<void> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    await sendTelegramMessage("⚠️ GEMINI_API_KEY non configuré côté serveur — je ne peux pas transcrire.");
+    return;
+  }
+  if (durationSeconds && durationSeconds > MAX_VOICE_SECONDS) {
+    await sendTelegramMessage(`🎤 Vocal trop long (${Math.round(durationSeconds)} s, max ${MAX_VOICE_SECONDS} s) — envoie plus court ou écris-moi.`);
+    return;
+  }
+
+  await sendTelegramChatAction("typing").catch(() => {});
+  const { base64 } = await getTelegramFileAsBase64(fileId);
+
+  const model = getGenAI(apiKey).getGenerativeModel({ model: MODEL });
+  const result = await model.generateContent([
+    {
+      inlineData: {
+        // Les vocaux Telegram sont en OGG/Opus ; on fait confiance au mime_type s'il est fourni.
+        mimeType: mimeType || "audio/ogg",
+        data: base64,
+      },
+    },
+    {
+      text: "Transcris fidèlement ce message vocal (français par défaut). Réponds UNIQUEMENT avec la transcription, sans commentaire ni guillemets. Si l'audio est vide ou inintelligible, réponds exactement : [inaudible]",
+    },
+  ]);
+  const transcription = result.response.text().trim();
+
+  if (!transcription || transcription === "[inaudible]") {
+    await sendTelegramMessage("🎤 Je n'ai pas réussi à comprendre ce vocal — réessaie ou écris-moi.");
+    return;
+  }
+
+  await sendTelegramMessage(`🎤 J'ai compris : « ${transcription.slice(0, 3000)} »`);
+  await handleIncomingTelegramText(chatId, transcription);
 }
 
 // Boucle agent : Gemini + tools. Lecture directe, action → bouton de confirmation.

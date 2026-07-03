@@ -13,6 +13,7 @@ import {
 } from "@/lib/telegram";
 import {
   handleIncomingTelegramText,
+  handleIncomingTelegramVoice,
   confirmTelegramAction,
   TELEGRAM_HELP_TEXT,
 } from "@/lib/telegram-agent";
@@ -37,6 +38,7 @@ interface TelegramUpdate {
   message?: {
     message_id: number;
     text?: string;
+    voice?: { file_id: string; duration?: number; mime_type?: string };
     chat?: { id: number };
   };
   callback_query?: {
@@ -75,9 +77,9 @@ export async function POST(request: NextRequest) {
 
   const allowedChat = process.env.TELEGRAM_CHAT_ID;
 
-  // ---------- 1. Messages texte → agent IA ----------
+  // ---------- 1. Messages (texte ou vocal) → agent IA ----------
   const msg = update.message;
-  if (msg?.text && msg.chat) {
+  if ((msg?.text || msg?.voice) && msg.chat) {
     // Fail-closed : seul le chat configuré parle à l'agent ; les autres sont ignorés.
     if (!allowedChat || String(msg.chat.id) !== String(allowedChat)) {
       return NextResponse.json({ ok: true });
@@ -95,7 +97,20 @@ export async function POST(request: NextRequest) {
         if (claim.modifiedCount !== 1) return NextResponse.json({ ok: true });
       }
 
-      const text = msg.text.trim();
+      if (msg.voice) {
+        // Vocal : transcription Gemini puis même boucle agent. ACK immédiat.
+        const voice = msg.voice;
+        void handleIncomingTelegramVoice(chatId, voice.file_id, voice.duration, voice.mime_type).catch(
+          async (err) => {
+            const m = err instanceof Error ? err.message : String(err);
+            console.error("[telegram agent voice]", m);
+            await sendTelegramMessage(`⚠️ Impossible de traiter le vocal : ${m.slice(0, 300)}`).catch(() => {});
+          }
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      const text = (msg.text ?? "").trim();
       const lower = text.toLowerCase();
       if (text === "/start" || text === "/aide" || text === "/help" || lower === "aide") {
         await sendTelegramMessage(TELEGRAM_HELP_TEXT);

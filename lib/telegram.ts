@@ -192,6 +192,29 @@ export async function sendTelegramChatAction(action: string = "typing"): Promise
   await tgCall("sendChatAction", { chat_id: chatId, action });
 }
 
+// Télécharge un fichier Telegram (vocal, audio…) en base64 via getFile.
+// Limite Bot API : 20 MB — on borne en dessous pour protéger la mémoire.
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
+
+export async function getTelegramFileAsBase64(
+  fileId: string
+): Promise<{ base64: string; sizeBytes: number }> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN manquant");
+  const file = await tgCall<{ file_path?: string; file_size?: number }>("getFile", { file_id: fileId });
+  if (!file.file_path) throw new Error("Telegram getFile: file_path absent");
+  if (file.file_size && file.file_size > MAX_FILE_BYTES) {
+    throw new Error(`Fichier trop volumineux (${Math.round(file.file_size / 1024 / 1024)} MB, max 15 MB)`);
+  }
+  const res = await fetch(`${API_BASE}/file/bot${token}/${file.file_path}`);
+  if (!res.ok) throw new Error(`Telegram file download failed: ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.byteLength > MAX_FILE_BYTES) {
+    throw new Error(`Fichier trop volumineux (${Math.round(buf.byteLength / 1024 / 1024)} MB, max 15 MB)`);
+  }
+  return { base64: buf.toString("base64"), sizeBytes: buf.byteLength };
+}
+
 export interface ParsedActionCallback {
   approve: boolean;
   token: string;

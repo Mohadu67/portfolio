@@ -33,6 +33,7 @@ export const TELEGRAM_HELP_TEXT = [
   "",
   "• « qu'est-ce qui est en attente de validation ? »",
   "• « liste mes candidatures postulées »",
+  "• « c'est quoi comme boîte Divalto ? ils recrutent ? »",
   "• « envoie une candidature à https://entreprise.fr »",
   "• « programme une relance pour Extia lundi 9h »",
   "• « passe Divalto en entretien »",
@@ -119,7 +120,9 @@ Brièveté : 1 phrase plutôt que 3. Pas d'introduction ni de conclusion bavarde
 
 Confirmation des actions : quand tu appelles un tool d'action (schedule_relance, cancel_relance, update_candidature_status, update_candidature_notes, send_relance_now, apply_to_company, process_pending_candidatures), le système envoie AUTOMATIQUEMENT des boutons ✅/❌ à l'utilisateur. NE demande JAMAIS de confirmation dans le texte, appelle directement le tool. Après l'appel, contente-toi d'annoncer en une phrase ce qui attend sa confirmation.
 
-Les tools de lecture (list_candidatures, get_candidature, list_relances_due, list_pending_approvals, resend_pending_approval, list_cv_sections, get_cv_section) s'exécutent immédiatement — utilise-les librement quand la question porte sur les données.
+Les tools de lecture (list_candidatures, get_candidature, list_relances_due, list_pending_approvals, resend_pending_approval, list_cv_sections, get_cv_section, research_company) s'exécutent immédiatement — utilise-les librement quand la question porte sur les données.
+
+Quand l'utilisateur mentionne une entreprise (« c'est quoi X ? », « ils recrutent ? », « tu penses quoi de X ? ») → research_company. Présente le récap (activité, score d'adéquation, offres de leur page carrières, déjà contactée ou non) puis, si c'est pertinent et pas déjà contacté, propose de candidater — apply_to_company déclenchera les boutons de confirmation.
 
 RÈGLE ANTI-INVENTION (critique) : ne cite JAMAIS de noms d'entreprises, de postes, de chiffres ou de dates qui ne viennent pas d'un résultat de tool. Si la donnée demandée n'apparaît ni dans un résultat de tool du tour courant, ni dans une ligne « [résultat …] » de l'historique, appelle le tool — ne complète JAMAIS de mémoire. Inventer une liste est une faute grave.
 L'historique peut contenir des lignes « [résultat <tool>] {…} » : ce sont les vraies données de tes appels précédents (avec les _id). Réutilise-les pour les questions de suivi (« détail du 2e », « celle d'Orano »…).

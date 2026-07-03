@@ -66,6 +66,20 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "research_company",
+    description:
+      "Enquête sur une entreprise : résout son site officiel (SerpAPI), scrape sa présentation et sa page carrières (offres d'emploi publiées), score son adéquation avec le profil (Gemini), et vérifie si elle a déjà été contactée. À utiliser quand l'utilisateur parle d'une boîte : « c'est quoi X ? », « est-ce que X a des postes ? », « tu penses quoi de X ? ». Lecture seule — propose ensuite apply_to_company si pertinent.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        entreprise: { type: "string", description: "Nom de l'entreprise (utilisé pour résoudre le site officiel si url absent)" },
+        url: { type: "string", description: "URL du site officiel si connue (https://…) — évite la résolution SerpAPI" },
+        localisation: { type: "string", description: "Ville pour aider la résolution (défaut : Strasbourg)" },
+      },
+    },
+  },
+  {
     name: "list_pending_approvals",
     description:
       "Liste les auto-réponses IA en attente de validation Telegram (human-in-the-loop) : entreprise, catégorie détectée, confiance, expéditeur, extrait de la réponse préparée. Utiliser quand l'utilisateur demande ce qui est en attente de validation/approbation.",

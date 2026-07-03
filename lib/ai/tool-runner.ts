@@ -9,6 +9,9 @@ import { processSingleCompany } from "@/lib/auto-apply";
 import { runProcessPending } from "@/lib/pending-processor";
 import { sendAutoReplyApprovalRequest } from "@/lib/telegram";
 import { getSettings } from "@/models/Settings";
+import { resolveCompanyWebsite } from "@/lib/serpapi-resolve";
+import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage } from "@/lib/web-scraper";
+import { scoreCompanyFit } from "@/lib/gemini";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -197,6 +200,94 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       }
       items.sort((a, b) => String(a.scheduledFor).localeCompare(String(b.scheduledFor)));
       return ok({ ok: true, summary: JSON.stringify({ count: items.length, items }) });
+    }
+
+    case "research_company": {
+      const entreprise = String(input.entreprise ?? "").trim();
+      const inputUrl = typeof input.url === "string" && input.url.trim() ? input.url.trim() : null;
+      const localisation = String(input.localisation ?? "").trim() || "Strasbourg";
+      if (!entreprise && !inputUrl) return fail(400, "entreprise ou url requis");
+
+      // 1. Site officiel (SerpAPI si pas d'URL fournie)
+      let site = inputUrl;
+      if (!site) {
+        try {
+          site = await resolveCompanyWebsite(entreprise, localisation);
+        } catch (err) {
+          return fail(500, `Résolution du site échouée : ${err instanceof Error ? err.message : err}`);
+        }
+      }
+      if (!site) {
+        return ok({
+          ok: true,
+          summary: JSON.stringify({ entreprise, site: null, note: "Site officiel introuvable via la recherche — demande l'URL à l'utilisateur." }),
+        });
+      }
+
+      // 2. Présentation + emails
+      const scraped = await scrapeCompanyWebsite(site);
+
+      // 3. Page carrières → offres publiées par la boîte elle-même
+      let careersUrl: string | null = null;
+      let offres: Array<{ titre: string; url: string }> = [];
+      try {
+        const homeRes = await fetch(site, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; CockpitBot/1.0)" },
+          redirect: "follow",
+          signal: AbortSignal.timeout(8000),
+        });
+        if (homeRes.ok) {
+          careersUrl = findCareersPage(site, await homeRes.text());
+          if (careersUrl) {
+            const careers = await scrapeCareersPage(careersUrl, 10);
+            offres = careers.offers.map((o) => ({ titre: o.title, url: o.url }));
+          }
+        }
+      } catch {
+        /* page carrières = best effort */
+      }
+
+      // 4. Adéquation avec le profil (si assez de matière)
+      let fit: { score: number; reason: string } | null = null;
+      if ((scraped.aboutText ?? "").length > 80) {
+        try {
+          const f = await scoreCompanyFit(entreprise || new URL(site).hostname, scraped.aboutText);
+          fit = { score: f.score, reason: f.reason };
+        } catch {
+          /* scoring = best effort */
+        }
+      }
+
+      // 5. Déjà dans le pipeline ?
+      const domain = new URL(site).hostname.replace(/^www\./, "");
+      const existing = await Candidature.findOne(
+        {
+          $or: [
+            { url: new RegExp(escapeRegex(domain), "i") },
+            { email: new RegExp(`@${escapeRegex(domain)}$`, "i") },
+            ...(entreprise ? [{ entreprise: new RegExp(`^${escapeRegex(entreprise)}$`, "i") }] : []),
+          ],
+        },
+        { entreprise: 1, poste: 1, statut: 1, created_at: 1 }
+      ).lean<ICandidature | null>();
+
+      return ok({
+        ok: true,
+        summary: JSON.stringify({
+          entreprise: entreprise || domain,
+          site,
+          resume: (scraped.aboutText || scraped.description || "").slice(0, 800) || null,
+          emails: (scraped.emails ?? []).slice(0, 5),
+          fitScore: fit?.score ?? null,
+          fitReason: fit?.reason ?? null,
+          careersUrl,
+          offres: offres.slice(0, 8),
+          dejaContactee: existing
+            ? { candidature_id: String(existing._id), poste: existing.poste, statut: existing.statut }
+            : null,
+          hint: "Fais un mini-récap : activité, adéquation, offres carrières trouvées, déjà contactée ou non. Si pertinent et pas déjà contactée, propose de candidater (apply_to_company avec ce site).",
+        }),
+      });
     }
 
     case "list_pending_approvals": {

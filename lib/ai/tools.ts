@@ -66,6 +66,26 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "list_pending_approvals",
+    description:
+      "Liste les auto-réponses IA en attente de validation Telegram (human-in-the-loop) : entreprise, catégorie détectée, confiance, expéditeur, extrait de la réponse préparée. Utiliser quand l'utilisateur demande ce qui est en attente de validation/approbation.",
+    requiresConfirmation: false,
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "resend_pending_approval",
+    description:
+      "Renvoie sur Telegram le message d'approbation (avec boutons ✅ Envoyer / ❌ Rejeter) d'une auto-réponse en attente pour une candidature donnée. Utiliser quand l'utilisateur veut revoir/décider une validation en attente.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: { type: "string", description: "ID MongoDB de la candidature concernée" },
+      },
+      required: ["candidature_id"],
+    },
+  },
+  {
     name: "list_cv_sections",
     description: "Liste les sections du CV (key, type, title) sans le contenu. Pour découvrir ce qui est disponible.",
     requiresConfirmation: false,

@@ -1,3 +1,21 @@
+# Bot Telegram : validation des auto-réponses + agent conversationnel
+
+## Parler au bot (agent IA)
+
+Le bot répond aussi aux **messages texte** avec les mêmes tools que le Chat IA du dashboard :
+
+- « qu'est-ce qui est en attente de validation ? » → liste les auto-réponses pending, peut
+  renvoyer les boutons ✅/❌ d'une réponse précise
+- « liste mes candidatures postulées », « détail de la candidature Extia »
+- « envoie une candidature à https://entreprise.fr » → pipeline apply_to_company
+- « programme une relance pour X lundi 9h », « passe Y en entretien »
+
+Toute **action** (envoi, modification) est proposée avec des boutons **✅ Exécuter / ❌ Annuler**
+— rien ne s'exécute sans tap. Les lectures (listes, détails) sont directes. La conversation
+garde un historique glissant (~16 messages) pour la continuité. `/aide` affiche l'aide.
+
+Nécessite `GEMINI_API_KEY` (déjà en prod). Seul le chat `TELEGRAM_CHAT_ID` est écouté.
+
 # Validation Telegram des auto-réponses (human-in-the-loop)
 
 Quand un RH répond à une candidature, l'IA (Gemini) prépare une réponse. Avec cette feature

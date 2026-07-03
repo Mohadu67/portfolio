@@ -164,3 +164,43 @@ export async function sendTelegramMessage(text: string): Promise<void> {
   if (!chatId) throw new Error("TELEGRAM_CHAT_ID manquant");
   await tgCall("sendMessage", { chat_id: chatId, text: text.slice(0, 4096) });
 }
+
+export interface TelegramInlineButton {
+  text: string;
+  callback_data: string;
+}
+
+// Message texte brut avec clavier inline générique. Retourne le message_id.
+export async function sendTelegramMessageWithButtons(
+  text: string,
+  buttons: TelegramInlineButton[][]
+): Promise<number> {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) throw new Error("TELEGRAM_CHAT_ID manquant");
+  const msg = await tgCall<{ message_id: number }>("sendMessage", {
+    chat_id: chatId,
+    text: text.slice(0, 4096),
+    reply_markup: { inline_keyboard: buttons },
+  });
+  return msg.message_id;
+}
+
+// Indicateur « en train d'écrire » pendant que l'agent réfléchit (expire seul après ~5 s).
+export async function sendTelegramChatAction(action: string = "typing"): Promise<void> {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) throw new Error("TELEGRAM_CHAT_ID manquant");
+  await tgCall("sendChatAction", { chat_id: chatId, action });
+}
+
+export interface ParsedActionCallback {
+  approve: boolean;
+  token: string;
+}
+
+// callback_data des confirmations d'action du bot IA : "act:ok:<token>" / "act:no:<token>".
+// Namespace distinct de "ar:" (approbation d'auto-réponse).
+export function parseActionCallback(data: string): ParsedActionCallback | null {
+  const m = data.match(/^act:(ok|no):([a-f0-9]{8,64})$/);
+  if (!m) return null;
+  return { approve: m[1] === "ok", token: m[2] };
+}

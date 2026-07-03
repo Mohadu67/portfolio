@@ -7,6 +7,7 @@ import {
   type ApprovalRequestInput,
 } from "@/lib/telegram";
 import { formatToolResult, pcmToWav } from "@/lib/telegram-agent";
+import { buildCandidatureSearchFilter } from "@/lib/ai/tool-runner";
 
 const baseInput: ApprovalRequestInput = {
   approvalToken: "a1b2c3d4e5f6a1b2c3d4e5f6",
@@ -174,6 +175,39 @@ describe("formatToolResult", () => {
       body: { ok: true, summary: "Relance programmée chez Extia pour le 06/07/2026 09:00" },
     });
     expect(txt).toBe("✅ Relance programmée chez Extia pour le 06/07/2026 09:00");
+  });
+});
+
+describe("buildCandidatureSearchFilter", () => {
+  const matches = (filter: Record<string, unknown> | null, doc: { entreprise: string; poste: string; localisation?: string }) => {
+    if (!filter) return false;
+    const and = filter.$and as Array<{ $or: Array<Record<string, RegExp>> }>;
+    return and.every((clause) =>
+      clause.$or.some((cond) => {
+        const [field, rx] = Object.entries(cond)[0];
+        return rx.test(String(doc[field as keyof typeof doc] ?? ""));
+      })
+    );
+  };
+
+  it("retrouve une candidature citée avec poste + entreprise mélangés (cas vocal)", () => {
+    const filter = buildCandidatureSearchFilter("Développeur Logiciel CDI Expectra");
+    expect(matches(filter, { entreprise: "Expectra", poste: "Développeur Logiciel - CDI" })).toBe(true);
+  });
+
+  it("insensible aux accents et à la casse", () => {
+    const filter = buildCandidatureSearchFilter("developpeur expectra");
+    expect(matches(filter, { entreprise: "EXPECTRA", poste: "Développeur Logiciel - CDI" })).toBe(true);
+  });
+
+  it("ne matche pas quand un mot est absent de tous les champs", () => {
+    const filter = buildCandidatureSearchFilter("Développeur Google");
+    expect(matches(filter, { entreprise: "Expectra", poste: "Développeur Logiciel - CDI" })).toBe(false);
+  });
+
+  it("ignore les tokens trop courts et retourne null si rien d'exploitable", () => {
+    expect(buildCandidatureSearchFilter("à -")).toBeNull();
+    expect(buildCandidatureSearchFilter("  ")).toBeNull();
   });
 });
 

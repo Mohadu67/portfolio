@@ -14,6 +14,34 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Motif insensible aux accents : chaque voyelle (et c/ç) matche toutes ses variantes.
+// Les classes insérées ne contiennent pas les lettres des passes suivantes → une seule passe
+// par famille suffit, pas de réécriture en cascade.
+function accentInsensitivePattern(s: string): string {
+  return escapeRegex(s)
+    .replace(/[eéèêë]/gi, "[eéèêë]")
+    .replace(/[aàâä]/gi, "[aàâä]")
+    .replace(/[iîï]/gi, "[iîï]")
+    .replace(/[oôö]/gi, "[oôö]")
+    .replace(/[uùûü]/gi, "[uùûü]")
+    .replace(/[cç]/gi, "[cç]");
+}
+
+// Recherche tolérante : CHAQUE mot (≥ 2 chars) doit matcher entreprise OU poste OU
+// localisation, insensible casse/accents. Indispensable pour les follow-ups vocaux du bot
+// Telegram : « Développeur Logiciel CDI Expectra » mélange poste et entreprise en un seul
+// libellé — une recherche substring d'un bloc ne matche aucun champ.
+export function buildCandidatureSearchFilter(search: string): Record<string, unknown> | null {
+  const tokens = search.trim().split(/\s+/).filter((t) => t.length >= 2);
+  if (tokens.length === 0) return null;
+  return {
+    $and: tokens.map((t) => {
+      const rx = new RegExp(accentInsensitivePattern(t), "i");
+      return { $or: [{ entreprise: rx }, { poste: rx }, { localisation: rx }] };
+    }),
+  };
+}
+
 const STATUTS: CandidatureStatut[] = [
   "identifiée",
   "lettre générée",
@@ -70,8 +98,8 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       const query: Record<string, unknown> = {};
       if (statut) query.statut = statut;
       if (search) {
-        const rx = new RegExp(escapeRegex(search), "i");
-        query.$or = [{ entreprise: rx }, { poste: rx }];
+        const filter = buildCandidatureSearchFilter(search);
+        if (filter) Object.assign(query, filter);
       }
       const docs = await Candidature.find(query, {
         entreprise: 1,

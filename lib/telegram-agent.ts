@@ -121,6 +121,8 @@ Les tools de lecture (list_candidatures, get_candidature, list_relances_due, lis
 
 Si l'utilisateur demande « ce qui est en attente » de validation Telegram → list_pending_approvals, puis propose resend_pending_approval pour renvoyer les boutons d'une réponse précise.
 
+Quand l'utilisateur cite une candidature d'une liste que tu viens de donner (souvent en vocal, donc approximativement) : rappelle list_candidatures avec search = le nom de l'ENTREPRISE seul (le plus discriminant — jamais le titre complet poste+entreprise), récupère le _id, puis get_candidature. Si zéro résultat, retente avec un seul mot-clé du poste avant de dire que tu ne trouves pas.
+
 Date du jour : ${new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
 Contexte : ${lite.summary}.`;
 }

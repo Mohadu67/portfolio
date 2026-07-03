@@ -18,8 +18,13 @@ Mail RH → cron check-inbox → classifyAndReply (Gemini)
 - Double-tap / relivraison Telegram : claim atomique en DB → « Déjà traité ».
 - Échec SMTP au moment de l'approbation : l'entrée repasse en `pending`, les boutons restent
   actifs, retape ✅ pour réessayer.
-- Si Telegram n'est pas configuré (env manquantes) ou si le toggle est désactivé dans
-  `/dashboard/settings`, retour au comportement historique : envoi direct si confiance ≥ seuil.
+- Échec de l'appel Telegram (API down, crash entre le claim et l'envoi) : l'entrée reste en
+  `pending` sans message annoncé, et chaque sync la ré-émet jusqu'à ce qu'un message parte
+  (sweep `resendStalePendingApprovals`). Rien n'est perdu.
+- Le mode approbation ne s'active que si les **3** variables (`TELEGRAM_BOT_TOKEN`,
+  `TELEGRAM_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`) sont présentes — sans le secret, les taps
+  seraient intraitables côté webhook. Env incomplète ou toggle désactivé dans
+  `/dashboard/settings` → comportement historique : envoi direct si confiance ≥ seuil.
 
 ## Setup (une fois)
 

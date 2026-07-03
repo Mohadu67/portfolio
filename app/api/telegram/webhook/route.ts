@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Candidature, IAutoReply, IEmailReceived } from "@/models/Candidature";
@@ -34,12 +35,19 @@ interface TelegramUpdate {
   };
 }
 
+function secretsMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export async function POST(request: NextRequest) {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!secret) {
-    return NextResponse.json({ error: "TELEGRAM_WEBHOOK_SECRET not configured" }, { status: 500 });
+    // 401 (pas 500) : un 5xx ferait re-livrer l'update par Telegram en boucle.
+    return NextResponse.json({ error: "TELEGRAM_WEBHOOK_SECRET not configured" }, { status: 401 });
   }
-  if (request.headers.get("x-telegram-bot-api-secret-token") !== secret) {
+  if (!secretsMatch(request.headers.get("x-telegram-bot-api-secret-token") ?? "", secret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -60,9 +68,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Seul le chat configuré (celui de Mohammed) peut décider.
+  // Seul le chat configuré (celui de Mohammed) peut décider — fail-closed : si le chat est
+  // absent de l'update (callback inline-mode, message inaccessible), on refuse aussi.
   const allowedChat = process.env.TELEGRAM_CHAT_ID;
-  if (allowedChat && cb.message?.chat && String(cb.message.chat.id) !== String(allowedChat)) {
+  const chatId = cb.message?.chat?.id;
+  if (!allowedChat || chatId === undefined || String(chatId) !== String(allowedChat)) {
     await answerCallbackQuery(cb.id, "Non autorisé").catch(() => {});
     return NextResponse.json({ ok: true });
   }
@@ -147,6 +157,8 @@ export async function POST(request: NextRequest) {
       }
     } catch (sendErr) {
       // Échec SMTP : on repasse en pending pour que les boutons restent actifs (retry possible).
+      // Trade-off assumé : sur un échec ambigu post-DATA (mail accepté mais throw avant le 250),
+      // un re-tap peut doubler l'envoi — cas rare, préféré à la perte silencieuse de la réponse.
       const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
       await Candidature.updateOne(
         { _id: candDoc._id, "autoReplies.approvalToken": parsed.token },

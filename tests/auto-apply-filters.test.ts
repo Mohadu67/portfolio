@@ -55,6 +55,41 @@ describe("scoreContactEmail (filtre strict)", () => {
     }
   });
 
+  it("mentions-legales@ → blacklist (pas nominatif malgré le tiret)", () => {
+    const r = scoreContactEmail("mentions-legales@boite.com", "https://boite.com");
+    expect(r.accept).toBe(false);
+    expect(r.reasons).toContain("blacklist_prefix");
+    expect(r.reasons).not.toContain("nominative");
+  });
+
+  it("formes concaténées privacyofficer@ / noreply2@ → blacklist par compact", () => {
+    for (const local of ["privacyofficer", "noreply2", "rgpdcontact"]) {
+      const r = scoreContactEmail(`${local}@boite.com`, "https://boite.com");
+      expect(r.accept).toBe(false);
+      expect(r.reasons).toContain("blacklist_prefix");
+    }
+  });
+
+  it("service.recrutement@ / info-recrutement@ → le token RH neutralise la blacklist douce", () => {
+    for (const local of ["service.recrutement", "info-recrutement", "service-rh"]) {
+      const r = scoreContactEmail(`${local}@boite.com`, "https://boite.com");
+      expect(r.accept).toBe(true);
+      expect(r.reasons).toContain("high_value_prefix");
+    }
+  });
+
+  it("noreply-jobs@ → la blacklist dure prime sur le token RH (émetteur automatique)", () => {
+    const r = scoreContactEmail("noreply-jobs@boite.com", "https://boite.com");
+    expect(r.accept).toBe(false);
+    expect(r.reasons).toContain("blacklist_prefix");
+  });
+
+  it("service.client@ → blacklist douce en forme composée", () => {
+    const r = scoreContactEmail("service.client@boite.com", "https://boite.com");
+    expect(r.accept).toBe(false);
+    expect(r.reasons).toContain("blacklist_prefix");
+  });
+
   it("email RH sur domaine free (gmail.com) → hardCap 0.3, refusé", () => {
     const r = scoreContactEmail("rh@gmail.com", "https://boite.com");
     expect(r.accept).toBe(false);

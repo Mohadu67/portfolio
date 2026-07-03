@@ -7,13 +7,25 @@ import { withRetry } from "./retry";
 
 const API_BASE = "https://api.telegram.org";
 
-// Telegram limite un message à 4096 chars. On borne extrait + réponse pour garder de la marge
-// pour l'en-tête et ne jamais dépasser.
+// Telegram limite un message à 4096 chars. TOUS les champs libres sont bornés (pas seulement
+// extrait/réponse : un sujet de thread « TR: TR: RE: … » peut dépasser 1000 chars et faire
+// échouer sendMessage en 400 MESSAGE_TOO_LONG, non retryé). Budget max ≈ 110 fixes + 600 +
+// 2500 + 200 + 150 + 2×120 ≈ 3800 < 4096.
 const MAX_EXCERPT_CHARS = 600;
 const MAX_REPLY_CHARS = 2500;
+const MAX_SUBJECT_CHARS = 200;
+const MAX_SENDER_CHARS = 150;
+const MAX_FIELD_CHARS = 120; // entreprise, poste
 
+// Le webhook exige TELEGRAM_WEBHOOK_SECRET : sans lui, les demandes partiraient sur Telegram
+// mais aucun tap ne serait traitable (webhook en 500) → on exige les 3 vars pour activer le
+// mode approbation, sinon fallback envoi direct.
 export function isTelegramConfigured(): boolean {
-  return !!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID;
+  return (
+    !!process.env.TELEGRAM_BOT_TOKEN &&
+    !!process.env.TELEGRAM_CHAT_ID &&
+    !!process.env.TELEGRAM_WEBHOOK_SECRET
+  );
 }
 
 interface TelegramApiResponse<T> {
@@ -74,11 +86,11 @@ export function buildApprovalMessage(input: ApprovalRequestInput): string {
   const lowConfidence = input.confidence < input.minConfidence;
   const sender = input.fromName ? `${input.fromName} — ${input.from}` : input.from;
   const lines = [
-    `📬 <b>Réponse reçue — ${escapeTelegramHtml(input.entreprise)}</b>`,
-    `<i>${escapeTelegramHtml(input.poste)}</i>`,
+    `📬 <b>Réponse reçue — ${escapeTelegramHtml(truncate(input.entreprise, MAX_FIELD_CHARS))}</b>`,
+    `<i>${escapeTelegramHtml(truncate(input.poste, MAX_FIELD_CHARS))}</i>`,
     ``,
-    `<b>De :</b> ${escapeTelegramHtml(sender)}`,
-    `<b>Sujet :</b> ${escapeTelegramHtml(input.subject)}`,
+    `<b>De :</b> ${escapeTelegramHtml(truncate(sender, MAX_SENDER_CHARS))}`,
+    `<b>Sujet :</b> ${escapeTelegramHtml(truncate(input.subject, MAX_SUBJECT_CHARS))}`,
     `<b>Catégorie :</b> ${escapeTelegramHtml(input.category)} (confiance ${pct}%${lowConfidence ? " ⚠️ sous le seuil" : ""})`,
     ``,
     `<b>📥 Leur message :</b>`,

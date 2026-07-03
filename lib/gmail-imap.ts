@@ -36,6 +36,52 @@ function snippetFromBody(text: string | undefined | null): string {
   return text.replace(/\s+/g, " ").trim().slice(0, 500);
 }
 
+// Ré-émet les demandes d'approbation dont le message Telegram n'est jamais parti :
+// approvalStatus "pending" + telegramMessageId null. Couvre l'échec de l'appel Telegram au
+// moment du claim ET le crash du process entre le claim et l'envoi. Idempotent : dès que le
+// message part, telegramMessageId est posé et l'entrée sort du filtre. Les pendings issus du
+// webhook (échec SMTP re-passé en pending) gardent leur telegramMessageId → jamais ré-émis.
+async function resendStalePendingApprovals(
+  autoReplyMinConfidence: number,
+  result: SyncResult
+): Promise<void> {
+  const stale = await Candidature.find({
+    autoReplies: { $elemMatch: { approvalStatus: "pending", telegramMessageId: null } },
+  }).lean<ICandidature[]>();
+
+  for (const cand of stale) {
+    for (const ar of cand.autoReplies ?? []) {
+      if (ar.approvalStatus !== "pending" || ar.telegramMessageId != null || !ar.approvalToken) continue;
+      const inbound = (cand.emailsReceived ?? []).find(
+        (e: IEmailReceived) => !!ar.inboundMessageId && e.messageId === ar.inboundMessageId
+      );
+      try {
+        const telegramMessageId = await sendAutoReplyApprovalRequest({
+          approvalToken: ar.approvalToken,
+          entreprise: cand.entreprise,
+          poste: cand.poste,
+          from: inbound?.from ?? "(inconnu)",
+          fromName: inbound?.fromName,
+          subject: inbound?.subject ?? "(sans sujet)",
+          inboundExcerpt: inbound?.snippet || inbound?.bodyText || "",
+          category: ar.category,
+          confidence: ar.confidence,
+          minConfidence: autoReplyMinConfidence,
+          reply: ar.reply,
+        });
+        await Candidature.updateOne(
+          { _id: cand._id, "autoReplies.approvalToken": ar.approvalToken },
+          { $set: { "autoReplies.$.telegramMessageId": telegramMessageId, "autoReplies.$.error": null } }
+        );
+        result.autoReplyPending++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        result.errors.push(`Telegram approval re-send failed for ${cand.entreprise}: ${msg}`);
+      }
+    }
+  }
+}
+
 interface SyncResult {
   ok: boolean;
   scanned: number;
@@ -98,6 +144,11 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
     profileCalendlyUrl = contactSection?.content?.calendly?.trim() ?? "";
   } catch {
     /* ignore — pas bloquant si la section n'existe pas encore */
+  }
+
+  // Rattrapage des demandes d'approbation jamais annoncées sur Telegram (cf. fonction).
+  if (telegramApproval && !opts.dryRun) {
+    await resendStalePendingApprovals(autoReplyMinConfidence, result);
   }
 
   // Build candidate emails map (lowercase email -> candidature)
@@ -342,7 +393,11 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
               let sendError: string | undefined;
               let pendingApproval = false;
 
-              if (telegramApproval && !opts.dryRun) {
+              if (telegramApproval && opts.dryRun) {
+                // Dry-run fidèle : le run réel passerait par l'approbation Telegram, on le
+                // signale dans le détail au lieu de compter un skip/send qui n'aurait pas lieu.
+                pendingApproval = true;
+              } else if (telegramApproval) {
                 // ---------- Validation Telegram avant envoi ----------
                 // TOUTES les réponses préparées passent par l'approbation (même sous le seuil de
                 // confiance : c'est l'humain qui tranche, le score est affiché à titre indicatif).
@@ -399,15 +454,17 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
                   result.autoReplyPending++;
                   pendingApproval = true;
                 } catch (tgErr) {
-                  // Message Telegram jamais parti → personne ne pourra approuver. On retire l'entrée
-                  // pending (aucun envoi n'a eu lieu, le claim était à nous) pour que le prochain
-                  // sync retente la demande d'approbation.
-                  await Candidature.updateOne(
-                    { _id: candDoc._id },
-                    { $pull: { autoReplies: { approvalToken } } }
-                  );
+                  // Message Telegram jamais parti. On GARDE l'entrée pending (telegramMessageId
+                  // null) : le mail est déjà dans emailsReceived donc il ne repassera plus jamais
+                  // par cette boucle — la retirer perdrait la réponse définitivement. C'est le
+                  // sweep resendStalePendingApprovals (début de sync) qui ré-émettra la demande.
                   sendError = tgErr instanceof Error ? tgErr.message : String(tgErr);
-                  result.errors.push(`Telegram approval request failed for ${candDoc.entreprise}: ${sendError}`);
+                  await Candidature.updateOne(
+                    { _id: candDoc._id, "autoReplies.approvalToken": approvalToken },
+                    { $set: { "autoReplies.$.error": sendError } }
+                  );
+                  pendingApproval = true;
+                  result.errors.push(`Telegram approval request failed for ${candDoc.entreprise} (sera retentée au prochain sync): ${sendError}`);
                 }
               } else if (shouldSend && !opts.dryRun) {
                 // Idempotence atomique sur le push d'autoReply : on push UNIQUEMENT si aucune autoReply

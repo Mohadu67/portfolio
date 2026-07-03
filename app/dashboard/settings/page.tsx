@@ -433,7 +433,7 @@ export default function SettingsPage() {
           />
           <Toggle
             label="Validation Telegram avant envoi"
-            description="Chaque réponse préparée par l'IA t'est envoyée sur Telegram (boutons ✅/❌) — rien ne part sans ton accord. Nécessite TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID côté serveur."
+            description="Chaque réponse préparée par l'IA t'est envoyée sur Telegram (boutons ✅/❌) — rien ne part sans ton accord. Nécessite TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID + TELEGRAM_WEBHOOK_SECRET côté serveur."
             checked={settings.gmail.telegramApprovalEnabled}
             onChange={() => toggleGmail("telegramApprovalEnabled")}
           />

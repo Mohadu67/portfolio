@@ -2,7 +2,12 @@
 // Objectif : éviter d'écrire à un standard générique (info@, contact@) qui n'a aucune
 // chance d'aboutir, et favoriser les emails RH ou nominatifs.
 
-const HIGH_VALUE_LOCAL_PREFIXES = [
+// Le local-part est découpé en tokens sur tout non-lettre (rh-recrutement → [rh, recrutement])
+// et comparé aux ensembles ci-dessous. Le découpage évite les deux pièges du matching par
+// préfixe : "service.recrutement@" (préfixe blacklisté mais token RH → vrai contact) et
+// "mentions-legales@" (aucun préfixe ne matche mais chaque token est légal).
+
+const HIGH_VALUE_LOCAL_TOKENS: ReadonlySet<string> = new Set([
   "rh",
   "recrutement",
   "recrutements",
@@ -20,17 +25,55 @@ const HIGH_VALUE_LOCAL_PREFIXES = [
   "hr",
   "people",
   "rrh",
-];
+]);
 
-const BLACKLIST_LOCAL_PREFIXES = [
+// Blacklist DURE : jamais destinataire, même combinée à un token RH (noreply-jobs@ reste un
+// émetteur automatique ; dpo-recrutement@ n'existe pas). Contacts légaux/conformité inclus :
+// le scraper les ramasse sur les pages RGPD/mentions légales, jamais des destinataires.
+const HARD_BLACKLIST_TOKENS: ReadonlySet<string> = new Set([
   "noreply",
-  "no-reply",
   "donotreply",
-  "do-not-reply",
-  "mailer-daemon",
   "postmaster",
   "abuse",
   "webmaster",
+  "dpo",
+  "rgpd",
+  "gdpr",
+  "privacy",
+  "dataprotection",
+  "protection",
+  "donnees",
+  "personnelles",
+  "confidentialite",
+  "legal",
+  "legale",
+  "legales",
+  "mentions",
+  "juridique",
+  "compliance",
+  "conformite",
+  "cnil",
+]);
+
+// Formes concaténées sans séparateur (privacyofficer@, noreply2@) : match par préfixe sur le
+// local compacté (lettres seules). Restreint aux mots qui ne peuvent pas démarrer un
+// nominatif initiale+nom — "dpo" en est exclu exprès (dpont@ = D. Pont, nom réel).
+const HARD_BLACKLIST_COMPACT_PREFIXES = [
+  "noreply",
+  "donotreply",
+  "mailerdaemon",
+  "postmaster",
+  "abuse",
+  "webmaster",
+  "privacy",
+  "rgpd",
+  "gdpr",
+  "dataprotection",
+] as const;
+
+// Blacklist DOUCE : boîtes génériques d'exploitation. Un token RH la neutralise (traité en
+// amont) ; sinon rejet, y compris les formes composées (service.client@, sav-paris@).
+const SOFT_BLACKLIST_TOKENS: ReadonlySet<string> = new Set([
   "support",
   "help",
   "service",
@@ -54,29 +97,7 @@ const BLACKLIST_LOCAL_PREFIXES = [
   "bonjour",
   "hello",
   "hi",
-  // Contacts légaux/conformité : ramassés par le scraper sur les pages RGPD/mentions
-  // légales — jamais des destinataires de candidature.
-  "dpo",
-  "rgpd",
-  "gdpr",
-  "privacy",
-  "dataprotection",
-  "data-protection",
-  "protection-donnees",
-  "donnees-personnelles",
-  "legal",
-  "juridique",
-  "compliance",
-  "conformite",
-  "cnil",
-];
-
-// Match un préfixe exact OU suivi d'un séparateur (dpo.externe@, legal-contact@…).
-function localMatchesPrefix(local: string, prefixes: string[]): boolean {
-  return prefixes.some(
-    (p) => local === p || local.startsWith(`${p}.`) || local.startsWith(`${p}-`) || local.startsWith(`${p}_`),
-  );
-}
+]);
 
 export const FREE_EMAIL_DOMAINS = new Set([
   "gmail.com",
@@ -222,13 +243,23 @@ export function scoreContactEmail(email: string, companyUrlOrDomain?: string): E
   }
 
   // Local-part checks (la partie avant le @ est le signal le plus fort)
-  if (localMatchesPrefix(local, BLACKLIST_LOCAL_PREFIXES)) {
+  const tokens = local.split(/[^a-z]+/).filter(Boolean);
+  const compact = local.replace(/[^a-z]/g, "");
+  const hardBlacklisted =
+    tokens.some((t) => HARD_BLACKLIST_TOKENS.has(t)) ||
+    HARD_BLACKLIST_COMPACT_PREFIXES.some((p) => compact.startsWith(p));
+
+  if (hardBlacklisted) {
     reasons.push("blacklist_prefix");
     score = 0;
     hardCap = 0;
-  } else if (localMatchesPrefix(local, HIGH_VALUE_LOCAL_PREFIXES)) {
+  } else if (tokens.some((t) => HIGH_VALUE_LOCAL_TOKENS.has(t))) {
     reasons.push("high_value_prefix");
     score += 0.5;
+  } else if (tokens.some((t) => SOFT_BLACKLIST_TOKENS.has(t))) {
+    reasons.push("blacklist_prefix");
+    score = 0;
+    hardCap = 0;
   } else if (isLikelyNominative(local)) {
     reasons.push("nominative");
     score += 0.4;

@@ -80,6 +80,19 @@ describe("buildApprovalMessage", () => {
     expect(msg.length).toBeLessThan(4096);
     expect(msg).toContain("…");
   });
+
+  it("borne aussi l'en-tête : sujet/expéditeur/entreprise/poste très longs → < 4096", () => {
+    const msg = buildApprovalMessage({
+      ...baseInput,
+      entreprise: "E".repeat(2_000),
+      poste: "P".repeat(2_000),
+      fromName: "N".repeat(2_000),
+      subject: `TR: RE: ${"TR: ".repeat(500)}candidature`,
+      inboundExcerpt: "x".repeat(10_000),
+      reply: "y".repeat(10_000),
+    });
+    expect(msg.length).toBeLessThan(4096);
+  });
 });
 
 describe("escapeTelegramHtml", () => {

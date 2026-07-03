@@ -54,7 +54,29 @@ const BLACKLIST_LOCAL_PREFIXES = [
   "bonjour",
   "hello",
   "hi",
+  // Contacts légaux/conformité : ramassés par le scraper sur les pages RGPD/mentions
+  // légales — jamais des destinataires de candidature.
+  "dpo",
+  "rgpd",
+  "gdpr",
+  "privacy",
+  "dataprotection",
+  "data-protection",
+  "protection-donnees",
+  "donnees-personnelles",
+  "legal",
+  "juridique",
+  "compliance",
+  "conformite",
+  "cnil",
 ];
+
+// Match un préfixe exact OU suivi d'un séparateur (dpo.externe@, legal-contact@…).
+function localMatchesPrefix(local: string, prefixes: string[]): boolean {
+  return prefixes.some(
+    (p) => local === p || local.startsWith(`${p}.`) || local.startsWith(`${p}-`) || local.startsWith(`${p}_`),
+  );
+}
 
 export const FREE_EMAIL_DOMAINS = new Set([
   "gmail.com",
@@ -200,11 +222,11 @@ export function scoreContactEmail(email: string, companyUrlOrDomain?: string): E
   }
 
   // Local-part checks (la partie avant le @ est le signal le plus fort)
-  if (BLACKLIST_LOCAL_PREFIXES.includes(local)) {
+  if (localMatchesPrefix(local, BLACKLIST_LOCAL_PREFIXES)) {
     reasons.push("blacklist_prefix");
     score = 0;
     hardCap = 0;
-  } else if (HIGH_VALUE_LOCAL_PREFIXES.some((p) => local === p || local.startsWith(`${p}.`) || local.startsWith(`${p}-`) || local.startsWith(`${p}_`))) {
+  } else if (localMatchesPrefix(local, HIGH_VALUE_LOCAL_PREFIXES)) {
     reasons.push("high_value_prefix");
     score += 0.5;
   } else if (isLikelyNominative(local)) {

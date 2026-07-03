@@ -32,6 +32,29 @@ describe("scoreContactEmail (filtre strict)", () => {
     expect(r.reasons).toContain("blacklist_prefix");
   });
 
+  it("dpo@ → blacklist, refusé même avec domain_match", () => {
+    const r = scoreContactEmail("dpo@boite.com", "https://boite.com");
+    expect(r.accept).toBe(false);
+    expect(r.score).toBe(0);
+    expect(r.reasons).toContain("blacklist_prefix");
+  });
+
+  it("rgpd@ / privacy@ / juridique@ → blacklist", () => {
+    for (const local of ["rgpd", "privacy", "juridique", "legal", "compliance"]) {
+      const r = scoreContactEmail(`${local}@boite.com`, "https://boite.com");
+      expect(r.accept).toBe(false);
+      expect(r.reasons).toContain("blacklist_prefix");
+    }
+  });
+
+  it("dpo.externe@ / dpo-contact@ → blacklist par préfixe, pas confondu avec nominatif", () => {
+    for (const local of ["dpo.externe", "dpo-contact", "legal_notice"]) {
+      const r = scoreContactEmail(`${local}@boite.com`, "https://boite.com");
+      expect(r.accept).toBe(false);
+      expect(r.reasons).toContain("blacklist_prefix");
+    }
+  });
+
   it("email RH sur domaine free (gmail.com) → hardCap 0.3, refusé", () => {
     const r = scoreContactEmail("rh@gmail.com", "https://boite.com");
     expect(r.accept).toBe(false);

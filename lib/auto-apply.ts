@@ -744,6 +744,10 @@ export interface ProcessSingleOptions {
   // Validé uniquement sur le format (regex basique). Utiliser quand l'auto-pick est trop strict
   // (typiquement : email valide mais sur un domaine "frère" que pickBestContactEmail refuse).
   emailOverride?: string;
+  // Consigne libre de l'utilisateur pour orienter la lettre (« insiste sur mon profil chef de
+  // projet », « ne mentionne pas le fast-food »). Persistée sur la candidature (letterInstruction)
+  // pour que les régénérations futures la conservent.
+  letterInstruction?: string;
 }
 
 export async function processSingleCompany(
@@ -841,6 +845,7 @@ export async function processSingleCompany(
     // applyToExistingCandidature comble). L'index unique sur url ferait échouer (E11000) un run
     // réel qui suit un dry-run ou un allowDuplicate sur la même URL : le dry-run persiste le doc.
     const poste = "Candidature spontanée — Développeur fullstack";
+    const letterInstruction = opts.letterInstruction?.trim() || "";
     let candDoc = await Candidature.findOne({ url: cleanUrl });
     if (candDoc) {
       // Réutilisation réservée aux docs pas encore partis : réutiliser une candidature
@@ -851,14 +856,23 @@ export async function processSingleCompany(
         decision.skipReason = `une candidature existe déjà pour cette URL (${candDoc.entreprise}, statut « ${candDoc.statut} ») — supprime-la ou gère-la à la main avant de réessayer.`;
         return decision;
       }
-      // En dry-run on ne touche pas au doc existant : une simulation ne doit pas écraser
-      // l'email, effacer la lettre ni polluer les notes d'une candidature réelle.
+      // Consigne posée en mémoire dans tous les cas (la génération de lettre la lit sur le doc) ;
+      // persistée plus bas hors dry-run seulement.
+      if (letterInstruction) candDoc.letterInstruction = letterInstruction;
+      // Une lettre sur mesure validée (set_lettre → dernière version model "manual") n'est
+      // JAMAIS écrasée automatiquement, même si le modèle repasse letter_instruction à l'envoi.
+      const manualLetter = !!candDoc.lettre && (candDoc.letters ?? []).slice(-1)[0]?.model === "manual";
+      // Nouvelle consigne → la lettre template existante ne la reflète plus : régénération,
+      // y compris en dry-run (sinon l'aperçu montrerait l'ancienne lettre). L'ancienne version
+      // reste archivée dans letters[].
+      if (letterInstruction && !manualLetter) candDoc.lettre = null;
+      // En dry-run on ne touche pas au reste du doc existant : une simulation ne doit pas
+      // écraser l'email, changer le type ni polluer les notes d'une candidature réelle.
       if (!opts.dryRun) {
         candDoc.email = bestEmail.email;
         candDoc.aboutText = scraped.aboutText || candDoc.aboutText;
-        // Lettre générée pour un autre type → obsolète : on force la régénération
-        // (l'historique letters[] conserve les anciennes versions).
-        if (candDoc.type !== candidatureType) candDoc.lettre = null;
+        // Lettre générée pour un autre type → obsolète (sauf lettre sur mesure).
+        if (candDoc.type !== candidatureType && !manualLetter) candDoc.lettre = null;
         candDoc.type = candidatureType;
         candDoc.notes = `${candDoc.notes ? `${candDoc.notes}\n` : ""}[${new Date().toISOString().slice(0, 10)}] repris via chat/agent${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""}`;
         await candDoc.save();
@@ -876,6 +890,7 @@ export async function processSingleCompany(
         statut: "identifiée",
         type: candidatureType,
         lettre: null,
+        letterInstruction,
         notes: `Chat manual ${new Date().toISOString().slice(0, 10)}${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""}`,
         source: "auto-apply",
         date: new Date().toISOString().slice(0, 10),

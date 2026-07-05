@@ -254,7 +254,12 @@ export const TOOLS: ToolDefinition[] = [
         type: {
           type: "string",
           enum: ["stage", "alternance", "cdi"],
-          description: "Type de candidature visé (défaut: stage). Adapte le 1er paragraphe de la lettre.",
+          description: "Type de candidature visé (défaut: alternance). Adapte le 1er paragraphe de la lettre.",
+        },
+        letter_instruction: {
+          type: "string",
+          description:
+            "Consigne libre pour orienter la lettre de motivation (ex: « insiste sur mon profil chef de projet », « mentionne mon expérience React », « ton plus sobre »). Persistée sur la candidature : les régénérations futures la conservent. À remplir dès que l'utilisateur exprime un angle ou une envie particulière.",
         },
         dry_run: {
           type: "boolean",
@@ -416,8 +421,44 @@ export const TOOLS: ToolDefinition[] = [
         localisation: { type: "string", description: "Ville (optionnel)" },
         description: { type: "string", description: "Description de l'offre/l'entreprise (optionnel)" },
         notes: { type: "string", description: "Notes libres (optionnel)" },
+        letter_instruction: {
+          type: "string",
+          description: "Consigne pour orienter la future lettre de motivation de cette candidature (optionnel)",
+        },
       },
       required: ["entreprise"],
+    },
+  },
+  {
+    name: "write_letter",
+    description:
+      "(Ré)génère la lettre de motivation d'une candidature avec une consigne libre (« insiste sur le management », « plus court », « mentionne le produit X ») et retourne le texte complet. La lettre reste basée sur le template (accroche + conclusion fixes, paragraphe central généré). Chaque version est archivée — on peut itérer sans rien perdre. Montre TOUJOURS le résultat à l'utilisateur. Rien n'est envoyé.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: { type: "string", description: "ID MongoDB de la candidature" },
+        instruction: {
+          type: "string",
+          description:
+            "Consigne de rédaction (remplace la précédente et est persistée). Vide = régénère avec la consigne déjà enregistrée.",
+        },
+      },
+      required: ["candidature_id"],
+    },
+  },
+  {
+    name: "set_lettre",
+    description:
+      "Enregistre une lettre de motivation COMPLÈTE rédigée sur mesure (hors template) comme lettre de la candidature — c'est elle qui partira à l'envoi. À utiliser quand tu as rédigé une lettre en conversation avec l'utilisateur et qu'il l'a validée EXPLICITEMENT. Ne jamais appeler sans avoir montré la lettre. La version précédente est archivée (récupérable).",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: { type: "string", description: "ID MongoDB de la candidature" },
+        lettre: { type: "string", description: "Texte complet de la lettre (corps uniquement, sans objet ni signature ajoutés par le mail)" },
+      },
+      required: ["candidature_id", "lettre"],
     },
   },
   {

@@ -69,4 +69,6 @@ export const TOOL_LABELS: Record<string, string> = {
   unblacklist_domain: "Réactiver un domaine écarté",
   create_candidature: "Créer une candidature (sans envoi)",
   delete_candidature: "Supprimer définitivement une candidature",
+  write_letter: "Régénérer la lettre avec consigne",
+  set_lettre: "Enregistrer une lettre sur mesure",
 };

@@ -11,7 +11,7 @@ import { sendAutoReplyApprovalRequest } from "@/lib/telegram";
 import { getSettings } from "@/models/Settings";
 import { resolveCompanyWebsite } from "@/lib/serpapi-resolve";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage } from "@/lib/web-scraper";
-import { scoreCompanyFit } from "@/lib/gemini";
+import { scoreCompanyFit, generateLetterProposal } from "@/lib/gemini";
 import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, AgentMemoryCategory } from "@/models/AgentMemory";
 import { getTelegramState, TelegramState, ITelegramState } from "@/models/TelegramState";
 import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed, SearchResult } from "@/lib/scraper";
@@ -588,9 +588,14 @@ export async function executeTool(toolName: string, input: Record<string, unknow
     case "apply_to_company": {
       const url = String(input.url ?? "").trim();
       if (!url) return fail(400, "url required");
-      const type = (input.type === "alternance" || input.type === "cdi") ? input.type : "stage";
+      // Défaut alternance : c'est la recherche active — et describeAction/le label de
+      // confirmation affichent déjà « alternance » quand type est absent.
+      const type = (input.type === "stage" || input.type === "cdi") ? input.type : "alternance";
       const emailOverride = typeof input.email_override === "string" && input.email_override.trim()
         ? input.email_override.trim()
+        : undefined;
+      const letterInstruction = typeof input.letter_instruction === "string" && input.letter_instruction.trim()
+        ? input.letter_instruction.trim()
         : undefined;
       const decision = await processSingleCompany(url, {
         dryRun: input.dry_run === true,
@@ -599,6 +604,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         allowGenericEmail: input.allow_generic_email === true,
         emailOverride,
         candidatureType: type,
+        letterInstruction,
       });
       const allowGenericEmailUsed = input.allow_generic_email === true;
       const emailFailure = decision.skipReason?.includes("aucun email RH") ?? false;
@@ -631,6 +637,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         type,
         skip_quality_score: input.skip_quality_score === true,
         allow_duplicate: input.allow_duplicate === true,
+        ...(letterInstruction ? { letter_instruction: letterInstruction } : {}),
       };
       let actions: ToolAction[] | undefined;
       if (emailFailure && !allowGenericEmailUsed) {
@@ -920,6 +927,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         statut: "identifiée",
         type,
         lettre: null,
+        letterInstruction: String(input.letter_instruction ?? "").trim(),
         notes: String(input.notes ?? "").trim(),
         source: "manual",
         date: new Date().toISOString().split("T")[0],
@@ -928,6 +936,88 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       return ok({
         ok: true,
         summary: `Candidature créée : ${entreprise} — ${poste} (${type}, statut « identifiée », _id ${String(c._id)}). Rien n'a été envoyé.`,
+      });
+    }
+
+    case "write_letter": {
+      const id = String(input.candidature_id);
+      const c = await Candidature.findById(id);
+      if (!c) return fail(404, "Candidature not found");
+      const instruction = String(input.instruction ?? "").trim();
+      if (instruction) c.letterInstruction = instruction;
+      const type = (c.type === "stage" || c.type === "cdi" ? c.type : "alternance") as "stage" | "alternance" | "cdi";
+      let lettre: string;
+      try {
+        lettre = await generateLetterProposal(
+          c.entreprise,
+          c.aboutText || c.description || "",
+          c.poste,
+          type,
+          c.letterInstruction || undefined
+        );
+      } catch (err) {
+        return fail(502, `Génération échouée : ${err instanceof Error ? err.message : String(err)}`);
+      }
+      c.lettre = lettre;
+      if (c.statut === "identifiée") c.statut = "lettre générée";
+      c.letters = [
+        ...(c.letters ?? []),
+        { version: (c.letters?.length ?? 0) + 1, model: "gemini", content: lettre, generatedAt: new Date(), type },
+      ];
+      await c.save();
+      return ok({
+        ok: true,
+        summary: JSON.stringify({
+          entreprise: c.entreprise,
+          version: c.letters.length,
+          consigne: c.letterInstruction || null,
+          lettre: lettre.slice(0, 3000),
+          hint: "Montre la lettre complète à l'utilisateur et demande si elle lui convient ou ce qu'il veut ajuster (nouvelle consigne → rappelle write_letter). Rien n'a été envoyé.",
+        }),
+      });
+    }
+
+    case "set_lettre": {
+      const id = String(input.candidature_id);
+      // Le PDF ajoute lui-même « Madame, Monsieur, », « Bien cordialement, » et la signature :
+      // on retire les salutations/formules que le modèle aurait incluses malgré la consigne,
+      // sinon elles apparaissent en double dans la lettre envoyée.
+      const rawLettre = String(input.lettre ?? "").trim();
+      const isSalutation = (s: string) => /^(madame,?\s*monsieur|madame|monsieur|messieurs|bonjour)\s*,?$/i.test(s);
+      const isClosing = (s: string) =>
+        /^((bien\s+|très\s+)?cordialement|respectueusement|mohammed\s+hamiani|concepteur\s+d[ée]veloppeur.*|(je\s+vous\s+prie\s+d'agr[ée]er|veuillez\s+(agr[ée]er|recevoir)).*)\s*,?$/i.test(s);
+      const lines = rawLettre.split("\n");
+      while (lines.length && (lines[0].trim() === "" || isSalutation(lines[0].trim()))) lines.shift();
+      while (lines.length && (lines[lines.length - 1].trim() === "" || isClosing(lines[lines.length - 1].trim()))) {
+        lines.pop();
+      }
+      const lettre = lines.join("\n").trim();
+      // Garde-fou : une « lettre » trop courte est presque sûrement un appel raté (résumé,
+      // placeholder) — on refuse plutôt que d'envoyer trois lignes à un recruteur.
+      if (lettre.length < 200) return fail(400, "Lettre trop courte (min 200 caractères) — envoie le texte complet.");
+      const c = await Candidature.findById(id);
+      if (!c) return fail(404, "Candidature not found");
+      c.lettre = lettre;
+      if (c.statut === "identifiée") c.statut = "lettre générée";
+      c.letters = [
+        ...(c.letters ?? []),
+        {
+          version: (c.letters?.length ?? 0) + 1,
+          model: "manual",
+          content: lettre,
+          generatedAt: new Date(),
+          type: (c.type === "stage" || c.type === "cdi" ? c.type : "alternance") as "stage" | "alternance" | "cdi",
+        },
+      ];
+      await c.save();
+      const willBeSent = c.statut === "identifiée" || c.statut === "lettre générée";
+      return ok({
+        ok: true,
+        summary: `Lettre sur mesure enregistrée pour ${c.entreprise} (version ${c.letters.length}, ${lettre.length} caractères).${
+          willBeSent
+            ? " C'est elle qui partira à l'envoi."
+            : ` Attention : statut « ${c.statut} » — cette candidature est déjà partie, aucun envoi automatique ne reprendra cette lettre.`
+        }`,
       });
     }
 

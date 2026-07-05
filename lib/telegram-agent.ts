@@ -38,8 +38,9 @@ export const TELEGRAM_HELP_TEXT = [
   "• « où j'en suis cette semaine ? » (stats du pipeline)",
   "• « cherche des offres alternance dev à Strasbourg »",
   "• « c'est quoi comme boîte Divalto ? ils recrutent ? »",
-  "• « envoie une candidature à https://entreprise.fr »",
-  "• « montre-moi la lettre envoyée à Divalto »",
+  "• « envoie une candidature à https://entreprise.fr en insistant sur mon profil chef de projet »",
+  "• « montre-moi la lettre envoyée à Divalto » / « refais-la plus courte »",
+  "• « écris-moi une lettre sur mesure pour Extia, on en discute d'abord »",
   "• « ajoute une candidature chez X, poste dev fullstack »",
   "• « supprime la candidature test »",
   "• « programme une relance pour Extia lundi 9h »",
@@ -151,11 +152,17 @@ Confirmation des actions : quand tu appelles un tool d'action (schedule_relance,
 
 VÉRITÉ SUR L'ÉTAT (critique) : une action à confirmation n'est PAS faite tant que l'utilisateur n'a pas tapé ✅. Ne dis JAMAIS « c'est envoyé » ou « c'est fait » à ce stade — dis « en attente de ta validation ». Une action n'est réellement faite que quand une ligne « Action exécutée (…) » apparaît dans l'historique. De même, dry_run = simulation : rien n'est envoyé.
 
-Les tools de lecture (list_candidatures, get_candidature, get_lettre, get_stats, list_relances_due, list_pending_approvals, resend_pending_approval, list_cv_sections, get_cv_section, research_company, search_offers, list_reminders, list_blacklist) s'exécutent immédiatement — utilise-les librement quand la question porte sur les données. cancel_reminder et unblacklist_domain s'exécutent aussi immédiatement (micro-actions réversibles) : ne les appelle que sur demande explicite et non ambiguë de l'utilisateur.
+Les tools de lecture (list_candidatures, get_candidature, get_lettre, get_stats, list_relances_due, list_pending_approvals, resend_pending_approval, list_cv_sections, get_cv_section, research_company, search_offers, list_reminders, list_blacklist) s'exécutent immédiatement — utilise-les librement quand la question porte sur les données. cancel_reminder, unblacklist_domain, write_letter et set_lettre s'exécutent aussi immédiatement (rien n'est envoyé, versions archivées) : ne les appelle que sur demande explicite et non ambiguë de l'utilisateur.
 
 Recherche d'offres : « cherche des offres », « il y a quoi en ce moment ? » → search_offers (job boards en direct). Pour suivre une offre qui l'intéresse → create_candidature avec les infos de l'offre (rien n'est envoyé). Bilan/avancement (« où j'en suis ? ») → get_stats. « Montre-moi la lettre » → get_lettre.
 
 Tests d'envoi : apply_to_company persiste la candidature en base MÊME en dry_run. Après un test, propose delete_candidature pour nettoyer, sinon les envois suivants vers la même URL seront bloqués en doublon.
+
+PERSONNALISATION DES LETTRES — c'est ton point fort, sers-t'en :
+- Par défaut la lettre = template fixe + un paragraphe central généré. Dès que l'utilisateur exprime un angle (« insiste sur le management », « parle de leur produit X », « ton plus direct »), passe letter_instruction à apply_to_company/create_candidature, ou write_letter(candidature_id, instruction) sur une candidature existante — montre le résultat, itère jusqu'à ce qu'il valide.
+- Pour une lettre 100 % sur mesure : RÉDIGE-LA TOI-MÊME dans la conversation, en t'appuyant sur ta mémoire (école, parcours, objectifs), le CV (get_cv_section) et l'entreprise (research_company, get_candidature). Propose un angle, discute, ajuste. Une fois qu'il dit explicitement OK → set_lettre pour l'enregistrer : c'est elle qui partira.
+- Workflow candidature soignée : apply_to_company en dry_run → get_lettre → itérations (write_letter ou set_lettre) → envoi réel (la lettre validée est conservée si tu ne repasses pas de letter_instruction et que le type ne change pas).
+- Avant une candidature importante, demande-lui s'il veut un angle particulier plutôt que d'envoyer la lettre standard.
 
 Rappels : schedule_telegram_reminder pour tout ce qui est « rappelle-moi de… » (préparer un entretien, une échéance) — c'est un message Telegram différé, PAS un email. Quand l'utilisateur annonce un entretien : mets à jour le statut (update_candidature_status) ET propose un rappel de préparation la veille.
 
@@ -197,7 +204,7 @@ async function describeAction(tool: string, input: Record<string, unknown>): Pro
   };
   switch (tool) {
     case "apply_to_company":
-      return `Candidature spontanée (${input.type ?? "alternance"}) → ${input.url}${input.email_override ? ` [email : ${input.email_override}]` : ""}${input.dry_run ? " [dry-run]" : ""}`;
+      return `Candidature spontanée (${input.type ?? "alternance"}) → ${input.url}${input.email_override ? ` [email : ${input.email_override}]` : ""}${input.letter_instruction ? ` [lettre : ${String(input.letter_instruction).slice(0, 60)}]` : ""}${input.dry_run ? " [dry-run]" : ""}`;
     case "send_relance_now":
       return `Envoyer une relance maintenant à ${await entrepriseOf()}`;
     case "schedule_relance":
@@ -216,7 +223,7 @@ async function describeAction(tool: string, input: Record<string, unknown>): Pro
       // Mêmes coercitions que le runner : le label validé par ✅ doit décrire ce qui sera créé.
       const type = input.type === "stage" || input.type === "cdi" ? input.type : "alternance";
       const poste = String(input.poste ?? "").trim() || "Candidature spontanée";
-      return `Créer la candidature ${input.entreprise} — ${poste} (${type}, sans envoi)`;
+      return `Créer la candidature ${input.entreprise} — ${poste} (${type}, sans envoi)${input.letter_instruction ? ` [lettre : ${String(input.letter_instruction).slice(0, 60)}]` : ""}`;
     }
     case "delete_candidature": {
       const id = String(input.candidature_id ?? "");

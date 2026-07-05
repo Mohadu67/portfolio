@@ -60,4 +60,13 @@ export const TOOL_LABELS: Record<string, string> = {
   list_cv_sections: "Lister les sections du CV",
   get_cv_section: "Lire une section du CV",
   apply_to_company: "Envoyer une candidature à une entreprise",
+  search_offers: "Chercher des offres sur les job boards",
+  get_lettre: "Lire la lettre de motivation",
+  get_stats: "Statistiques du pipeline",
+  list_reminders: "Lister les rappels programmés",
+  cancel_reminder: "Annuler un rappel",
+  list_blacklist: "Lister les domaines écartés",
+  unblacklist_domain: "Réactiver un domaine écarté",
+  create_candidature: "Créer une candidature (sans envoi)",
+  delete_candidature: "Supprimer définitivement une candidature",
 };

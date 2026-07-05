@@ -837,25 +837,51 @@ export async function processSingleCompany(
       }
     }
 
-    // 5. Création Candidature en DB (statut "identifiée", lettre nulle — applyToExistingCandidature comble).
+    // 5. Création OU réutilisation de la Candidature en DB (statut "identifiée", lettre nulle —
+    // applyToExistingCandidature comble). L'index unique sur url ferait échouer (E11000) un run
+    // réel qui suit un dry-run ou un allowDuplicate sur la même URL : le dry-run persiste le doc.
     const poste = "Candidature spontanée — Développeur fullstack";
-    const candDoc = await Candidature.create({
-      entreprise: entrepriseName,
-      poste,
-      plateforme: "Web",
-      localisation: "",
-      url: cleanUrl,
-      description: (scraped.description || "").slice(0, 500),
-      email: bestEmail.email,
-      aboutText: scraped.aboutText,
-      statut: "identifiée",
-      type: candidatureType,
-      lettre: null,
-      notes: `Chat manual ${new Date().toISOString().slice(0, 10)}${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""}`,
-      source: "auto-apply",
-      date: new Date().toISOString().slice(0, 10),
-      letters: [],
-    });
+    let candDoc = await Candidature.findOne({ url: cleanUrl });
+    if (candDoc) {
+      // Réutilisation réservée aux docs pas encore partis : réutiliser une candidature
+      // postulée/en entretien re-enverrait un mail (allowDuplicate bypasse l'étape 1) et
+      // dispatchCandidature écraserait son statut réel.
+      if (candDoc.statut !== "identifiée" && candDoc.statut !== "lettre générée") {
+        decision.candidatureId = String(candDoc._id);
+        decision.skipReason = `une candidature existe déjà pour cette URL (${candDoc.entreprise}, statut « ${candDoc.statut} ») — supprime-la ou gère-la à la main avant de réessayer.`;
+        return decision;
+      }
+      // En dry-run on ne touche pas au doc existant : une simulation ne doit pas écraser
+      // l'email, effacer la lettre ni polluer les notes d'une candidature réelle.
+      if (!opts.dryRun) {
+        candDoc.email = bestEmail.email;
+        candDoc.aboutText = scraped.aboutText || candDoc.aboutText;
+        // Lettre générée pour un autre type → obsolète : on force la régénération
+        // (l'historique letters[] conserve les anciennes versions).
+        if (candDoc.type !== candidatureType) candDoc.lettre = null;
+        candDoc.type = candidatureType;
+        candDoc.notes = `${candDoc.notes ? `${candDoc.notes}\n` : ""}[${new Date().toISOString().slice(0, 10)}] repris via chat/agent${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""}`;
+        await candDoc.save();
+      }
+    } else {
+      candDoc = await Candidature.create({
+        entreprise: entrepriseName,
+        poste,
+        plateforme: "Web",
+        localisation: "",
+        url: cleanUrl,
+        description: (scraped.description || "").slice(0, 500),
+        email: bestEmail.email,
+        aboutText: scraped.aboutText,
+        statut: "identifiée",
+        type: candidatureType,
+        lettre: null,
+        notes: `Chat manual ${new Date().toISOString().slice(0, 10)}${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""}`,
+        source: "auto-apply",
+        date: new Date().toISOString().slice(0, 10),
+        letters: [],
+      });
+    }
     decision.candidatureId = String(candDoc._id);
 
     // 6. Délègue à la pipeline partagée (lettre + envoi). preScraped évite un double scrape.

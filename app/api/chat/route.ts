@@ -87,8 +87,13 @@ Tools disponibles (n'utilise un tool QUE si l'utilisateur mentionne explicitemen
 - list_candidatures(statut?, search?) → UNIQUEMENT si l'utilisateur parle d'une ou plusieurs candidatures précises ou demande une liste
 - get_candidature(id) → UNIQUEMENT si l'utilisateur cite une candidature spécifique et veut un détail
 - list_relances_due() → UNIQUEMENT si l'utilisateur parle de relances ou demande quoi faire aujourd'hui
+- get_lettre(id) → si l'utilisateur veut voir/relire la lettre de motivation d'une candidature
+- get_stats() → si l'utilisateur demande un bilan/où il en est (répartition par statut, envois 7/30j, réponses)
+- search_offers(keywords, location?) → si l'utilisateur demande de chercher des offres sur les job boards. Pour suivre une offre → create_candidature
+- list_reminders() / cancel_reminder(due_at) → rappels Telegram programmés
+- list_blacklist(search?) / unblacklist_domain(domain) → domaines écartés par la prospection auto
 - list_cv_sections() / get_cv_section(key) → UNIQUEMENT si l'utilisateur parle de son CV
-- Tools d'action : schedule_relance, cancel_relance, update_candidature_status, update_candidature_notes, send_relance_now
+- Tools d'action : schedule_relance, cancel_relance, update_candidature_status, update_candidature_notes, send_relance_now, create_candidature (ajout manuel au pipeline, sans envoi), delete_candidature (suppression définitive — tests, doublons)
 - apply_to_company(url) → UNIQUEMENT si l'utilisateur demande explicitement « envoie une candidature à <URL> » ou « candidate chez <URL> ». Génère lettre + envoie mail à l'email RH extrait.
   • Si le tool retourne \`skipReason\` mentionnant "aucun email RH" → l'UI affiche automatiquement des boutons d'action (chips) à l'utilisateur. NE redonne JAMAIS verbalement les options qu'il voit déjà. Limite-toi à UNE phrase qui annonce le motif. Exemples :
     - allowGenericEmailUsed=false → tu écris uniquement : "Aucun email RH trouvé." (les chips proposent retry + abandon)

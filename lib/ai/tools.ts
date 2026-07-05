@@ -318,6 +318,121 @@ export const TOOLS: ToolDefinition[] = [
       required: ["candidature_id", "message"],
     },
   },
+  {
+    name: "search_offers",
+    description:
+      "Recherche d'offres d'emploi EN DIRECT sur les job boards (JSearch, Adzuna, France Travail, Indeed) par mots-clés + localisation. Dédoublonne les résultats et indique si l'offre est déjà dans le pipeline. Lecture seule — ne crée rien en base. À utiliser quand l'utilisateur demande « cherche des offres », « il y a quoi comme alternances dev en ce moment ? ». Pour suivre une offre trouvée : create_candidature.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        keywords: { type: "string", description: "Mots-clés de recherche (ex: 'développeur fullstack alternance')" },
+        location: { type: "string", description: "Ville/région (défaut : Strasbourg)" },
+        limit: { type: "number", description: "Nombre max de résultats après dédoublonnage (défaut 10, max 20)" },
+      },
+      required: ["keywords"],
+    },
+  },
+  {
+    name: "get_lettre",
+    description:
+      "Récupère le texte complet de la lettre de motivation générée pour une candidature, plus le dernier email envoyé (destinataire, sujet, statut). À utiliser quand l'utilisateur veut voir/relire la lettre ou vérifier ce qui est parti (« montre-moi la lettre », « qu'est-ce que tu as envoyé à X ? »).",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: { type: "string", description: "ID MongoDB de la candidature" },
+      },
+      required: ["candidature_id"],
+    },
+  },
+  {
+    name: "get_stats",
+    description:
+      "Statistiques du pipeline de candidatures : total et répartition par statut, envois sur 7 et 30 jours, réponses reçues, relances programmées, auto-réponses en attente de validation, rappels à venir. À utiliser pour « où j'en suis ? », « bilan de la semaine », « ça avance ? ».",
+    requiresConfirmation: false,
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_reminders",
+    description:
+      "Liste les rappels Telegram programmés non encore envoyés (message + date). À utiliser quand l'utilisateur demande ses rappels ou avant d'en annuler un (cancel_reminder).",
+    requiresConfirmation: false,
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "cancel_reminder",
+    description:
+      "Annule (supprime) un rappel Telegram programmé non envoyé. Utiliser le due_at EXACT retourné par list_reminders.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        due_at: { type: "string", description: "Date ISO exacte du rappel (champ dueAt de list_reminders)" },
+        message_contains: { type: "string", description: "Filtre optionnel : sous-chaîne du message, si plusieurs rappels à la même heure" },
+      },
+      required: ["due_at"],
+    },
+  },
+  {
+    name: "list_blacklist",
+    description:
+      "Liste les domaines écartés par la prospection automatique (raison du skip, score, date de réévaluation). À utiliser pour « pourquoi tu ne proposes plus X ? », « quels domaines sont bloqués ? ». Pour en réactiver un : unblacklist_domain.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        search: { type: "string", description: "Filtre sur le domaine ou le nom d'entreprise (optionnel)" },
+        limit: { type: "number", description: "Nombre max de résultats (défaut 20, max 50)" },
+      },
+    },
+  },
+  {
+    name: "unblacklist_domain",
+    description:
+      "Retire un domaine de la blacklist de prospection : il redevient éligible à l'évaluation automatique et à apply_to_company. Utiliser le domaine exact retourné par list_blacklist.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "Domaine racine sans www (ex: 'divalto.fr')" },
+      },
+      required: ["domain"],
+    },
+  },
+  {
+    name: "create_candidature",
+    description:
+      "Crée manuellement une candidature dans le pipeline SANS rien envoyer. Pour suivre une offre trouvée via search_offers, une entreprise repérée ailleurs (LinkedIn, bouche-à-oreille, salon) ou préparer une cible à travailler. L'envoi se fait ensuite via apply_to_company (site corporate) ou process_pending_candidatures.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        entreprise: { type: "string", description: "Nom de l'entreprise" },
+        poste: { type: "string", description: "Intitulé du poste (défaut : 'Candidature spontanée')" },
+        type: { type: "string", enum: ["stage", "alternance", "cdi"], description: "Type visé (défaut : alternance)" },
+        url: { type: "string", description: "URL de l'offre ou du site entreprise (optionnel — un placeholder unique est généré sinon)" },
+        email: { type: "string", description: "Email de contact si connu (optionnel)" },
+        localisation: { type: "string", description: "Ville (optionnel)" },
+        description: { type: "string", description: "Description de l'offre/l'entreprise (optionnel)" },
+        notes: { type: "string", description: "Notes libres (optionnel)" },
+      },
+      required: ["entreprise"],
+    },
+  },
+  {
+    name: "delete_candidature",
+    description:
+      "Supprime DÉFINITIVEMENT une candidature (test, doublon, entrée erronée). Irréversible : lettre, historique de relances et d'emails perdus. Typiquement pour nettoyer après un test apply_to_company (le dry-run persiste la candidature en base). Ne blackliste PAS le domaine : la prospection automatique pourra re-proposer l'entreprise.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: { type: "string", description: "ID MongoDB de la candidature à supprimer" },
+      },
+      required: ["candidature_id"],
+    },
+  },
 ];
 
 import type { Tool } from "@google/generative-ai";

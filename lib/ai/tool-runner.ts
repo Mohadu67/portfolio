@@ -13,7 +13,10 @@ import { resolveCompanyWebsite } from "@/lib/serpapi-resolve";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage } from "@/lib/web-scraper";
 import { scoreCompanyFit } from "@/lib/gemini";
 import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, AgentMemoryCategory } from "@/models/AgentMemory";
-import { getTelegramState, TelegramState } from "@/models/TelegramState";
+import { getTelegramState, TelegramState, ITelegramState } from "@/models/TelegramState";
+import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed, SearchResult } from "@/lib/scraper";
+import { normalizeUrl } from "@/lib/url-normalize";
+import { ProspectedDomain, IProspectedDomain } from "@/models/ProspectedDomain";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -684,6 +687,259 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         items: result.items.slice(0, 30),
       });
       return ok({ ok: result.ok, summary });
+    }
+
+    case "search_offers": {
+      const keywords = String(input.keywords ?? "").trim();
+      if (!keywords) return fail(400, "keywords requis");
+      const location = String(input.location ?? "").trim() || "Strasbourg";
+      const limit = Math.min(Math.max(Number(input.limit) || 10, 1), 20);
+
+      // Promise.allSettled : une API en panne/quota ne doit pas faire tomber toute la recherche.
+      const settled = await Promise.allSettled([
+        searchJSearch(keywords, location, limit),
+        searchAdzuna(keywords, location, limit),
+        searchFranceTravail(keywords, location, limit),
+        searchIndeed(keywords, location, limit),
+      ]);
+      const raw: SearchResult[] = settled.flatMap((s) => (s.status === "fulfilled" ? s.value : []));
+
+      // Dédup cross-source par URL normalisée.
+      const seen = new Set<string>();
+      const deduped = raw.filter((r) => {
+        if (!r.url?.trim()) return false;
+        const norm = normalizeUrl(r.url) ?? r.url;
+        if (seen.has(norm)) return false;
+        seen.add(norm);
+        return true;
+      });
+
+      const top = deduped.slice(0, limit);
+      // deja_en_base par URL NORMALISÉE : la même offre revient souvent avec www/utm/slash
+      // en plus — un match exact raterait la candidature déjà suivie. La collection est
+      // petite, on charge toutes les urls plutôt qu'un $in exact faux-négatif.
+      const existing = await Candidature.find({}, { url: 1 }).lean<{ url: string }[]>();
+      const existingNorm = new Set(existing.map((e) => normalizeUrl(e.url) ?? e.url));
+
+      const items = top.map((r) => ({
+        entreprise: r.entreprise,
+        poste: r.poste,
+        localisation: r.localisation,
+        plateforme: r.plateforme,
+        url: r.url,
+        description: (r.description ?? "").slice(0, 140),
+        deja_en_base: existingNorm.has(normalizeUrl(r.url) ?? r.url),
+      }));
+      return ok({
+        ok: true,
+        summary: JSON.stringify({
+          count: items.length,
+          keywords,
+          location,
+          items,
+          // Les fonctions de recherche avalent leurs erreurs (clé API absente, quota) et
+          // renvoient [] : count=0 ne distingue pas « aucune offre » de « sources en panne ».
+          note:
+            items.length === 0
+              ? "0 résultat : peut signifier aucune offre correspondante OU sources indisponibles/non configurées. Ne conclus pas qu'il n'y a rien sur le marché ; propose de réessayer avec d'autres mots-clés."
+              : undefined,
+          hint: "Présente les offres nouvelles (deja_en_base=false) en liste courte numérotée : poste — entreprise (localisation, plateforme). Si l'utilisateur veut en suivre une, appelle create_candidature avec entreprise/poste/url/localisation/description de l'offre.",
+        }),
+      });
+    }
+
+    case "get_lettre": {
+      const id = String(input.candidature_id);
+      const c = await Candidature.findById(id).lean<ICandidature | null>();
+      if (!c) return fail(404, "Candidature not found");
+      const lastEmail = (c.emailsSent ?? []).slice(-1)[0] ?? null;
+      return ok({
+        ok: true,
+        summary: JSON.stringify({
+          entreprise: c.entreprise,
+          poste: c.poste,
+          statut: c.statut,
+          email: c.email || null,
+          lettre: c.lettre ? c.lettre.slice(0, 3000) : null,
+          note: c.lettre ? undefined : "Aucune lettre générée pour cette candidature.",
+          dernierEmail: lastEmail
+            ? {
+                date: lastEmail.date instanceof Date ? lastEmail.date.toISOString() : String(lastEmail.date),
+                to: lastEmail.to,
+                subject: lastEmail.subject,
+                type: lastEmail.type,
+                status: lastEmail.status,
+              }
+            : null,
+        }),
+      });
+    }
+
+    case "get_stats": {
+      const sentSince = (d: Date) => ({
+        emailsSent: { $elemMatch: { type: "candidature", status: "sent", date: { $gte: d } } },
+      });
+      const chatId = process.env.TELEGRAM_CHAT_ID;
+      const [byStatut, sent7, sent30, recus30, relancesProgrammees, pendingApprovals, tgState] = await Promise.all([
+        Candidature.aggregate<{ _id: string; n: number }>([{ $group: { _id: "$statut", n: { $sum: 1 } } }]),
+        Candidature.countDocuments(sentSince(new Date(Date.now() - 7 * 86_400_000))),
+        Candidature.countDocuments(sentSince(new Date(Date.now() - 30 * 86_400_000))),
+        Candidature.countDocuments({ emailsReceived: { $elemMatch: { date: { $gte: new Date(Date.now() - 30 * 86_400_000) } } } }),
+        Candidature.countDocuments({ relanceHistory: { $elemMatch: { status: "programmée" } } }),
+        Candidature.countDocuments({ autoReplies: { $elemMatch: { approvalStatus: "pending" } } }),
+        chatId
+          ? TelegramState.findOne({ chatId }, { reminders: 1 }).lean<ITelegramState | null>()
+          : Promise.resolve(null),
+      ]);
+      const parStatut: Record<string, number> = {};
+      let total = 0;
+      for (const s of byStatut) {
+        parStatut[s._id] = s.n;
+        total += s.n;
+      }
+      return ok({
+        ok: true,
+        summary: JSON.stringify({
+          total,
+          parStatut,
+          candidaturesEnvoyees7j: sent7,
+          candidaturesEnvoyees30j: sent30,
+          // Tout email entrant compte (accusé, refus, entretien…) — pas un taux de réponse positif.
+          entreprisesAvecEmailRecu30j: recus30,
+          candidaturesAvecRelanceProgrammee: relancesProgrammees,
+          autoReponsesEnAttente: pendingApprovals,
+          rappelsAVenir: ((tgState as ITelegramState | null)?.reminders ?? []).filter((r) => !r.sent).length,
+        }),
+      });
+    }
+
+    case "list_reminders": {
+      const chatId = process.env.TELEGRAM_CHAT_ID;
+      if (!chatId) return fail(500, "TELEGRAM_CHAT_ID non configuré");
+      const state = await TelegramState.findOne({ chatId }, { reminders: 1 }).lean<ITelegramState | null>();
+      const items = (state?.reminders ?? [])
+        .filter((r) => !r.sent)
+        .map((r) => ({
+          message: r.message,
+          dueAt: r.dueAt instanceof Date ? r.dueAt.toISOString() : String(r.dueAt),
+          overdue: new Date(r.dueAt).getTime() < Date.now(),
+        }))
+        .sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+      return ok({ ok: true, summary: JSON.stringify({ count: items.length, items }) });
+    }
+
+    case "cancel_reminder": {
+      const chatId = process.env.TELEGRAM_CHAT_ID;
+      if (!chatId) return fail(500, "TELEGRAM_CHAT_ID non configuré");
+      const due = new Date(String(input.due_at ?? ""));
+      if (Number.isNaN(due.getTime())) return fail(400, "due_at invalide (ISO attendu, cf. list_reminders)");
+      const messageContains = String(input.message_contains ?? "").trim();
+      const baseCriteria: Record<string, unknown> = { sent: false };
+      if (messageContains) baseCriteria.message = { $regex: escapeRegex(messageContains), $options: "i" };
+      // Match exact d'abord ; fallback ±60 s ensuite (le modèle reformule parfois l'ISO :
+      // offset, millisecondes arrondies). Le fallback séparé évite d'emporter un rappel
+      // voisin quand l'exact suffit.
+      let res = await TelegramState.updateOne({ chatId }, { $pull: { reminders: { ...baseCriteria, dueAt: due } } });
+      if (res.modifiedCount === 0) {
+        res = await TelegramState.updateOne(
+          { chatId },
+          {
+            $pull: {
+              reminders: {
+                ...baseCriteria,
+                dueAt: { $gte: new Date(due.getTime() - 60_000), $lte: new Date(due.getTime() + 60_000) },
+              },
+            },
+          }
+        );
+      }
+      if (res.modifiedCount === 0) {
+        return fail(404, "Aucun rappel non envoyé à cette date (utilise list_reminders pour le dueAt exact)");
+      }
+      return ok({ ok: true, summary: `Rappel(s) du ${due.toLocaleString("fr-FR", { timeZone: "Europe/Paris" })} annulé(s)` });
+    }
+
+    case "list_blacklist": {
+      const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 50);
+      const search = String(input.search ?? "").trim();
+      const query: Record<string, unknown> = {};
+      if (search) {
+        const rx = new RegExp(escapeRegex(search), "i");
+        query.$or = [{ domain: rx }, { entreprise: rx }];
+      }
+      const docs = await ProspectedDomain.find(query)
+        .sort({ lastEvaluatedAt: -1 })
+        .limit(limit)
+        .lean<IProspectedDomain[]>();
+      const items = docs.map((d) => ({
+        domain: d.domain,
+        entreprise: d.entreprise ?? null,
+        skipReason: d.skipReason,
+        skipDetail: (d.skipDetail ?? "").slice(0, 120) || null,
+        companyScore: d.companyScore ?? null,
+        lastEvaluatedAt: d.lastEvaluatedAt instanceof Date ? d.lastEvaluatedAt.toISOString() : String(d.lastEvaluatedAt),
+        reevaluableApres: d.nextEvaluateAt instanceof Date ? d.nextEvaluateAt.toISOString() : String(d.nextEvaluateAt),
+      }));
+      return ok({ ok: true, summary: JSON.stringify({ count: items.length, items }) });
+    }
+
+    case "unblacklist_domain": {
+      const domain = String(input.domain ?? "").trim().toLowerCase().replace(/^www\./, "");
+      if (!domain) return fail(400, "domain requis");
+      const doc = await ProspectedDomain.findOneAndDelete({ domain }).lean<IProspectedDomain | null>();
+      if (!doc) return fail(404, `Domaine « ${domain} » introuvable dans la blacklist (utilise list_blacklist)`);
+      return ok({
+        ok: true,
+        summary: `Domaine ${domain} retiré de la blacklist (raison précédente : ${doc.skipReason}) — il redevient éligible à la prospection.`,
+      });
+    }
+
+    case "create_candidature": {
+      const entreprise = String(input.entreprise ?? "").trim();
+      if (!entreprise) return fail(400, "entreprise requise");
+      const poste = String(input.poste ?? "").trim() || "Candidature spontanée";
+      const type = input.type === "stage" || input.type === "cdi" ? input.type : "alternance";
+      // Même convention que POST /api/candidatures : url unique requise par le schéma →
+      // placeholder "manual://" horodaté quand on n'a pas d'annonce.
+      const cleanUrl = typeof input.url === "string" && input.url.trim() ? input.url.trim() : null;
+      const finalUrl =
+        cleanUrl ??
+        `manual://${entreprise.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "candidature"}-${Date.now()}`;
+      const existing = await Candidature.findOne({ url: finalUrl }, { entreprise: 1, statut: 1 }).lean<ICandidature | null>();
+      if (existing) {
+        return fail(409, `Une candidature existe déjà avec cette URL : ${existing.entreprise} (statut « ${existing.statut} », _id ${String(existing._id)})`);
+      }
+      const c = await Candidature.create({
+        entreprise,
+        poste,
+        plateforme: "Web",
+        localisation: String(input.localisation ?? "").trim(),
+        url: finalUrl,
+        description: String(input.description ?? "").slice(0, 500),
+        email: String(input.email ?? "").trim(),
+        statut: "identifiée",
+        type,
+        lettre: null,
+        notes: String(input.notes ?? "").trim(),
+        source: "manual",
+        date: new Date().toISOString().split("T")[0],
+        letters: [],
+      });
+      return ok({
+        ok: true,
+        summary: `Candidature créée : ${entreprise} — ${poste} (${type}, statut « identifiée », _id ${String(c._id)}). Rien n'a été envoyé.`,
+      });
+    }
+
+    case "delete_candidature": {
+      const id = String(input.candidature_id);
+      const c = await Candidature.findByIdAndDelete(id).lean<ICandidature | null>();
+      if (!c) return fail(404, "Candidature not found");
+      const sentCount = (c.emailsSent ?? []).length;
+      return ok({
+        ok: true,
+        summary: `Candidature supprimée : ${c.entreprise} — ${c.poste} (statut « ${c.statut} »${sentCount ? `, ${sentCount} email(s) dans l'historique perdu(s)` : ""}).`,
+      });
     }
 
     default:

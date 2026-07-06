@@ -4,8 +4,9 @@ import { getSettings } from "@/models/Settings";
 import { recordCronRun } from "@/lib/cron-log";
 import { runProcessPending } from "@/lib/pending-processor";
 
-// F3 — Process pending : reprend les candidatures "identifiée" et tente l'envoi auto en mode safe
-// (force=false → skip si aboutText < 100 chars).
+// F3 — Process pending : reprend les candidatures "identifiée". Avec prospectInteractive (défaut),
+// chaque cible est PROPOSÉE sur Telegram (boutons ✅/❌) au lieu d'être envoyée — l'envoi réel ne
+// part qu'après le ✅. Sinon, envoi auto en mode safe (force=false → skip si aboutText < 100 chars).
 //
 // Auth : Authorization: Bearer $CRON_SECRET
 // Schedule VPS (quotidien, ex. 8h30) :
@@ -43,15 +44,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: reason });
     }
 
-    const result = await runProcessPending({ force: false, dryRun });
+    const result = await runProcessPending({ force: false, dryRun, interactive: true });
+    const proposed = result.items.filter((i) => i.decision === "proposed").length;
     await recordCronRun({
       name: "process-pending",
       startedAt,
       status: result.errors.length > 0 ? "failed" : "success",
       processed: result.processed,
-      succeeded: result.applied,
+      succeeded: result.applied + proposed,
       failed: result.errors.length,
-      summary: `${result.processed} traité(s) · ${result.applied} envoyée(s) · ${result.skipped} skip`,
+      summary: `${result.processed} traité(s) · ${proposed} proposée(s) · ${result.applied} envoyée(s) · ${result.skipped} skip`,
       error: result.errors[0] ?? null,
     });
     return NextResponse.json(result);

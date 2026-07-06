@@ -22,6 +22,13 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Gemini émet parfois les booléens de tool en STRING ("true"). Un `=== true` strict raterait
+// le flag — dramatique pour dry_run : l'utilisateur confirmerait un label « [dry-run] » qui
+// déclenche un envoi réel. À utiliser pour TOUT flag booléen venant des args du modèle.
+export function isTruthyFlag(v: unknown): boolean {
+  return v === true || (typeof v === "string" && v.toLowerCase() === "true");
+}
+
 // Motif insensible aux accents : chaque voyelle (et c/ç) matche toutes ses variantes.
 // Les classes insérées ne contiennent pas les lettres des passes suivantes → une seule passe
 // par famille suffit, pas de réécriture en cascade.
@@ -598,15 +605,15 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         ? input.letter_instruction.trim()
         : undefined;
       const decision = await processSingleCompany(url, {
-        dryRun: input.dry_run === true,
-        skipQualityScore: input.skip_quality_score === true,
-        allowDuplicate: input.allow_duplicate === true,
-        allowGenericEmail: input.allow_generic_email === true,
+        dryRun: isTruthyFlag(input.dry_run),
+        skipQualityScore: isTruthyFlag(input.skip_quality_score),
+        allowDuplicate: isTruthyFlag(input.allow_duplicate),
+        allowGenericEmail: isTruthyFlag(input.allow_generic_email),
         emailOverride,
         candidatureType: type,
         letterInstruction,
       });
-      const allowGenericEmailUsed = input.allow_generic_email === true;
+      const allowGenericEmailUsed = isTruthyFlag(input.allow_generic_email);
       const emailFailure = decision.skipReason?.includes("aucun email RH") ?? false;
       const summary = JSON.stringify({
         decision: decision.decision,
@@ -635,8 +642,8 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       const baseInput = {
         url,
         type,
-        skip_quality_score: input.skip_quality_score === true,
-        allow_duplicate: input.allow_duplicate === true,
+        skip_quality_score: isTruthyFlag(input.skip_quality_score),
+        allow_duplicate: isTruthyFlag(input.allow_duplicate),
         ...(letterInstruction ? { letter_instruction: letterInstruction } : {}),
       };
       let actions: ToolAction[] | undefined;
@@ -683,8 +690,8 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       const ids = Array.isArray(input.ids)
         ? (input.ids as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
         : undefined;
-      const force = input.force === true;
-      const dryRun = input.dry_run === true;
+      const force = isTruthyFlag(input.force);
+      const dryRun = isTruthyFlag(input.dry_run);
       const result = await runProcessPending({ ids, force, dryRun });
       const summary = JSON.stringify({
         processed: result.processed,

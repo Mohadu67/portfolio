@@ -17,7 +17,8 @@ import { Candidature } from "@/models/Candidature";
 import { getSettingsDoc } from "@/models/Settings";
 import { scrapeCompanyWebsite } from "./web-scraper";
 import { resolveCompanyWebsite } from "./serpapi-resolve";
-import { applyToExistingCandidature, countAutoAppliedSince } from "./auto-apply";
+import { applyToExistingCandidature, countAutoAppliedSince, proposeCandidatureTelegram } from "./auto-apply";
+import { isTelegramConfigured } from "./telegram";
 
 export interface ProcessPendingResult {
   ok: boolean;
@@ -28,7 +29,7 @@ export interface ProcessPendingResult {
   items: Array<{
     candidatureId: string;
     entreprise: string;
-    decision: "applied" | "would_apply" | "skipped" | "errored";
+    decision: "applied" | "would_apply" | "proposed" | "skipped" | "errored";
     skipReason?: string;
     error?: string;
   }>;
@@ -41,6 +42,10 @@ export interface RunProcessPendingOptions {
   dryRun?: boolean;
   // Sous-ensemble d'IDs à traiter. Si vide → toutes les candidatures "identifiée".
   ids?: string[];
+  // Réservé au CRON : propose chaque cible sur Telegram (✅/❌) au lieu d'envoyer, si
+  // prospectInteractive est actif. Les appels explicites (✅ d'une proposition, tool de
+  // l'agent, bouton dashboard) ne le passent pas → envoi réel.
+  interactive?: boolean;
 }
 
 // Best-effort scrape avec timeout court (5s) pour cas A : on a déjà un email, on veut juste
@@ -92,8 +97,18 @@ export async function runProcessPending(opts: RunProcessPendingOptions = {}): Pr
     items: [],
   };
 
+  // Mode interactif (cron) : proposer sur Telegram au lieu d'envoyer. Calculé AVANT le
+  // check budget — les propositions ne consomment pas le budget Gmail (l'envoi réel du ✅
+  // repassera par ici et le re-vérifiera), un budget saturé ne doit pas les bloquer.
+  const interactive =
+    opts.interactive === true &&
+    auto.prospectInteractive !== false &&
+    isTelegramConfigured() &&
+    !dryRun &&
+    !(opts.ids && opts.ids.length > 0);
+
   let remainingBudget = maxPerDay;
-  if (!dryRun) {
+  if (!dryRun && !interactive) {
     const recentlySent = await countAutoAppliedSince(24 * 60 * 60 * 1000);
     remainingBudget = Math.max(0, maxPerDay - recentlySent);
     if (remainingBudget === 0) {
@@ -130,6 +145,55 @@ export async function runProcessPending(opts: RunProcessPendingOptions = {}): Pr
   }
   const docs = await Candidature.find(filter, { _id: 1 }).lean<{ _id: unknown }[]>();
   const candidateIds = docs.map((d) => String(d._id));
+
+  // Branche interactive : la candidature reste « identifiée » et sort de l'éligibilité des
+  // prochains runs tant que la décision est en attente (exclusion origin "prospection" +
+  // status "pending" ci-dessus).
+  if (interactive) {
+    // Cap anti-spam : un gros backlog ne doit pas déverser des dizaines de messages à
+    // boutons d'un coup — le reste sera proposé aux runs suivants.
+    const MAX_PROPOSALS_PER_RUN = 10;
+    for (const id of candidateIds.slice(0, MAX_PROPOSALS_PER_RUN)) {
+      const doc = await Candidature.findById(id, {
+        entreprise: 1,
+        poste: 1,
+        plateforme: 1,
+        localisation: 1,
+        email: 1,
+        url: 1,
+      }).lean<{ entreprise: string; poste: string; plateforme?: string; localisation?: string; email?: string; url?: string } | null>();
+      if (!doc) continue;
+      try {
+        await proposeCandidatureTelegram({
+          candidatureId: id,
+          label: `Candidater chez ${doc.entreprise} — ${doc.poste}`,
+          domain: null,
+          recap: [
+            `📋 Cible en attente, patron : ${doc.entreprise}`,
+            `Poste : ${doc.poste}`,
+            ...(doc.plateforme ? [`Source : ${doc.plateforme}${doc.localisation ? ` — ${doc.localisation}` : ""}`] : []),
+            doc.email
+              ? `Email cible : ${doc.email}`
+              : "Email : à résoudre automatiquement (site officiel + scrape)",
+            ...(doc.url && !doc.url.startsWith("manual:") ? [`Annonce : ${doc.url}`] : []),
+            ``,
+            `Je candidate ?`,
+          ].join("\n"),
+        });
+        result.processed++;
+        result.items.push({ candidatureId: id, entreprise: doc.entreprise, decision: "proposed" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        result.errors.push(`${doc.entreprise}: proposition Telegram échouée — ${msg}`);
+        result.items.push({ candidatureId: id, entreprise: doc.entreprise, decision: "errored", error: msg });
+      }
+    }
+    settingsDoc.automation.lastPendingProcessRunAt = new Date();
+    settingsDoc.automation.lastPendingProcessSummary = `${result.processed} proposée(s) sur Telegram · ${Math.max(0, candidateIds.length - result.processed)} restante(s) · ${result.errors.length} erreur(s)`;
+    await settingsDoc.save();
+    result.ok = true;
+    return result;
+  }
 
   for (const id of candidateIds) {
     if (!dryRun && remainingBudget <= 0) {

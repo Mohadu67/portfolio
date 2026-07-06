@@ -607,68 +607,28 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
       // Telegram. ✅ → process_pending_candidatures ciblé (lettre + envoi, via le flux de
       // confirmation de l'agent) ; ❌ → suppression + blacklist du domaine (user_ignored).
       if (interactive) {
-        const chatId = String(process.env.TELEGRAM_CHAT_ID);
-        await getTelegramState(chatId);
-        const token = randomBytes(12).toString("hex");
-        // Purge des actions décidées > 7 j AVANT le push : sans ça le $slice évincerait
-        // des propositions encore actives au profit de vieilles entrées consommées.
-        await TelegramState.updateOne(
-          { chatId },
-          { $pull: { pendingActions: { status: { $ne: "pending" }, decidedAt: { $lt: new Date(Date.now() - 7 * 86_400_000) } } } }
-        );
-        await TelegramState.updateOne(
-          { chatId },
-          {
-            $push: {
-              pendingActions: {
-                $each: [
-                  {
-                    token,
-                    tool: "process_pending_candidatures",
-                    input: { ids: [String(candDoc._id)], force: true },
-                    label: `Candidater chez ${entrepriseName} — ${poste}`,
-                    status: "pending",
-                    origin: "prospection",
-                    candidatureId: String(candDoc._id),
-                    // Domaine racine du SITE de la boîte (pas l'URL de l'offre, qui peut
-                    // être un ATS externe) — utilisé par la blacklist du ❌.
-                    domain: decision.domain,
-                    createdAt: new Date(),
-                    decidedAt: null,
-                  },
-                ],
-                $slice: -30,
-              },
-            },
-          }
-        );
-        const recap = [
-          `🎯 Nouvelle cible, patron : ${entrepriseName}`,
-          `Poste : ${poste}`,
-          `Score fit : ${fit.score.toFixed(2)} — ${fit.reason.slice(0, 180)}`,
-          ...(chosenOffer && offerScore
-            ? [`Offre repérée : ${chosenOffer.title} (match ${offerScore.score.toFixed(2)})`]
-            : ["Candidature spontanée (pas d'offre publiée repérée)"]),
-          `Email cible : ${bestEmail.email}`,
-          `Site : ${company.url}`,
-          ``,
-          `Je candidate ?`,
-        ].join("\n");
-        try {
-          await sendTelegramMessageWithButtons(recap, [
-            [
-              { text: "✅ Candidater", callback_data: `act:ok:${token}` },
-              { text: "❌ Ignorer", callback_data: `act:no:${token}` },
-            ],
-          ]);
-        } catch (tgErr) {
-          // Message jamais parti : on nettoie l'action ET la candidature (proposition jamais
-          // vue → le prochain run re-proposera la cible), sinon action fantôme + candidature
-          // orpheline dans le backlog.
-          await TelegramState.updateOne({ chatId }, { $pull: { pendingActions: { token } } }).catch(() => {});
-          await Candidature.deleteOne({ _id: candDoc._id, statut: "identifiée" }).catch(() => {});
-          throw tgErr;
-        }
+        await proposeCandidatureTelegram({
+          candidatureId: String(candDoc._id),
+          label: `Candidater chez ${entrepriseName} — ${poste}`,
+          // Domaine racine du SITE de la boîte (pas l'URL de l'offre, qui peut être un ATS
+          // externe) — utilisé par la blacklist du ❌.
+          domain: decision.domain,
+          recap: [
+            `🎯 Nouvelle cible, patron : ${entrepriseName}`,
+            `Poste : ${poste}`,
+            `Score fit : ${fit.score.toFixed(2)} — ${fit.reason.slice(0, 180)}`,
+            ...(chosenOffer && offerScore
+              ? [`Offre repérée : ${chosenOffer.title} (match ${offerScore.score.toFixed(2)})`]
+              : ["Candidature spontanée (pas d'offre publiée repérée)"]),
+            `Email cible : ${bestEmail.email}`,
+            `Site : ${company.url}`,
+            ``,
+            `Je candidate ?`,
+          ].join("\n"),
+          // Candidature créée POUR la proposition : si le message Telegram ne part pas, on la
+          // supprime (le prochain run re-proposera la cible), sinon candidature orpheline.
+          deleteCandidatureOnSendFailure: true,
+        });
         decision.decision = "proposed";
         result.proposed++;
         continue;
@@ -728,6 +688,73 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
 // Variante : pas de SerpAPI, pas de rate-limit 24h (l'utilisateur déclenche manuellement),
 // score qualité plus permissif (la cible a été choisie consciemment).
 // Garde-fous conservés : email whitelist + dédup par domaine (sauf override).
+
+// ---------- Proposition Telegram (human-in-the-loop, partagée F1/F2/F3) ----------
+// Propose une cible sur Telegram (boutons ✅ Candidater / ❌ Ignorer) AU LIEU d'envoyer.
+// ✅ → process_pending_candidatures ciblé (lettre + envoi, via le flux de confirmation de
+// l'agent) ; ❌ → suppression de la candidature (si toujours « identifiée ») + blacklist du
+// domaine (user_ignored). La candidature reste « identifiée » et est exclue du cron
+// process-pending tant que la décision est en attente (origin "prospection" + status "pending").
+
+export async function proposeCandidatureTelegram(params: {
+  candidatureId: string;
+  label: string;
+  // Domaine racine à blacklister sur ❌ ; null → dérivé de l'url de la candidature au moment du ❌.
+  domain: string | null;
+  recap: string;
+  // Si le message Telegram ne part pas : true → supprime la candidature (créée pour la
+  // proposition, le prochain run la re-proposera) ; false → la laisse dans le backlog.
+  deleteCandidatureOnSendFailure?: boolean;
+}): Promise<void> {
+  const chatId = String(process.env.TELEGRAM_CHAT_ID);
+  await getTelegramState(chatId);
+  const token = randomBytes(12).toString("hex");
+  // Purge des actions décidées > 7 j AVANT le push : sans ça le $slice évincerait
+  // des propositions encore actives au profit de vieilles entrées consommées.
+  await TelegramState.updateOne(
+    { chatId },
+    { $pull: { pendingActions: { status: { $ne: "pending" }, decidedAt: { $lt: new Date(Date.now() - 7 * 86_400_000) } } } }
+  );
+  await TelegramState.updateOne(
+    { chatId },
+    {
+      $push: {
+        pendingActions: {
+          $each: [
+            {
+              token,
+              tool: "process_pending_candidatures",
+              input: { ids: [params.candidatureId], force: true },
+              label: params.label,
+              status: "pending",
+              origin: "prospection",
+              candidatureId: params.candidatureId,
+              domain: params.domain,
+              createdAt: new Date(),
+              decidedAt: null,
+            },
+          ],
+          $slice: -30,
+        },
+      },
+    }
+  );
+  try {
+    await sendTelegramMessageWithButtons(params.recap, [
+      [
+        { text: "✅ Candidater", callback_data: `act:ok:${token}` },
+        { text: "❌ Ignorer", callback_data: `act:no:${token}` },
+      ],
+    ]);
+  } catch (tgErr) {
+    // Message jamais parti : on nettoie l'action fantôme, et la candidature si demandé.
+    await TelegramState.updateOne({ chatId }, { $pull: { pendingActions: { token } } }).catch(() => {});
+    if (params.deleteCandidatureOnSendFailure) {
+      await Candidature.deleteOne({ _id: params.candidatureId, statut: "identifiée" }).catch(() => {});
+    }
+    throw tgErr;
+  }
+}
 
 export interface ProcessSingleOptions {
   dryRun?: boolean;

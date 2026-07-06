@@ -27,34 +27,43 @@ async function callGeminiNative(
   options: { model?: string; temperature?: number; maxOutputTokens?: number; jsonMode?: boolean } = {},
 ): Promise<string> {
   const modelName = options.model ?? DEFAULT_MODEL;
-  const generationConfig: GenerationConfig = {
-    temperature: options.temperature ?? 0.7,
-    maxOutputTokens: options.maxOutputTokens ?? 2048,
-  };
-  if (options.jsonMode) {
-    generationConfig.responseMimeType = "application/json";
-  }
+  const baseMax = options.maxOutputTokens ?? 4096;
 
-  const model = getGenAI().getGenerativeModel({
-    model: modelName,
-    ...(systemPrompt ? { systemInstruction: systemPrompt } : {}),
-    generationConfig,
-  });
-  const result = await model.generateContent(userPrompt);
+  // gemini-2.5-flash consomme un "thinking budget" sur maxOutputTokens : un prompt qui fait
+  // beaucoup réfléchir (ex: consigne de lettre riche) peut vider le budget avant la sortie
+  // utile, qui arrive alors tronquée — souvent en plein milieu d'un JSON (ex: `"reason": "L'`).
+  // Plutôt que d'échouer directement, on retente UNE fois avec un budget doublé : le cap ne
+  // coûte rien, seuls les tokens réellement produits sont facturés.
+  let lastPartial = "";
+  for (const maxOutputTokens of [baseMax, baseMax * 2]) {
+    const generationConfig: GenerationConfig = {
+      temperature: options.temperature ?? 0.7,
+      maxOutputTokens,
+    };
+    if (options.jsonMode) {
+      generationConfig.responseMimeType = "application/json";
+    }
 
-  // gemini-2.5-flash consomme un "thinking budget" sur maxOutputTokens. Si le thinking
-  // bouffe le quota, la sortie utile est tronquée — souvent en plein milieu d'un JSON
-  // (ex: `"reason": "L'`). On détecte explicitement ce cas pour éviter de retourner du texte
-  // partiel qui pète plus loin avec un message d'erreur opaque ("non-JSON response").
-  const finishReason = result.response.candidates?.[0]?.finishReason;
-  if (finishReason === FinishReason.MAX_TOKENS) {
-    const partial = result.response.text().slice(0, 200);
-    throw new Error(
-      `Gemini truncated by MAX_TOKENS (maxOutputTokens=${generationConfig.maxOutputTokens}). ` +
-      `Augmente maxOutputTokens ou raccourcis le prompt. Partial: ${partial}`,
-    );
+    const model = getGenAI().getGenerativeModel({
+      model: modelName,
+      ...(systemPrompt ? { systemInstruction: systemPrompt } : {}),
+      generationConfig,
+    });
+    const result = await model.generateContent(userPrompt);
+
+    const finishReason = result.response.candidates?.[0]?.finishReason;
+    if (finishReason !== FinishReason.MAX_TOKENS) {
+      return result.response.text();
+    }
+    lastPartial = result.response.text().slice(0, 200);
+    if (maxOutputTokens === baseMax) {
+      console.warn(`[gemini] MAX_TOKENS à ${maxOutputTokens} tokens — retry avec budget doublé`);
+    }
   }
-  return result.response.text();
+  throw new Error(
+    `Gemini truncated by MAX_TOKENS (maxOutputTokens=${baseMax * 2}, après retry). ` +
+    `Raccourcis le prompt ou la consigne. Partial: ${lastPartial}`,
+  );
 }
 
 // Compat : ancien helper qui appelait l'API. Maintenant aliasé sur le SDK natif.

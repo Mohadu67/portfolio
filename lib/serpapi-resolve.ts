@@ -52,6 +52,13 @@ function isBlocked(host: string): boolean {
   return false;
 }
 
+// Disjoncteur quota : quand SerpAPI répond 429 « run out of searches », TOUS les appels
+// suivants échoueraient pareil jusqu'au renouvellement du plan — inutile de marteler l'API
+// à chaque run de cron (bruit de logs + latence). In-memory : reset au redémarrage, et
+// réessai automatique après le délai.
+const QUOTA_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 h
+let quotaExhaustedUntil = 0;
+
 export async function resolveCompanyWebsite(
   entreprise: string,
   location: string = ""
@@ -61,6 +68,12 @@ export async function resolveCompanyWebsite(
   const name = entreprise.trim();
   if (!name) return null;
 
+  if (Date.now() < quotaExhaustedUntil) {
+    throw new Error(
+      `SerpAPI quota épuisé (réessai automatique après ${new Date(quotaExhaustedUntil).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris" })})`
+    );
+  }
+
   const q = location.trim()
     ? `"${name}" site officiel ${location.trim()}`
     : `"${name}" site officiel`;
@@ -68,6 +81,9 @@ export async function resolveCompanyWebsite(
   const res = await fetch(url);
   if (!res.ok) {
     const txt = await res.text();
+    if (res.status === 429) {
+      quotaExhaustedUntil = Date.now() + QUOTA_COOLDOWN_MS;
+    }
     throw new Error(`SerpAPI ${res.status}: ${txt.slice(0, 200)}`);
   }
   const data = (await res.json()) as {

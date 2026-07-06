@@ -47,9 +47,9 @@ export async function POST(request: NextRequest) {
       startedAt,
       status: result.errors.length > 0 ? "failed" : "success",
       processed: result.queriesProcessed,
-      succeeded: result.applied,
+      succeeded: result.applied + result.proposed,
       failed: result.errors.length,
-      summary: `${result.queriesProcessed} query · ${result.offresInserted} offres · ${result.applied} envoyée(s) · ${result.skipped} skip`,
+      summary: `${result.queriesProcessed} query · ${result.offresInserted} offres · ${result.proposed} proposée(s) · ${result.applied} envoyée(s) · ${result.skipped} skip`,
       error: result.errors[0] ?? null,
     });
     return NextResponse.json(result);

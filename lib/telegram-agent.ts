@@ -11,7 +11,7 @@ import { recordProspectSkip } from "@/models/ProspectedDomain";
 import { getTelegramState, ITelegramPendingAction, TelegramState } from "@/models/TelegramState";
 import { buildContextLite } from "./ai/context";
 import { toolsForGemini, getTool } from "./ai/tools";
-import { executeTool, ToolRunResult } from "./ai/tool-runner";
+import { executeTool, isTruthyFlag, ToolRunResult } from "./ai/tool-runner";
 import {
   sendTelegramMessage,
   sendTelegramMessageWithButtons,
@@ -148,7 +148,7 @@ MÉMOIRE PROACTIVE : dès que la conversation révèle une info personnelle DURA
 
 Brièveté : 1 phrase plutôt que 3. Pas d'introduction ni de conclusion bavarde. N'annonce pas ce que tu vas faire — fais-le.
 
-Confirmation des actions : quand tu appelles un tool d'action (schedule_relance, cancel_relance, update_candidature_status, update_candidature_notes, send_relance_now, apply_to_company, process_pending_candidatures, create_candidature, delete_candidature), le système envoie AUTOMATIQUEMENT des boutons ✅/❌ à l'utilisateur. NE demande JAMAIS de confirmation dans le texte, appelle directement le tool. Après l'appel, contente-toi d'annoncer en une phrase ce qui attend sa confirmation.
+Confirmation des actions : quand tu appelles un tool d'action (schedule_relance, cancel_relance, update_candidature_status, update_candidature_notes, send_relance_now, apply_to_company, process_pending_candidatures, create_candidature, delete_candidature), le système envoie AUTOMATIQUEMENT des boutons ✅/❌ à l'utilisateur. NE demande JAMAIS de confirmation dans le texte, appelle directement le tool. Après l'appel, contente-toi d'annoncer en une phrase ce qui attend sa confirmation. Exception : apply_to_company et process_pending_candidatures avec dry_run=true s'exécutent IMMÉDIATEMENT (simulation, rien n'est envoyé — pas de boutons) ; tu reçois le résultat directement.
 
 VÉRITÉ SUR L'ÉTAT (critique) : une action à confirmation n'est PAS faite tant que l'utilisateur n'a pas tapé ✅. Ne dis JAMAIS « c'est envoyé » ou « c'est fait » à ce stade — dis « en attente de ta validation ». Une action n'est réellement faite que quand une ligne « Action exécutée (…) » apparaît dans l'historique. De même, dry_run = simulation : rien n'est envoyé.
 
@@ -161,7 +161,7 @@ Tests d'envoi : apply_to_company persiste la candidature en base MÊME en dry_ru
 PERSONNALISATION DES LETTRES — c'est ton point fort, sers-t'en :
 - Par défaut la lettre = template fixe + un paragraphe central généré. Dès que l'utilisateur exprime un angle (« insiste sur le management », « parle de leur produit X », « ton plus direct »), passe letter_instruction à apply_to_company/create_candidature, ou write_letter(candidature_id, instruction) sur une candidature existante — montre le résultat, itère jusqu'à ce qu'il valide.
 - Pour une lettre 100 % sur mesure : RÉDIGE-LA TOI-MÊME dans la conversation, en t'appuyant sur ta mémoire (école, parcours, objectifs), le CV (get_cv_section) et l'entreprise (research_company, get_candidature). Propose un angle, discute, ajuste. Une fois qu'il dit explicitement OK → set_lettre pour l'enregistrer : c'est elle qui partira.
-- Workflow candidature soignée : apply_to_company en dry_run → get_lettre → itérations (write_letter ou set_lettre) → envoi réel (la lettre validée est conservée si tu ne repasses pas de letter_instruction et que le type ne change pas).
+- Workflow candidature soignée : apply_to_company en dry_run (s'exécute direct, montre la lettre avec get_lettre) → itérations (write_letter ou set_lettre) → apply_to_company SANS dry_run pour l'envoi réel (boutons ✅ ; une lettre sur mesure set_lettre est toujours conservée, une lettre template est conservée si tu ne repasses pas de letter_instruction et que le type ne change pas).
 - Avant une candidature importante, demande-lui s'il veut un angle particulier plutôt que d'envoyer la lettre standard.
 
 Rappels : schedule_telegram_reminder pour tout ce qui est « rappelle-moi de… » (préparer un entretien, une échéance) — c'est un message Telegram différé, PAS un email. Quand l'utilisateur annonce un entretien : mets à jour le statut (update_candidature_status) ET propose un rappel de préparation la veille.
@@ -383,7 +383,15 @@ export async function handleIncomingTelegramText(
         responseParts.push({ functionResponse: { name: fc.name, response: { error: `Tool inconnu : ${fc.name}` } } });
         continue;
       }
-      if (def.requiresConfirmation) {
+      // Un dry-run n'envoie rien : exécution directe, sans boutons. La double validation
+      // (confirmer la simulation, puis confirmer l'envoi réel) perdait l'utilisateur —
+      // il « validait » le dry-run et croyait la candidature partie.
+      // isTruthyFlag : Gemini émet parfois dry_run en string "true" — un === true strict
+      // enverrait ce cas vers les boutons avec un label « [dry-run] » qui exécuterait en réel.
+      const isDryRunSimulation =
+        (fc.name === "apply_to_company" || fc.name === "process_pending_candidatures") &&
+        isTruthyFlag(args.dry_run);
+      if (def.requiresConfirmation && !isDryRunSimulation) {
         const token = randomBytes(12).toString("hex");
         const label = await describeAction(fc.name, args);
         proposals.push({ token, tool: fc.name, input: args, label, origin: "agent" as const });
@@ -509,6 +517,24 @@ export async function confirmTelegramAction(token: string, approve: boolean): Pr
 
   if (!approve) {
     if (action.origin === "prospection" && action.candidatureId) {
+      // Offre issue d'un job board (source "scraper") : on la GARDE en la passant « refus » —
+      // la supprimer ferait re-insérer puis re-proposer la même offre au prochain run de
+      // recherche (la dédup des crons repose sur la présence de l'URL en base). Pas de
+      // blacklist non plus : l'URL pointe l'agrégateur, pas l'entreprise.
+      const ignoredOffer = await Candidature.findOneAndUpdate(
+        { _id: action.candidatureId, statut: "identifiée", source: "scraper" },
+        { $set: { statut: "refus" } }
+      )
+        .lean<ICandidature | null>()
+        .catch(() => null);
+      if (ignoredOffer) {
+        await appendModelNote(state.chatId, `Offre ignorée par l'utilisateur (conservée en « refus ») : ${action.label}`);
+        return {
+          outcome: "cancelled",
+          label: action.label,
+          resultText: "❌ Offre écartée (gardée en base en « refus » pour ne pas te la re-proposer).",
+        };
+      }
       // « Ignorer » une cible de prospection : suppression UNIQUEMENT si la candidature est
       // encore « identifiée » — si elle a évolué entre-temps (envoyée, travaillée à la main),
       // on ne détruit pas d'historique réel.

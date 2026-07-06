@@ -16,21 +16,26 @@ import { getSettingsDoc } from "@/models/Settings";
 import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed } from "./scraper";
 import { normalizeUrl } from "./url-normalize";
 import { resolveCompanyWebsite } from "./serpapi-resolve";
-import { applyToExistingCandidature, countAutoAppliedSince } from "./auto-apply";
+import { applyToExistingCandidature, countAutoAppliedSince, proposeCandidatureTelegram } from "./auto-apply";
+import { isTelegramConfigured } from "./telegram";
 
 export interface OfferSearchSummary {
   ok: boolean;
   queriesProcessed: number;
   offresInserted: number;
   applied: number;
+  proposed: number;
   skipped: number;
   errors: string[];
-  perQuery: Array<{ keywords: string; location: string; inserted: number; applied: number; skipped: number; errors: number }>;
+  perQuery: Array<{ keywords: string; location: string; inserted: number; applied: number; proposed: number; skipped: number; errors: number }>;
 }
 
 interface RunOfferSearchOptions {
   dryRun?: boolean;
 }
+
+// Cap de propositions Telegram par run (voir commentaire dans la boucle).
+const MAX_PROPOSALS_PER_RUN = 10;
 
 export async function runOfferSearch(opts: RunOfferSearchOptions = {}): Promise<OfferSearchSummary> {
   await connectDB();
@@ -46,19 +51,25 @@ export async function runOfferSearch(opts: RunOfferSearchOptions = {}): Promise<
     ? auto.defaultCandidatureType
     : "alternance";
 
+  // Human-in-the-loop : même interrupteur que la prospection hebdo. Quand il est actif,
+  // AUCUN envoi automatique — chaque offre insérée est proposée sur Telegram (✅/❌).
+  const interactive = auto.prospectInteractive !== false && isTelegramConfigured() && !opts.dryRun;
+
   const summary: OfferSearchSummary = {
     ok: false,
     queriesProcessed: 0,
     offresInserted: 0,
     applied: 0,
+    proposed: 0,
     skipped: 0,
     errors: [],
     perQuery: [],
   };
 
-  // Rate-limit Gmail partagé.
+  // Rate-limit Gmail partagé. Ignoré en mode interactif : les propositions Telegram ne
+  // consomment pas le budget (l'envoi réel du ✅ le re-vérifiera via process-pending).
   let remainingBudget = maxPerDay;
-  if (!opts.dryRun) {
+  if (!opts.dryRun && !interactive) {
     const recentlySent = await countAutoAppliedSince(24 * 60 * 60 * 1000);
     remainingBudget = Math.max(0, maxPerDay - recentlySent);
     if (remainingBudget === 0) {
@@ -80,7 +91,7 @@ export async function runOfferSearch(opts: RunOfferSearchOptions = {}): Promise<
 
   for (const query of due) {
     summary.queriesProcessed++;
-    const perQ = { keywords: query.keywords, location: query.location, inserted: 0, applied: 0, skipped: 0, errors: 0 };
+    const perQ = { keywords: query.keywords, location: query.location, inserted: 0, applied: 0, proposed: 0, skipped: 0, errors: 0 };
     try {
       const [j, a, f, i] = await Promise.all([
         searchJSearch(query.keywords, query.location, 10),
@@ -141,7 +152,47 @@ export async function runOfferSearch(opts: RunOfferSearchOptions = {}): Promise<
       summary.offresInserted += insertedDocs.length;
 
       // Pour chaque doc inséré : résout le site officiel, scrape, génère lettre, envoie.
+      // En mode interactif : proposition Telegram à la place — l'utilisateur décide (✅/❌),
+      // le ✅ déclenche process_pending_candidatures ciblé qui fait le vrai pipeline.
       for (const doc of insertedDocs) {
+        if (interactive) {
+          // Cap anti-spam partagé entre toutes les queries du run : chaque proposition pousse
+          // dans pendingActions ($slice -30) — au-delà, les plus anciennes encore actives
+          // seraient évincées (boutons morts). L'excédent reste « identifiée » et sera proposé
+          // par le cron process-pending (10/run).
+          if (summary.proposed >= MAX_PROPOSALS_PER_RUN) {
+            summary.skipped++;
+            perQ.skipped++;
+            continue;
+          }
+          try {
+            await proposeCandidatureTelegram({
+              candidatureId: String(doc._id),
+              label: `Candidater chez ${doc.entreprise} — ${doc.poste}`,
+              // L'url d'une offre pointe souvent le job board, pas la boîte : on laisse le
+              // ❌ dériver le domaine au moment du clic plutôt que de blacklister l'agrégateur.
+              domain: null,
+              recap: [
+                `📋 Nouvelle offre, patron : ${doc.entreprise}`,
+                `Poste : ${doc.poste}`,
+                `Source : ${doc.plateforme}${doc.localisation ? ` — ${doc.localisation}` : ""}`,
+                doc.email
+                  ? `Email cible : ${doc.email}`
+                  : "Email : à résoudre automatiquement (site officiel + scrape)",
+                `Annonce : ${doc.url}`,
+                ``,
+                `Je candidate ?`,
+              ].join("\n"),
+            });
+            summary.proposed++;
+            perQ.proposed++;
+          } catch (tgErr) {
+            const msg = tgErr instanceof Error ? tgErr.message : String(tgErr);
+            perQ.errors++;
+            summary.errors.push(`${doc.entreprise}: proposition Telegram échouée — ${msg}`);
+          }
+          continue;
+        }
         if (!opts.dryRun && remainingBudget <= 0) {
           summary.skipped++;
           perQ.skipped++;
@@ -207,7 +258,7 @@ export async function runOfferSearch(opts: RunOfferSearchOptions = {}): Promise<
   }
 
   settingsDoc.automation.lastOfferSearchRunAt = new Date();
-  settingsDoc.automation.lastOfferSearchSummary = `${summary.queriesProcessed} query · ${summary.offresInserted} offres · ${summary.applied} envoyée(s) · ${summary.skipped} skip · ${summary.errors.length} erreur(s)`;
+  settingsDoc.automation.lastOfferSearchSummary = `${summary.queriesProcessed} query · ${summary.offresInserted} offres · ${summary.proposed} proposée(s) · ${summary.applied} envoyée(s) · ${summary.skipped} skip · ${summary.errors.length} erreur(s)`;
   await settingsDoc.save();
 
   summary.ok = true;

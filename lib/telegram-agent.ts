@@ -454,6 +454,15 @@ export async function handleIncomingTelegramText(
   const sentinelNorm = finalText.trim().toUpperCase().normalize("NFD").replace(/[^A-Z]/g, "");
   if (sentinelNorm === "RIENAAJOUTER") finalText = "";
 
+  // Action en attente de boutons : si le texte du modèle prétend que c'est fait (« C'est
+  // envoyé, patron » — il imite ses propres messages précédents de l'historique, aucune
+  // consigne n'y résiste), on le SUPPRIME : incohérent avec les boutons qui suivent. Le
+  // message « ⚡ Action proposée … Je l'exécute ? » est autosuffisant. Un texte honnête
+  // (réponse à une autre partie de la demande, annonce d'attente) passe, lui.
+  if (proposals.length > 0 && /envoy|c'est fait|c'est parti|cré[ée]|exécut|supprim|programm/i.test(finalText)) {
+    finalText = "";
+  }
+
   // Persistance ATOMIQUE ($push + $slice) — jamais de réécriture des tableaux entiers :
   // deux messages traités en parallèle (webhook fire-and-forget) feraient du last-writer-wins
   // et pourraient ressusciter une pendingAction déjà confirmée (double exécution) ou effacer
@@ -463,6 +472,13 @@ export async function handleIncomingTelegramText(
     // Max 3 digests par tour pour ne pas noyer le dialogue dans la fenêtre glissante.
     ...toolDigests.slice(-3).map((d) => ({ role: "model" as const, text: d, at: new Date() })),
     ...(finalText.trim() ? [{ role: "model" as const, text: finalText.trim(), at: new Date() }] : []),
+    ...(proposals.length > 0
+      ? [{
+          role: "model" as const,
+          text: `[proposition envoyée, EN ATTENTE de validation par boutons ✅/❌ — PAS exécutée : ${proposals.map((p) => p.label).join(" ; ")}]`,
+          at: new Date(),
+        }]
+      : []),
     ...(turnError
       ? [{ role: "model" as const, text: `[tour interrompu par une erreur interne : ${turnError.slice(0, 200)}]`, at: new Date() }]
       : []),

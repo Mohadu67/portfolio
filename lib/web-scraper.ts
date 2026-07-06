@@ -196,15 +196,22 @@ function findLegalLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
   return findLinksByPatterns($, baseUrl, LEGAL_LINK_PATTERNS);
 }
 
+// Segments de <title> qui ne sont PAS un nom d'entreprise (« Accueil - ARC Informatique »
+// donnait entreprise = « Accueil » → lettre et mail adressés à une boîte nommée Accueil).
+const GENERIC_TITLE_PARTS = new Set([
+  "accueil", "home", "homepage", "bienvenue", "welcome", "index", "menu", "site officiel",
+]);
+
 function extractCompanyName($: cheerio.CheerioAPI): string {
-  const ogSiteName = $('meta[property="og:site_name"]').attr("content");
-  if (ogSiteName) return ogSiteName.trim();
+  const ogSiteName = $('meta[property="og:site_name"]').attr("content")?.trim();
+  if (ogSiteName && !GENERIC_TITLE_PARTS.has(ogSiteName.toLowerCase())) return ogSiteName;
 
   const title = $("title").text().trim();
   if (title) {
-    // Take text before common separators
-    const parts = title.split(/\s*[-|–—]\s*/);
-    return parts[0].trim();
+    // Premier segment NON générique du titre (séparateurs usuels).
+    const parts = title.split(/\s*[-|–—:·]\s*/).map((p) => p.trim()).filter(Boolean);
+    const meaningful = parts.find((p) => !GENERIC_TITLE_PARTS.has(p.toLowerCase()));
+    if (meaningful) return meaningful;
   }
 
   return "";

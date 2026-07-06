@@ -101,7 +101,7 @@ export async function countAutoAppliedSince(sinceMs: number): Promise<number> {
   });
 }
 
-async function alreadyContactedDomain(domain: string): Promise<boolean> {
+async function alreadyContactedDomain(domain: string, opts: { ignoreDrafts?: boolean } = {}): Promise<boolean> {
   if (!domain) return true;
   // Fix : on matche sur le domaine eTLD+1 normalisé, et on cherche dans email ET url.
   // L'ancienne version sur substring `url` ratait les URL JSearch (linkedin.com/jobs/...) et matchait
@@ -109,14 +109,32 @@ async function alreadyContactedDomain(domain: string): Promise<boolean> {
   const base = domain.split(".").slice(-2).join(".");
   if (!base) return true;
   const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const existing = await Candidature.findOne({
+  const domainMatch = {
     $or: [
       // email RH du domaine (ou sous-domaine)
       { email: { $regex: `@(?:[^@]*\\.)?${escapedBase}$`, $options: "i" } },
       // URL de l'offre/site sur le domaine (ou sous-domaine)
       { url: { $regex: `://(?:[^/]*\\.)?${escapedBase}(?:[/:?#]|$)`, $options: "i" } },
     ],
-  });
+  };
+  // ignoreDrafts : un brouillon jamais parti (« identifiée »/« lettre générée » sans email
+  // réellement DÉLIVRÉ — un envoi status "failed" ne compte pas) n'est pas « contactée ».
+  // Sans ça, le flow dry-run → envoi réel se bloque lui-même avec un faux « déjà contactée »,
+  // et un envoi échoué bloquerait tout retry.
+  const query = opts.ignoreDrafts
+    ? {
+        $and: [
+          domainMatch,
+          {
+            $or: [
+              { statut: { $nin: ["identifiée", "lettre générée"] } },
+              { emailsSent: { $elemMatch: { status: "sent" } } },
+            ],
+          },
+        ],
+      }
+    : domainMatch;
+  const existing = await Candidature.findOne(query);
   return !!existing;
 }
 
@@ -803,9 +821,10 @@ export async function processSingleCompany(
   }
 
   try {
-    // 1. Dedup par domaine (sauf override)
-    if (!opts.allowDuplicate && (await alreadyContactedDomain(decision.domain))) {
-      decision.skipReason = "déjà contactée (domaine présent en DB)";
+    // 1. Dedup par domaine (sauf override). ignoreDrafts : un brouillon du même domaine ne
+    // bloque pas — l'étape 5 le réutilise (flow dry-run → envoi réel).
+    if (!opts.allowDuplicate && (await alreadyContactedDomain(decision.domain, { ignoreDrafts: true }))) {
+      decision.skipReason = "déjà contactée (domaine présent en DB — un email est déjà parti vers cette entreprise)";
       return decision;
     }
 

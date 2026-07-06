@@ -161,6 +161,11 @@ export async function sendCandidature(
   cvOverride?: { buffer: Buffer; filename: string }
 ): Promise<void> {
   const isSpontanee = poste.toLowerCase().includes("spontanée") || poste.toLowerCase().includes("spontanee");
+  // entreprise/poste viennent (en partie) du scraping de sites externes : on échappe avant
+  // interpolation HTML — un <title> piégé injecterait du markup dans NOTRE mail au recruteur.
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const entrepriseHtml = esc(entreprise);
+  const posteHtml = esc(poste);
 
   let subjectPrefix = "Candidature";
   let typeLabel = "stage";
@@ -183,16 +188,16 @@ export async function sendCandidature(
 
   if (isSpontanee) {
     const typeText =
-      type === "cdi" ? "un CDI en développement web" :
-      "une alternance en développement web dès septembre 2026";
+      type === "cdi" ? "un poste de développeur web en CDI" :
+      type === "stage" ? "un stage en développement web" :
+      "une alternance en développement web à partir de septembre 2026";
 
     emailBody = `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
       <p>Bonjour,</p>
-      <p>Actuellement en formation Concepteur Développeur d'Applications, je me permets de vous contacter car le travail de <strong>${entreprise}</strong> m'intéresse particulièrement.</p>
-      <p>Je suis à la recherche de <strong>${typeText}</strong>.</p>
-      <p>Vous trouverez ci-joint mon CV ainsi qu'une lettre de motivation détaillant mon parcours et mes motivations.</p>
-      <p>Je serais ravi d'échanger avec vous à ce sujet.</p>
+      <p>Développeur fullstack en fin de Bachelor Concepteur Développeur d'Applications, je recherche <strong>${typeText}</strong> — et j'aimerais rejoindre <strong>${entrepriseHtml}</strong>.</p>
+      <p>Vous trouverez en pièce jointe mon CV et une lettre de motivation qui détaille ce que je peux apporter à votre équipe.</p>
+      <p>Je suis disponible pour un échange, par téléphone ou sur place.</p>
       <p>Cordialement,<br><strong>${candidatName}</strong></p>
     </div>
   `;
@@ -200,9 +205,9 @@ export async function sendCandidature(
     emailBody = `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
       <p>Bonjour,</p>
-      <p>Votre offre de <strong>${poste}</strong> a retenu toute mon attention et je souhaite vous proposer ma candidature.</p>
-      <p>Vous trouverez ci-joint mon CV ainsi qu'une lettre de motivation détaillant mon parcours et mes motivations pour ce poste.</p>
-      <p>Je reste disponible pour en discuter à votre convenance.</p>
+      <p>Je vous adresse ma candidature au poste de <strong>${posteHtml}</strong>.</p>
+      <p>Vous trouverez en pièce jointe mon CV et une lettre de motivation qui détaille mon parcours et ce que je peux apporter sur ce poste.</p>
+      <p>Je suis disponible pour un échange, par téléphone ou sur place.</p>
       <p>Cordialement,<br><strong>${candidatName}</strong></p>
     </div>
   `;

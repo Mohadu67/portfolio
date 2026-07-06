@@ -961,6 +961,10 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       if (existing) {
         return fail(409, `Une candidature existe déjà avec cette URL : ${existing.entreprise} (statut « ${existing.statut} », _id ${String(existing._id)})`);
       }
+      // Le modèle met parfois n'importe quoi dans email (« Equipe RH ») : un email invalide
+      // en base ferait échouer l'envoi bien plus tard, de façon opaque. On ignore plutôt.
+      const rawEmail = String(input.email ?? "").trim();
+      const email = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(rawEmail) ? rawEmail : "";
       const c = await Candidature.create({
         entreprise,
         poste,
@@ -968,7 +972,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         localisation: String(input.localisation ?? "").trim(),
         url: finalUrl,
         description: String(input.description ?? "").slice(0, 500),
-        email: String(input.email ?? "").trim(),
+        email,
         statut: "identifiée",
         type,
         lettre: null,
@@ -980,7 +984,9 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       });
       return ok({
         ok: true,
-        summary: `Candidature créée : ${entreprise} — ${poste} (${type}, statut « identifiée », _id ${String(c._id)}). Rien n'a été envoyé.`,
+        summary: `Candidature créée : ${entreprise} — ${poste} (${type}, statut « identifiée », _id ${String(c._id)}).${
+          rawEmail && !email ? ` L'email fourni (« ${rawEmail.slice(0, 40)} ») n'est pas une adresse valide — ignoré.` : ""
+        } Rien n'a été envoyé.`,
       });
     }
 

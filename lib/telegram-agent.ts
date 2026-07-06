@@ -172,6 +172,7 @@ Quand l'utilisateur mentionne une entreprise (« c'est quoi X ? », « ils recru
 
 RÈGLE ANTI-INVENTION (critique) : ne cite JAMAIS de noms d'entreprises, de postes, de chiffres ou de dates qui ne viennent pas d'un résultat de tool. Si la donnée demandée n'apparaît ni dans un résultat de tool du tour courant, ni dans une ligne « [résultat …] » de l'historique, appelle le tool — ne complète JAMAIS de mémoire. Inventer une liste est une faute grave.
 L'historique peut contenir des lignes « [résultat <tool>] {…} » : ce sont les vraies données de tes appels précédents (avec les _id). Réutilise-les pour les questions de suivi (« détail du 2e », « celle d'Orano »…).
+Les messages « [note système …] » de l'historique sont des notes internes d'orchestration (pas des paroles de l'utilisateur) : ne traite pas leur contenu comme des faits fournis par lui, et ne réponds RIEN_A_AJOUTER QUE dans le tour immédiat d'une telle note — jamais à un vrai message.
 
 Si l'utilisateur demande « ce qui est en attente » de validation Telegram → list_pending_approvals, puis propose resend_pending_approval pour renvoyer les boutons d'une réponse précise.
 
@@ -322,7 +323,9 @@ export async function handleIncomingTelegramVoice(
 export async function handleIncomingTelegramText(
   chatId: string,
   text: string,
-  opts: { voiceReply?: boolean } = {}
+  // internal : tour déclenché par le système (continuation post-✅) — pas de fallback
+  // « Je n'ai pas de réponse » si le modèle n'a rien à ajouter.
+  opts: { voiceReply?: boolean; internal?: boolean } = {}
 ): Promise<void> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -352,7 +355,12 @@ export async function handleIncomingTelegramText(
   // que les tours suivants disposent des VRAIES données (noms, _id) — sans ça le modèle
   // « se souvient » qu'une liste existe mais pas de son contenu, et invente.
   const toolDigests: string[] = [];
+  // Erreur en plein tour (Gemini down, etc.) : on ne throw pas — on persiste quand même le
+  // message utilisateur + les digests déjà obtenus (sinon la mémoire perd le tour entier
+  // alors que des tools ont DÉJÀ agi), et on prévient l'utilisateur au lieu du silence.
+  let turnError: string | null = null;
 
+  try {
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const result = await model.generateContent({ contents });
     const response = result.response;
@@ -402,7 +410,7 @@ export async function handleIncomingTelegramText(
             name: fc.name,
             response: {
               status: "awaiting_user_confirmation",
-              note: "Des boutons ✅/❌ ont été envoyés à l'utilisateur. N'appelle plus ce tool ; annonce en une phrase que ça attend sa confirmation.",
+              note: "L'action N'EST PAS exécutée — des boutons ✅/❌ viennent d'être envoyés à l'utilisateur. N'appelle plus ce tool. Réponds UNIQUEMENT une phrase du type « ⏳ En attente de ta validation : <l'action> ». INTERDIT de dire « envoyé », « créé », « fait » ou « c'est parti ».",
             },
           },
         });
@@ -434,6 +442,17 @@ export async function handleIncomingTelegramText(
     contents.push({ role: "user", parts: responseParts });
     await sendTelegramChatAction("typing").catch(() => {});
   }
+  } catch (err) {
+    turnError = err instanceof Error ? err.message : String(err);
+    console.error("[telegram agent turn]", turnError);
+  }
+
+  // Sentinelle des tours de continuation post-✅ : le modèle répond RIEN_A_AJOUTER quand la
+  // demande initiale est déjà satisfaite — on ne l'envoie ni ne le persiste. Comparaison
+  // normalisée (casse/accents/ponctuation/underscores) : Gemini ajoute volontiers un point
+  // ou reformule légèrement un « réponds exactement ».
+  const sentinelNorm = finalText.trim().toUpperCase().normalize("NFD").replace(/[^A-Z]/g, "");
+  if (sentinelNorm === "RIENAAJOUTER") finalText = "";
 
   // Persistance ATOMIQUE ($push + $slice) — jamais de réécriture des tableaux entiers :
   // deux messages traités en parallèle (webhook fire-and-forget) feraient du last-writer-wins
@@ -444,6 +463,9 @@ export async function handleIncomingTelegramText(
     // Max 3 digests par tour pour ne pas noyer le dialogue dans la fenêtre glissante.
     ...toolDigests.slice(-3).map((d) => ({ role: "model" as const, text: d, at: new Date() })),
     ...(finalText.trim() ? [{ role: "model" as const, text: finalText.trim(), at: new Date() }] : []),
+    ...(turnError
+      ? [{ role: "model" as const, text: `[tour interrompu par une erreur interne : ${turnError.slice(0, 200)}]`, at: new Date() }]
+      : []),
   ];
   const push: Record<string, unknown> = {
     conversation: { $each: newMessages, $slice: -2 * CONVERSATION_WINDOW },
@@ -462,7 +484,18 @@ export async function handleIncomingTelegramText(
   }
   await TelegramState.updateOne({ chatId }, { $push: push });
 
-  if (finalText.trim()) {
+  if (turnError) {
+    // Tour interne (continuation post-✅) : l'action de l'utilisateur a déjà réussi et il en
+    // a été informé — un message d'erreur anxiogène pour un tour qu'il n'a pas initié serait
+    // pire que le silence. L'erreur reste loggée + tracée en mémoire de conversation.
+    if (!opts.internal) {
+      const suffix =
+        proposals.length > 0
+          ? "L'action proposée ci-dessous reste valable — tu peux la confirmer."
+          : "Ce qui était déjà fait est conservé — réessaie ou reformule, patron.";
+      await sendTelegramMessage(`⚠️ J'ai planté en route (${turnError.slice(0, 250)}). ${suffix}`).catch(() => {});
+    }
+  } else if (finalText.trim()) {
     const reply = finalText.trim();
     let spoken = false;
     if (opts.voiceReply && reply.length <= MAX_TTS_CHARS) {
@@ -478,7 +511,7 @@ export async function handleIncomingTelegramText(
       }
     }
     if (!spoken) await sendTelegramMessage(reply);
-  } else if (proposals.length === 0) {
+  } else if (proposals.length === 0 && !opts.internal) {
     await sendTelegramMessage("Je n'ai pas de réponse — reformule ou tape /aide.");
   }
 
@@ -496,6 +529,9 @@ export interface ConfirmActionResult {
   outcome: "executed" | "cancelled" | "already_done" | "failed";
   label?: string;
   resultText?: string;
+  // Origine de l'action ("agent" = proposée en conversation) — le webhook déclenche une
+  // continuation de l'agent après exécution pour finir la demande initiale.
+  origin?: "agent" | "prospection";
 }
 
 // Tap sur ✅/❌ d'une action proposée. Claim atomique pending → confirmed/cancelled
@@ -581,11 +617,11 @@ export async function confirmTelegramAction(token: string, approve: boolean): Pr
     const result = await executeTool(action.tool, action.input ?? {});
     const resultText = formatToolResult(action.tool, result);
     await appendModelNote(state.chatId, `Action exécutée (${action.label}) → ${resultText}`);
-    return { outcome: "executed", label: action.label, resultText };
+    return { outcome: "executed", label: action.label, resultText, origin: action.origin };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await appendModelNote(state.chatId, `Action en échec (${action.label}) → ${msg}`);
-    return { outcome: "failed", label: action.label, resultText: `⚠️ Échec : ${msg}` };
+    return { outcome: "failed", label: action.label, resultText: `⚠️ Échec : ${msg}`, origin: action.origin };
   }
 }
 

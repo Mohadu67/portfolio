@@ -163,6 +163,18 @@ export async function POST(request: NextRequest) {
           await appendDecisionToMessage(messageId, currentText, "✅ Exécutée.").catch(() => {});
         }
         if (res.resultText) await sendTelegramMessage(res.resultText).catch(() => {});
+        // Continuation : l'action confirmée fait souvent partie d'une demande plus large
+        // (« fais-moi une lettre » → create_candidature ✅ → il reste la lettre à rédiger).
+        // Sans ce tour, l'agent ne reprend jamais la main après un ✅ et la demande meurt.
+        if (res.origin === "agent") {
+          void handleIncomingTelegramText(
+            String(cbChatId),
+            `[note système — pas un message de l'utilisateur] L'action « ${res.label ?? ""} » vient d'être confirmée et exécutée. Résultat : ${(res.resultText ?? "ok").slice(0, 300)}. Relis la demande initiale de l'utilisateur : s'il reste des étapes pour la satisfaire (ex. rédiger/montrer la lettre demandée), fais-les MAINTENANT avec tes tools. L'utilisateur a DÉJÀ reçu le résultat ci-dessus — ne le reformule pas. S'il n'y a aucune étape restante, réponds exactement : RIEN_A_AJOUTER`,
+            { internal: true }
+          ).catch((err) => {
+            console.error("[telegram continuation]", err instanceof Error ? err.message : err);
+          });
+        }
       } else {
         // failed
         await answerCallbackQuery(cb.id, "⚠️ Échec de l'exécution", true).catch(() => {});

@@ -90,6 +90,7 @@ Tools disponibles (n'utilise un tool QUE si l'utilisateur mentionne explicitemen
 - get_lettre(id) → si l'utilisateur veut voir/relire la lettre de motivation d'une candidature
 - write_letter(id, instruction?) → (re)génère la lettre avec une consigne (« insiste sur X », « plus court ») et retourne le texte ; itérable, versions archivées
 - set_lettre(id, lettre) → enregistre une lettre complète rédigée sur mesure en conversation, UNIQUEMENT après validation explicite de l'utilisateur
+- send_letter_to_me(candidature_id | lettre+entreprise) → envoie la lettre (PDF + CV) sur la boîte perso de l'utilisateur pour une candidature manuelle sur plateforme. N'envoie rien à l'entreprise
 - get_stats() → si l'utilisateur demande un bilan/où il en est (répartition par statut, envois 7/30j, réponses)
 - search_offers(keywords, location?) → si l'utilisateur demande de chercher des offres sur les job boards. Pour suivre une offre → create_candidature
 - list_reminders() / cancel_reminder(due_at) → rappels Telegram programmés

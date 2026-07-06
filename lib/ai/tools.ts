@@ -462,6 +462,27 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "send_letter_to_me",
+    description:
+      "Envoie une lettre de motivation sur la boîte mail PERSO de l'utilisateur (PDF officiel joint + texte copiable dans le corps, CV joint par défaut) — pour postuler MANUELLEMENT sur une plateforme (LinkedIn, Indeed, formulaire ATS…). Deux modes : candidature_id → lettre de la candidature (générée si absente) ; OU lettre = texte complet fourni/rédigé en conversation, avec entreprise (+ poste) pour l'en-tête du PDF. N'envoie RIEN à l'entreprise — destinataire fixe : l'adresse perso configurée côté serveur.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: { type: "string", description: "ID de la candidature dont utiliser la lettre (optionnel si `lettre` fourni)" },
+        lettre: { type: "string", description: "Texte complet de la lettre (corps uniquement) — mode texte libre" },
+        entreprise: { type: "string", description: "Nom de l'entreprise pour l'en-tête du PDF (requis en mode texte libre)" },
+        poste: { type: "string", description: "Poste visé (défaut : Candidature spontanée)" },
+        type: {
+          type: "string",
+          enum: ["stage", "alternance", "cdi"],
+          description: "Type visé — choisit le CV joint (défaut : type de la candidature, sinon alternance)",
+        },
+        include_cv: { type: "boolean", description: "Joindre le CV (défaut : true)" },
+      },
+    },
+  },
+  {
     name: "delete_candidature",
     description:
       "Supprime DÉFINITIVEMENT une candidature (test, doublon, entrée erronée). Irréversible : lettre, historique de relances et d'emails perdus. Typiquement pour nettoyer après un test apply_to_company (le dry-run persiste la candidature en base). Ne blackliste PAS le domaine : la prospection automatique pourra re-proposer l'entreprise.",

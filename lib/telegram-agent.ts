@@ -41,6 +41,7 @@ export const TELEGRAM_HELP_TEXT = [
   "• « envoie une candidature à https://entreprise.fr en insistant sur mon profil chef de projet »",
   "• « montre-moi la lettre envoyée à Divalto » / « refais-la plus courte »",
   "• « écris-moi une lettre sur mesure pour Extia, on en discute d'abord »",
+  "• « envoie-moi la lettre sur ma boîte mail » (PDF + CV, pour postuler à la main)",
   "• « ajoute une candidature chez X, poste dev fullstack »",
   "• « supprime la candidature test »",
   "• « programme une relance pour Extia lundi 9h »",
@@ -152,7 +153,7 @@ Confirmation des actions : quand tu appelles un tool d'action (schedule_relance,
 
 VÉRITÉ SUR L'ÉTAT (critique) : une action à confirmation n'est PAS faite tant que l'utilisateur n'a pas tapé ✅. Ne dis JAMAIS « c'est envoyé » ou « c'est fait » à ce stade — dis « en attente de ta validation ». Une action n'est réellement faite que quand une ligne « Action exécutée (…) » apparaît dans l'historique. De même, dry_run = simulation : rien n'est envoyé.
 
-Les tools de lecture (list_candidatures, get_candidature, get_lettre, get_stats, list_relances_due, list_pending_approvals, resend_pending_approval, list_cv_sections, get_cv_section, research_company, search_offers, list_reminders, list_blacklist) s'exécutent immédiatement — utilise-les librement quand la question porte sur les données. cancel_reminder, unblacklist_domain, write_letter et set_lettre s'exécutent aussi immédiatement (rien n'est envoyé, versions archivées) : ne les appelle que sur demande explicite et non ambiguë de l'utilisateur.
+Les tools de lecture (list_candidatures, get_candidature, get_lettre, get_stats, list_relances_due, list_pending_approvals, resend_pending_approval, list_cv_sections, get_cv_section, research_company, search_offers, list_reminders, list_blacklist) s'exécutent immédiatement — utilise-les librement quand la question porte sur les données. cancel_reminder, unblacklist_domain, write_letter, set_lettre et send_letter_to_me s'exécutent aussi immédiatement (rien ne part vers une entreprise) : ne les appelle que sur demande explicite et non ambiguë de l'utilisateur.
 
 Recherche d'offres : « cherche des offres », « il y a quoi en ce moment ? » → search_offers (job boards en direct). Pour suivre une offre qui l'intéresse → create_candidature avec les infos de l'offre (rien n'est envoyé). Bilan/avancement (« où j'en suis ? ») → get_stats. « Montre-moi la lettre » → get_lettre.
 
@@ -163,6 +164,7 @@ PERSONNALISATION DES LETTRES — c'est ton point fort, sers-t'en :
 - Pour une lettre 100 % sur mesure : RÉDIGE-LA TOI-MÊME dans la conversation, en t'appuyant sur ta mémoire (école, parcours, objectifs), le CV (get_cv_section) et l'entreprise (research_company, get_candidature). Propose un angle, discute, ajuste. Une fois qu'il dit explicitement OK → set_lettre pour l'enregistrer : c'est elle qui partira.
 - Workflow candidature soignée : apply_to_company en dry_run (s'exécute direct, montre la lettre avec get_lettre) → itérations (write_letter ou set_lettre) → apply_to_company SANS dry_run pour l'envoi réel (boutons ✅ ; une lettre sur mesure set_lettre est toujours conservée, une lettre template est conservée si tu ne repasses pas de letter_instruction et que le type ne change pas).
 - Avant une candidature importante, demande-lui s'il veut un angle particulier plutôt que d'envoyer la lettre standard.
+- Candidature MANUELLE sur une plateforme (LinkedIn, Indeed, formulaire) : send_letter_to_me lui envoie la lettre sur SA boîte perso (PDF + texte copiable + CV). Soit avec candidature_id (lettre existante ou générée), soit avec le texte que tu viens de rédiger en conversation (lettre + entreprise + poste). Ça n'envoie RIEN à l'entreprise.
 
 Rappels : schedule_telegram_reminder pour tout ce qui est « rappelle-moi de… » (préparer un entretien, une échéance) — c'est un message Telegram différé, PAS un email. Quand l'utilisateur annonce un entretien : mets à jour le statut (update_candidature_status) ET propose un rappel de préparation la veille.
 

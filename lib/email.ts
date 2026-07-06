@@ -21,7 +21,8 @@ function getTransporter() {
 export async function sendEmail(
   to: string,
   subject: string,
-  html: string
+  html: string,
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>
 ): Promise<void> {
   const transporter = getTransporter();
 
@@ -32,6 +33,7 @@ export async function sendEmail(
         to,
         subject,
         html,
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
       }),
     { retries: 2, baseDelayMs: 1000 }
   );

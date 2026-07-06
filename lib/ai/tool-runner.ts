@@ -4,7 +4,9 @@
 import { connectDB } from "@/lib/mongodb";
 import { Candidature, CandidatureStatut, ICandidature } from "@/models/Candidature";
 import { CVSection, ICVSection } from "@/models/CVSection";
-import { sendRelance } from "@/lib/email";
+import { sendRelance, sendEmail } from "@/lib/email";
+import { generateLettrePDF } from "@/lib/pdf-generator";
+import { resolveCVForSend } from "@/lib/cvFile";
 import { processSingleCompany } from "@/lib/auto-apply";
 import { runProcessPending } from "@/lib/pending-processor";
 import { sendAutoReplyApprovalRequest } from "@/lib/telegram";
@@ -27,6 +29,42 @@ function escapeRegex(s: string): string {
 // déclenche un envoi réel. À utiliser pour TOUT flag booléen venant des args du modèle.
 export function isTruthyFlag(v: unknown): boolean {
   return v === true || (typeof v === "string" && v.toLowerCase() === "true");
+}
+
+// Retire salutation d'ouverture et formules de politesse/signature de fin d'une lettre
+// complète : le PDF (generateLettrePDF) ajoute lui-même « Madame, Monsieur, »,
+// « Bien cordialement, » et la signature — sans strip elles apparaîtraient en double.
+export function stripLetterBoilerplate(raw: string): string {
+  const isSalutation = (s: string) => /^(madame,?\s*monsieur|madame|monsieur|messieurs|bonjour)\s*,?$/i.test(s);
+  const isClosing = (s: string) =>
+    /^((bien\s+|très\s+)?cordialement|respectueusement|mohammed\s+hamiani|concepteur\s+d[ée]veloppeur.*|(je\s+vous\s+prie\s+d'agr[ée]er|veuillez\s+(agr[ée]er|recevoir)).*)\s*,?$/i.test(s);
+  const lines = raw.trim().split("\n");
+  while (lines.length && (lines[0].trim() === "" || isSalutation(lines[0].trim()))) lines.shift();
+  while (lines.length && (lines[lines.length - 1].trim() === "" || isClosing(lines[lines.length - 1].trim()))) {
+    lines.pop();
+  }
+  return lines.join("\n").trim();
+}
+
+// Génère la lettre d'une candidature (consigne letterInstruction respectée), l'archive dans
+// letters[] et avance identifiée → « lettre générée ». Partagé write_letter / send_letter_to_me.
+async function generateAndArchiveLetter(c: ICandidature & { save: () => Promise<unknown> }): Promise<string> {
+  const type = (c.type === "stage" || c.type === "cdi" ? c.type : "alternance") as "stage" | "alternance" | "cdi";
+  const lettre = await generateLetterProposal(
+    c.entreprise,
+    c.aboutText || c.description || "",
+    c.poste,
+    type,
+    c.letterInstruction || undefined
+  );
+  c.lettre = lettre;
+  if (c.statut === "identifiée") c.statut = "lettre générée";
+  c.letters = [
+    ...(c.letters ?? []),
+    { version: (c.letters?.length ?? 0) + 1, model: "gemini", content: lettre, generatedAt: new Date(), type },
+  ];
+  await c.save();
+  return lettre;
 }
 
 // Motif insensible aux accents : chaque voyelle (et c/ç) matche toutes ses variantes.
@@ -952,26 +990,12 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       if (!c) return fail(404, "Candidature not found");
       const instruction = String(input.instruction ?? "").trim();
       if (instruction) c.letterInstruction = instruction;
-      const type = (c.type === "stage" || c.type === "cdi" ? c.type : "alternance") as "stage" | "alternance" | "cdi";
       let lettre: string;
       try {
-        lettre = await generateLetterProposal(
-          c.entreprise,
-          c.aboutText || c.description || "",
-          c.poste,
-          type,
-          c.letterInstruction || undefined
-        );
+        lettre = await generateAndArchiveLetter(c);
       } catch (err) {
         return fail(502, `Génération échouée : ${err instanceof Error ? err.message : String(err)}`);
       }
-      c.lettre = lettre;
-      if (c.statut === "identifiée") c.statut = "lettre générée";
-      c.letters = [
-        ...(c.letters ?? []),
-        { version: (c.letters?.length ?? 0) + 1, model: "gemini", content: lettre, generatedAt: new Date(), type },
-      ];
-      await c.save();
       return ok({
         ok: true,
         summary: JSON.stringify({
@@ -989,16 +1013,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       // Le PDF ajoute lui-même « Madame, Monsieur, », « Bien cordialement, » et la signature :
       // on retire les salutations/formules que le modèle aurait incluses malgré la consigne,
       // sinon elles apparaissent en double dans la lettre envoyée.
-      const rawLettre = String(input.lettre ?? "").trim();
-      const isSalutation = (s: string) => /^(madame,?\s*monsieur|madame|monsieur|messieurs|bonjour)\s*,?$/i.test(s);
-      const isClosing = (s: string) =>
-        /^((bien\s+|très\s+)?cordialement|respectueusement|mohammed\s+hamiani|concepteur\s+d[ée]veloppeur.*|(je\s+vous\s+prie\s+d'agr[ée]er|veuillez\s+(agr[ée]er|recevoir)).*)\s*,?$/i.test(s);
-      const lines = rawLettre.split("\n");
-      while (lines.length && (lines[0].trim() === "" || isSalutation(lines[0].trim()))) lines.shift();
-      while (lines.length && (lines[lines.length - 1].trim() === "" || isClosing(lines[lines.length - 1].trim()))) {
-        lines.pop();
-      }
-      const lettre = lines.join("\n").trim();
+      const lettre = stripLetterBoilerplate(String(input.lettre ?? ""));
       // Garde-fou : une « lettre » trop courte est presque sûrement un appel raté (résumé,
       // placeholder) — on refuse plutôt que d'envoyer trois lignes à un recruteur.
       if (lettre.length < 200) return fail(400, "Lettre trop courte (min 200 caractères) — envoie le texte complet.");
@@ -1025,6 +1040,82 @@ export async function executeTool(toolName: string, input: Record<string, unknow
             ? " C'est elle qui partira à l'envoi."
             : ` Attention : statut « ${c.statut} » — cette candidature est déjà partie, aucun envoi automatique ne reprendra cette lettre.`
         }`,
+      });
+    }
+
+    case "send_letter_to_me": {
+      // Destinataire FIXE côté serveur (jamais un paramètre du modèle) : l'agent ne peut pas
+      // exfiltrer la lettre vers une adresse arbitraire, d'où requiresConfirmation: false.
+      const to = (process.env.PERSONAL_EMAIL || process.env.GMAIL_USER || "").trim();
+      if (!to) return fail(500, "PERSONAL_EMAIL / GMAIL_USER non configurés côté serveur");
+
+      // Strip aussi en mode texte libre : le PDF ajoute salutation et signature.
+      let lettre = stripLetterBoilerplate(String(input.lettre ?? ""));
+      let entreprise = String(input.entreprise ?? "").trim();
+      let poste = String(input.poste ?? "").trim();
+      let type: "stage" | "alternance" | "cdi" =
+        input.type === "stage" || input.type === "cdi" ? input.type : "alternance";
+      let generated = false;
+
+      const id = input.candidature_id ? String(input.candidature_id) : "";
+      if (id) {
+        const c = await Candidature.findById(id);
+        if (!c) return fail(404, "Candidature not found");
+        entreprise = entreprise || c.entreprise;
+        poste = poste || c.poste;
+        if (input.type !== "stage" && input.type !== "cdi" && input.type !== "alternance") {
+          type = c.type === "stage" || c.type === "cdi" ? c.type : "alternance";
+        }
+        if (!lettre) {
+          lettre = (c.lettre ?? "").trim();
+          if (!lettre) {
+            // Pas de lettre : on la génère (même consigne persistée que write_letter) et on l'archive.
+            try {
+              lettre = await generateAndArchiveLetter(c);
+              generated = true;
+            } catch (err) {
+              return fail(502, `Génération échouée : ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
+      }
+      if (!lettre) return fail(400, "Fournis candidature_id ou le texte complet de la lettre");
+      if (!entreprise) return fail(400, "entreprise requise (en-tête du PDF)");
+      poste = poste || "Candidature spontanée";
+
+      const slug = entreprise.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "lettre";
+      const attachments: Array<{ filename: string; content: Buffer; contentType?: string }> = [
+        {
+          filename: `LM-${slug}.pdf`,
+          content: await generateLettrePDF(lettre, entreprise, poste),
+          contentType: "application/pdf",
+        },
+      ];
+      const includeCv = input.include_cv === undefined ? true : isTruthyFlag(input.include_cv);
+      let cvAttached = false;
+      if (includeCv) {
+        try {
+          const cv = await resolveCVForSend({ cvFileId: null, type });
+          attachments.push({ filename: cv.filename, content: cv.buffer, contentType: "application/pdf" });
+          cvAttached = true;
+        } catch {
+          /* CV introuvable → on envoie quand même la lettre */
+        }
+      }
+
+      const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      await sendEmail(
+        to,
+        `📄 LM prête — ${entreprise} (${poste})`,
+        `<p>Lettre de motivation pour <strong>${escapeHtml(entreprise)}</strong> — ${escapeHtml(poste)}.<br>PDF en pièce jointe${cvAttached ? " (+ CV)" : ""} ; texte copiable ci-dessous :</p>
+<pre style="white-space:pre-wrap;font-family:Georgia,serif;font-size:14px;border-left:3px solid #ccc;padding-left:12px;">${escapeHtml(lettre)}</pre>`,
+        attachments
+      );
+      return ok({
+        ok: true,
+        summary: `Lettre envoyée sur ${to} — ${entreprise} (${poste}), PDF joint${cvAttached ? " + CV" : ""}.${
+          generated ? " La lettre a été générée et archivée sur la candidature (statut « lettre générée »)." : ""
+        } Rien n'est parti vers l'entreprise.`,
       });
     }
 

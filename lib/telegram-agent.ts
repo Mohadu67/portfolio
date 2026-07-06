@@ -631,15 +631,42 @@ export async function confirmTelegramAction(token: string, approve: boolean): Pr
     return { outcome: "cancelled", label: action.label };
   }
 
+  // Échec (retourné ou levé) : on repasse l'action en pending pour que les boutons restent
+  // actifs — sans ça le claim resterait « confirmed » et un re-tap répondrait « Déjà traité »
+  // sans possibilité de réessayer (même trade-off assumé que le flux ar: des auto-réponses).
+  const revertClaim = () =>
+    TelegramState.updateOne(
+      { chatId: state.chatId, "pendingActions.token": token },
+      { $set: { "pendingActions.$.status": "pending", "pendingActions.$.decidedAt": null } }
+    ).catch(() => {});
+
   try {
     const result = await executeTool(action.tool, action.input ?? {});
     const resultText = formatToolResult(action.tool, result);
+    // Erreur retournée (pas levée) par le tool → outcome failed : sinon la carte afficherait
+    // « ✅ Exécutée » avec un texte d'échec, et la continuation post-✅ partirait sur un échec.
+    if (result.body.error) {
+      await appendModelNote(state.chatId, `Action en échec (${action.label}) → ${result.body.error}`);
+      await revertClaim();
+      return {
+        outcome: "failed",
+        label: action.label,
+        resultText: `${resultText} — retape ✅ pour réessayer.`,
+        origin: action.origin,
+      };
+    }
     await appendModelNote(state.chatId, `Action exécutée (${action.label}) → ${resultText}`);
     return { outcome: "executed", label: action.label, resultText, origin: action.origin };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await appendModelNote(state.chatId, `Action en échec (${action.label}) → ${msg}`);
-    return { outcome: "failed", label: action.label, resultText: `⚠️ Échec : ${msg}`, origin: action.origin };
+    await revertClaim();
+    return {
+      outcome: "failed",
+      label: action.label,
+      resultText: `⚠️ Échec : ${msg} — retape ✅ pour réessayer.`,
+      origin: action.origin,
+    };
   }
 }
 

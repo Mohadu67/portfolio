@@ -462,6 +462,21 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "set_email_body",
+    description:
+      "Enregistre un CORPS DE MAIL sur mesure pour une candidature : c'est ce texte (au lieu du modèle générique) qui accompagnera le CV + la lettre à l'envoi. À utiliser quand tu as rédigé le mail en conversation et que l'utilisateur l'a validé EXPLICITEMENT — ne jamais appeler sans avoir montré le texte. Texte brut, SANS « Bonjour » ni signature (ajoutés automatiquement à l'envoi). reset=true pour revenir au modèle par défaut.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: { type: "string", description: "ID MongoDB de la candidature" },
+        texte: { type: "string", description: "Corps du mail (2-5 phrases), sans salutation ni signature" },
+        reset: { type: "boolean", description: "true → supprime le corps sur mesure, retour au modèle par défaut" },
+      },
+      required: ["candidature_id"],
+    },
+  },
+  {
     name: "send_letter_to_me",
     description:
       "Envoie une lettre de motivation sur la boîte mail PERSO de l'utilisateur (PDF officiel joint + texte copiable dans le corps, CV joint par défaut) — pour postuler MANUELLEMENT sur une plateforme (LinkedIn, Indeed, formulaire ATS…). Deux modes : candidature_id → lettre de la candidature (générée si absente) ; OU lettre = texte complet fourni/rédigé en conversation, avec entreprise (+ poste) pour l'en-tête du PDF. N'envoie RIEN à l'entreprise — destinataire fixe : l'adresse perso configurée côté serveur.",

@@ -814,6 +814,9 @@ export async function executeTool(toolName: string, input: Record<string, unknow
           email: c.email || null,
           lettre: c.lettre ? c.lettre.slice(0, 3000) : null,
           note: c.lettre ? undefined : "Aucune lettre générée pour cette candidature.",
+          corpsMail: c.emailBody
+            ? c.emailBody.slice(0, 1000)
+            : "(modèle par défaut — personnalisable via set_email_body)",
           dernierEmail: lastEmail
             ? {
                 date: lastEmail.date instanceof Date ? lastEmail.date.toISOString() : String(lastEmail.date),
@@ -1045,6 +1048,35 @@ export async function executeTool(toolName: string, input: Record<string, unknow
           willBeSent
             ? " C'est elle qui partira à l'envoi."
             : ` Attention : statut « ${c.statut} » — cette candidature est déjà partie, aucun envoi automatique ne reprendra cette lettre.`
+        }`,
+      });
+    }
+
+    case "set_email_body": {
+      const id = String(input.candidature_id);
+      const c = await Candidature.findById(id);
+      if (!c) return fail(404, "Candidature not found");
+      if (isTruthyFlag(input.reset)) {
+        c.emailBody = null;
+        await c.save();
+        return ok({ ok: true, summary: `Corps de mail sur mesure supprimé pour ${c.entreprise} — le modèle par défaut sera utilisé.` });
+      }
+      // Même nettoyage que set_lettre : l'envoi ajoute déjà « Bonjour » et la signature.
+      const texte = stripLetterBoilerplate(String(input.texte ?? ""));
+      if (texte.length < 60) {
+        return fail(400, "Corps de mail trop court (min 60 caractères) — envoie le texte complet, sans salutation ni signature.");
+      }
+      const alreadySent = (c.emailsSent ?? []).some(
+        (e: { type?: string; status?: string }) => e.type === "candidature" && e.status === "sent"
+      );
+      c.emailBody = texte;
+      await c.save();
+      return ok({
+        ok: true,
+        summary: `Corps de mail enregistré pour ${c.entreprise} (${texte.length} caractères).${
+          alreadySent
+            ? ` Attention : la candidature est déjà partie (statut « ${c.statut} ») — ce texte ne servira que si un nouvel envoi a lieu.`
+            : " C'est lui qui accompagnera le CV et la lettre à l'envoi."
         }`,
       });
     }

@@ -158,7 +158,10 @@ export async function sendCandidature(
   letterPdfBuffer: Buffer,
   candidatName: string = "Mohammed Hamiani",
   type: "stage" | "alternance" | "cdi" = "alternance",
-  cvOverride?: { buffer: Buffer; filename: string }
+  cvOverride?: { buffer: Buffer; filename: string },
+  // Corps de mail sur mesure (texte brut, sans salutation ni signature — ajoutées ici).
+  // Rédigé en conversation avec l'agent (Candidature.emailBody). null/vide = modèle par défaut.
+  customBody?: string | null
 ): Promise<void> {
   const isSpontanee = poste.toLowerCase().includes("spontanée") || poste.toLowerCase().includes("spontanee");
   // entreprise/poste viennent (en partie) du scraping de sites externes : on échappe avant
@@ -186,7 +189,20 @@ export async function sendCandidature(
     ? `${subjectPrefix} développeur - ${candidatName}`
     : `${subjectPrefix} - ${poste} - ${candidatName}`;
 
-  if (isSpontanee) {
+  if (customBody && customBody.trim()) {
+    const paragraphs = customBody
+      .trim()
+      .split(/\n{2,}/)
+      .map((p) => `<p>${esc(p.trim()).replace(/\n/g, "<br>")}</p>`)
+      .join("\n      ");
+    emailBody = `
+    <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
+      <p>Bonjour,</p>
+      ${paragraphs}
+      <p>Cordialement,<br><strong>${candidatName}</strong></p>
+    </div>
+  `;
+  } else if (isSpontanee) {
     const typeText =
       type === "cdi" ? "un poste de développeur web en CDI" :
       type === "stage" ? "un stage en développement web" :

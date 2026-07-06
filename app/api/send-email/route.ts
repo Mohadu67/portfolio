@@ -81,7 +81,8 @@ export async function POST(request: NextRequest) {
         letterPdfBuffer,
         process.env.PROFIL_NOM || "Mohammed Hamiani",
         type || "alternance",
-        { buffer: resolvedCV.buffer, filename: resolvedCV.filename }
+        { buffer: resolvedCV.buffer, filename: resolvedCV.filename },
+        candidature.emailBody
       );
     } catch (err) {
       sendError = err instanceof Error ? err.message : String(err);

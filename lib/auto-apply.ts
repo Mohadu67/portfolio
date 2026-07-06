@@ -178,7 +178,8 @@ export async function dispatchCandidature(
       letterPdfBuffer,
       process.env.PROFIL_NOM || "Mohammed Hamiani",
       candidatureType,
-      { buffer: resolvedCV.buffer, filename: resolvedCV.filename }
+      { buffer: resolvedCV.buffer, filename: resolvedCV.filename },
+      candDoc.emailBody
     );
 
     candDoc.emailsSent = [

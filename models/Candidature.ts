@@ -112,6 +112,9 @@ export interface ICandidature {
   statut: CandidatureStatut;
   type: CandidatureType;
   lettre: string | null;
+  // Corps de mail sur mesure (texte brut, sans « Bonjour » ni signature — ajoutés à l'envoi).
+  // null = modèle par défaut de sendCandidature. Rédigé via l'agent (set_email_body).
+  emailBody: string | null;
   // Consignes libres pour orienter la prochaine génération IA (ex: « mentionne mon expérience React »,
   // « ne parle pas du fast-food »). Vide = comportement par défaut.
   letterInstruction: string;
@@ -232,6 +235,7 @@ const candidatureSchema = new Schema<ICandidature>(
       default: "alternance",
     },
     lettre: { type: String, default: null },
+    emailBody: { type: String, default: null },
     letterInstruction: { type: String, default: "" },
     cv: { type: String, default: null },
     notes: { type: String, default: "" },

@@ -71,5 +71,6 @@ export const TOOL_LABELS: Record<string, string> = {
   delete_candidature: "Supprimer définitivement une candidature",
   write_letter: "Régénérer la lettre avec consigne",
   set_lettre: "Enregistrer une lettre sur mesure",
+  set_email_body: "Enregistrer un mail d'accompagnement sur mesure",
   send_letter_to_me: "M'envoyer la lettre par email",
 };

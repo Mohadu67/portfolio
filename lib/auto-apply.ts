@@ -11,7 +11,7 @@ import { Candidature, ICandidature, CandidatureType } from "@/models/Candidature
 import { getSettingsDoc } from "@/models/Settings";
 import { isProspectSkipFresh, recordProspectSkip, ProspectSkipReason } from "@/models/ProspectedDomain";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage, fetchJobDescription, ScrapedJobOffer } from "./web-scraper";
-import { scoreCompanyFit, matchJobOffer, generateLetterProposal } from "./gemini";
+import { scoreCompanyFit, matchJobOffer, generateLetterProposal, generateEmailBody } from "./gemini";
 import { pickBestContactEmail, pickBestContactEmailLoose, EmailScore } from "./auto-apply-filters";
 import { sendCandidature } from "./email";
 import { generateLettrePDF } from "./pdf-generator";
@@ -377,6 +377,26 @@ export async function applyToExistingCandidature(
         type: candidatureType,
       },
     ];
+
+    // Génération du corps d'email personnalisé (cohérent avec la lettre et le contexte).
+    // Non bloquant : en cas d'échec, sendCandidature utilisera un fallback minimal.
+    try {
+      const instruction = (candDoc.letterInstruction && candDoc.letterInstruction.trim())
+        ? candDoc.letterInstruction
+        : (opts.defaultLetterInstruction ?? "");
+      candDoc.emailBody = await generateEmailBody({
+        entreprise: entrepriseName,
+        poste: candDoc.poste,
+        type: candidatureType,
+        lettre,
+        aboutText: aboutText || description,
+        instruction: instruction || undefined,
+      });
+    } catch (emailBodyErr) {
+      const msg = emailBodyErr instanceof Error ? emailBodyErr.message : String(emailBodyErr);
+      console.error("[applyToExistingCandidature] generateEmailBody failed:", msg);
+    }
+
     await candDoc.save();
   }
 

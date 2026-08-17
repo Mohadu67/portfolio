@@ -44,6 +44,7 @@ vi.mock("@/lib/gemini", async (importOriginal) => {
     generateLetterProposal: vi.fn(async (_entreprise: string, _aboutText: string, _poste: string | undefined, _type: string, userInstruction?: string) => {
       return `Lettre générée${userInstruction ? ` — consigne reçue : ${userInstruction.slice(0, 200)}` : " — sans consigne"}.`;
     }),
+    generateEmailBody: vi.fn(async () => "Corps de mail de test généré par Gemini."),
   };
 });
 
@@ -142,6 +143,7 @@ describe("apply_from_email", () => {
     expect(docs).toHaveLength(1);
     expect(docs[0].statut).toBe("lettre générée");
     expect(docs[0].email).toBe("recruteur@testcorp.com");
+    expect(docs[0].emailBody).toBe("Corps de mail de test généré par Gemini.");
   });
 
   it("envoie la candidature manuelle quand dry_run=false", async () => {

@@ -16,6 +16,8 @@ import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage } from "@/lib/
 import {
   scoreCompanyFit,
   generateLetterProposal,
+  generateEmailBody,
+  stripEmailBoilerplate,
   parseEmailWithAI,
   draftReplyWithInstruction,
   summarizeInboundEmail,
@@ -953,6 +955,21 @@ export async function executeTool(toolName: string, input: Record<string, unknow
             { version: (c.letters?.length ?? 0) + 1, model: "gemini", content: lettre, generatedAt: new Date(), type },
           ];
           c.statut = "lettre générée";
+
+          // Génération du corps d'email cohérent avec la lettre
+          try {
+            c.emailBody = await generateEmailBody({
+              entreprise: c.entreprise,
+              poste: c.poste,
+              type,
+              lettre,
+              aboutText: aboutText || c.description || "",
+              instruction: letterInstruction || undefined,
+            });
+          } catch (emailBodyErr) {
+            console.warn("[apply_from_email] generateEmailBody failed:", emailBodyErr);
+          }
+
           await c.save();
 
           return ok({
@@ -1463,8 +1480,8 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         await c.save();
         return ok({ ok: true, summary: `Corps de mail sur mesure supprimé pour ${c.entreprise} — le modèle par défaut sera utilisé.` });
       }
-      // Même nettoyage que set_lettre : l'envoi ajoute déjà « Bonjour » et la signature.
-      const texte = stripLetterBoilerplate(String(input.texte ?? ""));
+      // L'envoi ajoute déjà « Bonjour » et la signature : on utilise le strippeur dédié aux emails.
+      const texte = stripEmailBoilerplate(String(input.texte ?? ""));
       if (texte.length < 60) {
         return fail(400, "Corps de mail trop court (min 60 caractères) — envoie le texte complet, sans salutation ni signature.");
       }

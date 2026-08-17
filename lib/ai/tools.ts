@@ -286,6 +286,10 @@ export const TOOLS: ToolDefinition[] = [
           type: "string",
           description: "Email destinataire saisi explicitement par l'utilisateur — bypass total du picker auto. À utiliser quand un email valable a été trouvé mais que le filtre auto le rejette.",
         },
+        force: {
+          type: "boolean",
+          description: "Force l'envoi même si le site n'a pas pu être scrapé (JS-only/inaccessible). Nécessite un email_override valide. La lettre sera générée à partir de la consigne utilisateur.",
+        },
       },
       required: ["url"],
     },
@@ -364,6 +368,10 @@ export const TOOLS: ToolDefinition[] = [
         allow_generic_email: {
           type: "boolean",
           description: "Autorise l'envoi à un email générique du domaine. Mettre true en dry_run si aucun email nominatif n'est trouvé.",
+        },
+        force: {
+          type: "boolean",
+          description: "Force l'envoi même si le site n'a pas pu être scrapé (JS-only/inaccessible). Nécessite un email_override valide.",
         },
       },
       required: ["email_content"],

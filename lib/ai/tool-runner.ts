@@ -728,6 +728,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         candidatureType: type,
         letterInstruction,
         country: normalizeCountryInput(input.country),
+        force: isTruthyFlag(input.force),
       });
       const allowGenericEmailUsed = isTruthyFlag(input.allow_generic_email);
       const emailFailure = decision.skipReason?.includes("aucun email RH") ?? false;
@@ -865,6 +866,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
           allowGenericEmail: isTruthyFlag(input.allow_generic_email),
           allowDuplicate: isTruthyFlag(input.allow_duplicate),
           country,
+          force: isTruthyFlag(input.force),
         });
         const summary = JSON.stringify({
           decision: decision.decision,

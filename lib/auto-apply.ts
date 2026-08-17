@@ -822,6 +822,10 @@ export interface ProcessSingleOptions {
   // Pays cible (fr, de, ch, be, lu, at, nl). Sert à orienter la recherche/résolution du site
   // officiel et la langue des outils IA quand c'est pertinent.
   country?: string;
+  // Force l'envoi même si le scraping du site est vide (JS-only/inaccessible), à condition
+  // qu'un email_override valide soit fourni. La lettre sera générée uniquement à partir de
+  // la consigne utilisateur et du nom de l'entreprise.
+  force?: boolean | string;
 }
 
 export async function processSingleCompany(
@@ -860,7 +864,9 @@ export async function processSingleCompany(
 
     // 2. Scrape entreprise
     const scraped = await scrapeCompanyWebsite(cleanUrl);
-    if (!scraped.aboutText && scraped.emails.length === 0) {
+    const hasOverride = opts.emailOverride && opts.emailOverride.trim().length > 0;
+    const canForce = (opts.force === true || opts.force === "true") && hasOverride;
+    if (!scraped.aboutText && scraped.emails.length === 0 && !canForce) {
       decision.skipReason = "scrape vide (site inaccessible, JS-only ou pas d'email exposé)";
       return decision;
     }

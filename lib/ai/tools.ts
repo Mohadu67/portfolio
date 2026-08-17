@@ -286,6 +286,103 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "parse_email",
+    description:
+      "Analyse un message collé ou forwardé par l'utilisateur pour en extraire les métadonnées : type (offre / réponse recruteur / forward / inconnu), entreprise, poste, email de contact, URL, localisation, instructions libres et URLs de contexte. À utiliser DÈS QUE l'utilisateur colle un bloc ressemblant à un email, ou qu'il fournit un email + instructions + URLs.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        raw_text: {
+          type: "string",
+          description: "Texte brut envoyé par l'utilisateur (peut mélanger email, instructions et URLs).",
+        },
+        user_instruction: {
+          type: "string",
+          description: "Instruction libre explicite de l'utilisateur (optionnel — parse_email essaie aussi de l'extraire du texte).",
+        },
+      },
+      required: ["raw_text"],
+    },
+  },
+  {
+    name: "apply_from_email",
+    description:
+      "Prépare et envoie une candidature à partir d'un email ou d'instructions textuelles. Scrape l'entreprise et les pages de contexte (ex: master), génère la lettre avec les consignes, puis propose l'envoi (validation Telegram obligatoire). Par défaut : dry_run=true pour montrer la lettre AVANT d'envoyer. À utiliser quand l'utilisateur dit 'postule à cette adresse', 'envoie une candidature à cet email', ou après parse_email quand le type est 'offre'.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        email_content: {
+          type: "string",
+          description: "Contenu brut du message/email de l'utilisateur.",
+        },
+        letter_instruction: {
+          type: "string",
+          description: "Consigne libre pour orienter la lettre (ex: 'insiste sur le côté chef de projet', 'mentionne mon master en manager en ingénierie informatique').",
+        },
+        type: {
+          type: "string",
+          enum: ["stage", "alternance", "cdi"],
+          description: "Type de candidature visé (défaut: alternance).",
+        },
+        email_override: {
+          type: "string",
+          description: "Email destinataire fourni explicitement par l'utilisateur. Si vide, l'IA tente de le résoudre depuis le site.",
+        },
+        company_url: {
+          type: "string",
+          description: "URL du site de l'entreprise ou de l'offre si connue.",
+        },
+        context_urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "URLs de contexte à scraper pour enrichir la lettre (ex: page de la formation/master).",
+        },
+        dry_run: {
+          type: "boolean",
+          description: "Si true (défaut) : génère la lettre et montre un récap SANS envoyer. L'utilisateur valide ensuite l'envoi réel.",
+        },
+        skip_quality_score: {
+          type: "boolean",
+          description: "Bypass le scoring qualité Gemini (rare).",
+        },
+        allow_duplicate: {
+          type: "boolean",
+          description: "Forcer même si le domaine a déjà été contacté (rare).",
+        },
+        allow_generic_email: {
+          type: "boolean",
+          description: "Autorise l'envoi à un email générique (contact@, info@...) quand aucun email RH nominatif n'est trouvé. À n'utiliser que sur demande explicite de l'utilisateur.",
+        },
+      },
+      required: ["email_content"],
+    },
+  },
+  {
+    name: "draft_email_reply",
+    description:
+      "Rédige une réponse à un recruteur à partir d'un email reçu et d'instructions. Si candidature_id est fourni, la réponse sera envoyée dans le thread existant. Sinon, prépare un brouillon à envoyer manuellement. À utiliser quand l'utilisateur colle une réponse de RH et demande de répondre.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: {
+          type: "string",
+          description: "ID MongoDB de la candidature liée (permet d'envoyer dans le thread).",
+        },
+        email_content: {
+          type: "string",
+          description: "Contenu du mail reçu (obligatoire si candidature_id non fourni).",
+        },
+        reply_instruction: {
+          type: "string",
+          description: "Consigne pour la réponse (ex: 'dis que je suis dispo mardi et jeudi après-midi', 'demande plus de détails sur le poste').",
+        },
+      },
+    },
+  },
+  {
     name: "process_pending_candidatures",
     description:
       "Lance le pipeline F3 (process pending) sur les candidatures statut 'identifiée' : pour chacune, scrape best-effort + résolution SerpAPI si besoin, génère lettre, envoie. Utiliser quand l'utilisateur demande de relancer/traiter les candidatures en attente ou veut vider le backlog. Respecte le rate-limit Gmail global.",

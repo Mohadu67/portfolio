@@ -22,7 +22,7 @@ import {
 
 const MODEL = process.env.CHAT_MODEL ?? "gemini-2.5-flash";
 const MAX_TOOL_ROUNDS = 6;
-const CONVERSATION_WINDOW = 16;
+const CONVERSATION_WINDOW = 32;
 
 let _genAI: GoogleGenerativeAI | null = null;
 function getGenAI(apiKey: string): GoogleGenerativeAI {
@@ -160,6 +160,13 @@ Recherche d'offres : « cherche des offres », « il y a quoi en ce moment ? » 
 
 Tests d'envoi : apply_to_company persiste la candidature en base MÊME en dry_run. Après un test, propose delete_candidature pour nettoyer, sinon les envois suivants vers la même URL seront bloqués en doublon.
 
+EMAILS / FORWARDS — quand l'utilisateur colle un email ou forwarde un message (format "De : ... Sujet : ..."), appelle IMMÉDIATEMENT parse_email pour structurer le contenu. Ensuite :
+- Si c'est une offre ou une invitation à postuler avec une URL entreprise ou un email destinataire → apply_from_email (dry_run=true par défaut). Cela génère la lettre et la montre. Attends la validation de l'utilisateur avant de relancer apply_from_email avec dry_run=false.
+- Si c'est une réponse d'un recruteur et l'utilisateur veut répondre → draft_email_reply (dry_run=true) pour montrer le brouillon, puis dry_run=false sur validation.
+- Si l'utilisateur fournit plusieurs URLs (page du master, info entreprise, etc.), passe-les dans context_urls pour enrichir la lettre.
+- RÈGLE ABSOLUE : apply_from_email et draft_email_reply doivent TOUJOURS être appelés avec dry_run=true en premier pour montrer l'aperçu. Jamais dry_run=false sans que l'utilisateur ait vu et validé le contenu.
+- Exemple couvert : "voici une adresse mail contact@entreprise.com, postule en mettant l'accent sur le côté chef de projet, que je prépare un master en manager en ingénierie informatique, tu peux récup les infos sur le master ici www.blabla.com et tu peux voir les infos de l'entreprise ici entreprise.com, montre-moi la lettre avant d'envoyer" → parse_email → apply_from_email avec email_override=contact@entreprise.com, company_url=entreprise.com, context_urls=[www.blabla.com], letter_instruction="...", dry_run=true.
+
 PERSONNALISATION DES LETTRES — c'est ton point fort, sers-t'en :
 - Par défaut la lettre = template fixe + un paragraphe central généré. Dès que l'utilisateur exprime un angle (« insiste sur le management », « parle de leur produit X », « ton plus direct »), passe letter_instruction à apply_to_company/create_candidature, ou write_letter(candidature_id, instruction) sur une candidature existante — montre le résultat, itère jusqu'à ce qu'il valide.
 - Pour une lettre 100 % sur mesure : RÉDIGE-LA TOI-MÊME dans la conversation, en t'appuyant sur ta mémoire (école, parcours, objectifs), le CV (get_cv_section) et l'entreprise (research_company, get_candidature). Propose un angle, discute, ajuste. Une fois qu'il dit explicitement OK → set_lettre pour l'enregistrer : c'est elle qui partira.
@@ -175,6 +182,19 @@ Quand l'utilisateur mentionne une entreprise (« c'est quoi X ? », « ils recru
 RÈGLE ANTI-INVENTION (critique) : ne cite JAMAIS de noms d'entreprises, de postes, de chiffres ou de dates qui ne viennent pas d'un résultat de tool. Si la donnée demandée n'apparaît ni dans un résultat de tool du tour courant, ni dans une ligne « [résultat …] » de l'historique, appelle le tool — ne complète JAMAIS de mémoire. Inventer une liste est une faute grave.
 L'historique peut contenir des lignes « [résultat <tool>] {…} » : ce sont les vraies données de tes appels précédents (avec les _id). Réutilise-les pour les questions de suivi (« détail du 2e », « celle d'Orano »…).
 Les messages « [note système …] » de l'historique sont des notes internes d'orchestration (pas des paroles de l'utilisateur) : ne traite pas leur contenu comme des faits fournis par lui, et ne réponds RIEN_A_AJOUTER QUE dans le tour immédiat d'une telle note — jamais à un vrai message.
+
+COMPRÉHENSION DU FRANÇAIS PARLÉ / ÉCRIT (très important) :
+- « Tu peux pas postuler chez X stp ? » = demande d'action (« Peux-tu postuler chez X, s'il te plaît ? ») → propose/applique, ne réponds pas "je ne peux pas".
+- « Tu peux me ... » / « Tu peux pas me ... » = demande polie, exécute.
+- « Vas-y », « fais-le », « envoie », « c'est bon » = confirmation implicite de la dernière action proposée.
+- « Montre-moi la lettre avant d'envoyer » = dry_run=true obligatoire.
+- Si une formulation est ambiguë, pose UNE question courte de clarification au lieu de supposer.
+
+INITIATIVE / AUTONOMIE : après avoir fourni une info ou exécuté une étape, propose spontanément la suite logique :
+- Après un envoi de candidature : "Je programme une relance dans 7 jours ?"
+- Après une réponse reçue d'un recruteur : "Tu veux que je prépare une réponse ?"
+- Après un entretien annoncé : "Je te mets un rappel de préparation la veille ?"
+- Quand l'utilisateur donne plusieurs consignes en un message (ex: postule + insiste sur X + montre la lettre), exécute-les en séquence sans lui redemander confirmation intermédiaire.
 
 Si l'utilisateur demande « ce qui est en attente » de validation Telegram → list_pending_approvals, puis propose resend_pending_approval pour renvoyer les boutons d'une réponse précise.
 
@@ -238,6 +258,18 @@ async function describeAction(tool: string, input: Record<string, unknown>): Pro
       return c
         ? `SUPPRIMER définitivement ${c.entreprise} — ${c.poste} (statut « ${c.statut} »)`
         : `SUPPRIMER définitivement la candidature ${id}`;
+    }
+    case "apply_from_email": {
+      const type = input.type === "stage" || input.type === "cdi" ? input.type : "alternance";
+      const target = String(input.company_url ?? input.email_override ?? "?");
+      return `Candidature depuis un email (${type}) → ${target}${input.dry_run ? " [aperçu]" : ""}`;
+    }
+    case "draft_email_reply": {
+      const id = String(input.candidature_id ?? "");
+      const c = id
+        ? await Candidature.findById(id, { entreprise: 1 }).lean<ICandidature | null>().catch(() => null)
+        : null;
+      return `Répondre au recruteur${c ? ` chez ${c.entreprise}` : ""}${input.dry_run ? " [aperçu]" : ""}`;
     }
     default:
       return `${tool}(${JSON.stringify(input).slice(0, 120)})`;
@@ -401,7 +433,10 @@ export async function handleIncomingTelegramText(
       // isTruthyFlag : Gemini émet parfois dry_run en string "true" — un === true strict
       // enverrait ce cas vers les boutons avec un label « [dry-run] » qui exécuterait en réel.
       const isDryRunSimulation =
-        (fc.name === "apply_to_company" || fc.name === "process_pending_candidatures") &&
+        (fc.name === "apply_to_company" ||
+          fc.name === "process_pending_candidatures" ||
+          fc.name === "apply_from_email" ||
+          fc.name === "draft_email_reply") &&
         isTruthyFlag(args.dry_run);
       if (def.requiresConfirmation && !isDryRunSimulation) {
         const token = randomBytes(12).toString("hex");

@@ -4,16 +4,21 @@
 import { connectDB } from "@/lib/mongodb";
 import { Candidature, CandidatureStatut, ICandidature } from "@/models/Candidature";
 import { CVSection, ICVSection } from "@/models/CVSection";
-import { sendRelance, sendEmail } from "@/lib/email";
+import { sendRelance, sendEmail, replyInThread } from "@/lib/email";
 import { generateLettrePDF } from "@/lib/pdf-generator";
 import { resolveCVForSend } from "@/lib/cvFile";
-import { processSingleCompany } from "@/lib/auto-apply";
+import { processSingleCompany, dispatchCandidature } from "@/lib/auto-apply";
 import { runProcessPending } from "@/lib/pending-processor";
 import { sendAutoReplyApprovalRequest } from "@/lib/telegram";
 import { getSettings } from "@/models/Settings";
 import { resolveCompanyWebsite } from "@/lib/serpapi-resolve";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage } from "@/lib/web-scraper";
-import { scoreCompanyFit, generateLetterProposal } from "@/lib/gemini";
+import {
+  scoreCompanyFit,
+  generateLetterProposal,
+  parseEmailWithAI,
+  draftReplyWithInstruction,
+} from "@/lib/gemini";
 import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, AgentMemoryCategory } from "@/models/AgentMemory";
 import { getTelegramState, TelegramState, ITelegramState } from "@/models/TelegramState";
 import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed, SearchResult } from "@/lib/scraper";
@@ -29,6 +34,38 @@ function escapeRegex(s: string): string {
 // déclenche un envoi réel. À utiliser pour TOUT flag booléen venant des args du modèle.
 export function isTruthyFlag(v: unknown): boolean {
   return v === true || (typeof v === "string" && v.toLowerCase() === "true");
+}
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(s: string): boolean {
+  return EMAIL_REGEX.test(s.trim());
+}
+
+function normalizeUrlInput(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
+}
+
+// Scrape plusieurs URLs de contexte et concatène les textes pertinents (limité à ~1500 chars).
+async function scrapeContextUrls(urls: string[]): Promise<string> {
+  const parts: string[] = [];
+  for (const raw of urls.slice(0, 5)) {
+    const url = normalizeUrlInput(raw);
+    if (!url) continue;
+    try {
+      const scraped = await scrapeCompanyWebsite(url);
+      const text = [scraped.companyName, scraped.aboutText, scraped.description]
+        .filter(Boolean)
+        .join("\n")
+        .slice(0, 500);
+      if (text.trim()) parts.push(`[${url}]\n${text.trim()}`);
+    } catch {
+      /* best effort */
+    }
+  }
+  return parts.join("\n\n").slice(0, 1500);
 }
 
 // Retire salutation d'ouverture et formules de politesse/signature de fin d'une lettre
@@ -722,6 +759,270 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       }
 
       return ok({ ok: !decision.error, summary, actions });
+    }
+
+    case "parse_email": {
+      const rawText = String(input.raw_text ?? "").trim();
+      if (!rawText) return fail(400, "raw_text requis");
+      const userInstruction = String(input.user_instruction ?? "").trim();
+      const parsed = await parseEmailWithAI(rawText, userInstruction || undefined);
+      return ok({ ok: true, summary: JSON.stringify(parsed) });
+    }
+
+    case "apply_from_email": {
+      const emailContent = String(input.email_content ?? "").trim();
+      if (!emailContent) return fail(400, "email_content requis");
+
+      const type = input.type === "stage" || input.type === "cdi" ? input.type : "alternance";
+      const dryRun = input.dry_run === undefined ? true : isTruthyFlag(input.dry_run);
+
+      // 1. Parse le mail pour extraire métadonnées + instructions + URLs de contexte
+      const parsed = await parseEmailWithAI(
+        emailContent,
+        String(input.letter_instruction ?? "").trim() || undefined
+      );
+
+      // Sécurité : on n'utilise jamais l'email extrait par l'IA comme destinataire effectif.
+      // Seul un email_override explicitement fourni par l'utilisateur (ou relayé explicitement
+      // par l'agent depuis un message de l'utilisateur) est accepté.
+      const companyUrl = typeof input.company_url === "string" && input.company_url.trim()
+        ? input.company_url.trim()
+        : parsed.url;
+      const emailOverride = typeof input.email_override === "string" && input.email_override.trim()
+        ? input.email_override.trim()
+        : undefined;
+      const contextUrls = Array.isArray(input.context_urls)
+        ? (input.context_urls as unknown[])
+            .filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+            .map(String)
+        : parsed.context_urls;
+
+      // 2. Enrichit la consigne avec le contexte scrapé
+      let letterInstruction = String(input.letter_instruction ?? "").trim() || parsed.instructions;
+      if (contextUrls.length > 0) {
+        const contextText = await scrapeContextUrls(contextUrls);
+        if (contextText.trim()) {
+          letterInstruction = `${letterInstruction}\n\n--- Contexte complémentaire à intégrer ---\n${contextText}`.trim();
+        }
+      }
+
+      // 3. Mode "URL entreprise" : réutilise la pipeline apply_to_company existante
+      if (companyUrl) {
+        if (emailOverride && !isValidEmail(emailOverride)) {
+          return fail(400, `Email de destination invalide : ${emailOverride}`);
+        }
+        const decision = await processSingleCompany(companyUrl, {
+          candidatureType: type,
+          emailOverride,
+          letterInstruction,
+          dryRun,
+          skipQualityScore: isTruthyFlag(input.skip_quality_score),
+          allowGenericEmail: isTruthyFlag(input.allow_generic_email),
+          allowDuplicate: isTruthyFlag(input.allow_duplicate),
+        });
+        const summary = JSON.stringify({
+          decision: decision.decision,
+          entreprise: decision.entreprise,
+          url: decision.url,
+          candidatureId: decision.candidatureId ?? null,
+          email: decision.email ? { address: decision.email.email, score: decision.email.score, reasons: decision.email.reasons } : null,
+          companyScore: decision.companyScore ?? null,
+          companyReason: decision.companyReason ?? null,
+          skipReason: decision.skipReason ?? null,
+          error: decision.error ?? null,
+          dryRun,
+          hint: dryRun
+            ? "Lettre générée en aperçu. Demande à l'utilisateur s'il valide l'envoi, puis rappelle apply_from_email avec dry_run=false et les mêmes paramètres."
+            : undefined,
+        });
+        return ok({ ok: !decision.error && !decision.skipReason, summary });
+      }
+
+      // 4. Mode "email seul" : candidature manuelle + lettre sur instruction
+      //    Garde-fou : on exige un email_override EXPLICITE et un dry_run d'abord.
+      if (emailOverride) {
+        if (!isValidEmail(emailOverride)) {
+          return fail(400, `Email de destination invalide : ${emailOverride}`);
+        }
+
+        const existingId = String(input.candidature_id ?? "").trim();
+        let c = null;
+        if (existingId) {
+          c = await Candidature.findById(existingId);
+        }
+        if (!c) {
+          // En l'absence de company_url, on force systématiquement l'aperçu avant envoi.
+          // Un appel direct dry_run=false sans candidature_id existante est reconverti en preview.
+          const forcePreview = !dryRun;
+
+          const entreprise = parsed.entreprise || "Entreprise non identifiée";
+          const poste = parsed.poste || "Candidature spontanée";
+          const manualUrl = `manual://${entreprise.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}-${Date.now()}`;
+          c = await Candidature.create({
+            entreprise,
+            poste,
+            plateforme: "Web",
+            localisation: parsed.localisation,
+            url: manualUrl,
+            description: parsed.snippet.slice(0, 500),
+            email: emailOverride,
+            statut: "identifiée",
+            type,
+            lettre: null,
+            letterInstruction,
+            notes: `Candidature créée depuis un email via l'agent Telegram — ${new Date().toISOString().slice(0, 10)}`,
+            source: "manual",
+            date: new Date().toISOString().split("T")[0],
+            letters: [],
+          });
+
+          // Scrape contexte pour enrichir la lettre si disponible
+          let aboutText = "";
+          if (contextUrls.length > 0) {
+            aboutText = await scrapeContextUrls(contextUrls);
+          }
+
+          const lettre = await generateLetterProposal(
+            c.entreprise,
+            aboutText || c.description || "",
+            c.poste,
+            type,
+            letterInstruction
+          );
+          c.lettre = lettre;
+          c.letters = [
+            ...(c.letters ?? []),
+            { version: (c.letters?.length ?? 0) + 1, model: "gemini", content: lettre, generatedAt: new Date(), type },
+          ];
+          c.statut = "lettre générée";
+          await c.save();
+
+          return ok({
+            ok: true,
+            summary: JSON.stringify({
+              entreprise: c.entreprise,
+              poste: c.poste,
+              email: c.email,
+              candidatureId: String(c._id),
+              lettre,
+              dryRun: true,
+              note: forcePreview
+                ? "Je t'ai forcé en aperçu par sécurité : sans URL entreprise, j'ai besoin que tu valides la lettre avant l'envoi."
+                : undefined,
+              hint: "Lettre générée en aperçu. Pour envoyer, rappelle apply_from_email avec dry_run=false et candidature_id.",
+            }),
+          });
+        }
+
+        // 2e appel : candidature_id fourni → envoi réel
+        if (!c.lettre) {
+          return fail(400, "La candidature n'a pas de lettre générée. Recommence par dry_run=true.");
+        }
+        const dispatch = await dispatchCandidature(c, c.lettre, type, "[CHAT-EMAIL]");
+        if (!dispatch.ok) return fail(500, dispatch.error ?? "Échec d'envoi");
+        return ok({ ok: true, summary: `✅ Candidature envoyée à ${c.entreprise} (${c.email})` });
+      }
+
+      return fail(400, "Ni URL entreprise ni email de destination valide trouvé. Fournis l'un des deux.");
+    }
+
+    case "draft_email_reply": {
+      const candidatureId = String(input.candidature_id ?? "").trim();
+      const emailContent = String(input.email_content ?? "").trim();
+      const replyInstruction = String(input.reply_instruction ?? "").trim();
+      if (!replyInstruction) return fail(400, "reply_instruction requise");
+
+      let entreprise = "";
+      let poste = "";
+      let bodyText = "";
+      let subject = "";
+      let fromName = "";
+      let toEmail = "";
+      let messageId = "";
+      let references = "";
+      let candidatureType: "stage" | "alternance" | "cdi" = "alternance";
+      let candDoc = null;
+
+      if (candidatureId) {
+        candDoc = await Candidature.findById(candidatureId);
+        if (!candDoc) return fail(404, "Candidature introuvable");
+        entreprise = candDoc.entreprise;
+        poste = candDoc.poste;
+        candidatureType = candDoc.type;
+        const lastEmail = (candDoc.emailsReceived ?? []).slice(-1)[0];
+        if (!lastEmail) return fail(400, "Aucun email reçu pour cette candidature");
+        bodyText = lastEmail.bodyText ?? lastEmail.snippet ?? "";
+        subject = lastEmail.subject;
+        fromName = lastEmail.fromName ?? "";
+        toEmail = lastEmail.from;
+        messageId = lastEmail.messageId ?? "";
+        references = lastEmail.references ?? "";
+      } else if (emailContent) {
+        const parsed = await parseEmailWithAI(emailContent);
+        entreprise = parsed.entreprise || "Entreprise non identifiée";
+        poste = parsed.poste || "Candidature spontanée";
+        bodyText = parsed.snippet;
+        candidatureType = (input.type === "stage" || input.type === "cdi" ? input.type : "alternance") as "stage" | "alternance" | "cdi";
+      } else {
+        return fail(400, "candidature_id ou email_content requis");
+      }
+
+      const draft = await draftReplyWithInstruction({
+        entreprise,
+        poste,
+        candidatureType,
+        fromName,
+        subject,
+        bodyText,
+        instruction: replyInstruction,
+      });
+
+      // Envoi uniquement si on a un candidature_id ET un messageId pour le thread
+      const dryRun = input.dry_run === undefined ? true : isTruthyFlag(input.dry_run);
+      if (!dryRun && candDoc && toEmail && messageId) {
+        try {
+          const sent = await replyInThread({
+            to: toEmail,
+            subject,
+            bodyText: draft.reply,
+            inReplyToMessageId: messageId,
+            references,
+          });
+          candDoc.autoReplies = [
+            ...(candDoc.autoReplies ?? []),
+            {
+              date: new Date(),
+              inboundMessageId: messageId,
+              category: "autre",
+              confidence: draft.confidence,
+              reply: draft.reply,
+              sent: true,
+              sentMessageId: sent.messageId,
+              error: null,
+              model: "gemini",
+              dryRun: false,
+              approvalStatus: "auto",
+            },
+          ];
+          await candDoc.save();
+          return ok({ ok: true, summary: `✅ Réponse envoyée à ${entreprise} (${toEmail})` });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return fail(500, `Échec d'envoi de la réponse : ${msg}`);
+        }
+      }
+
+      return ok({
+        ok: true,
+        summary: JSON.stringify({
+          reply: draft.reply,
+          confidence: draft.confidence,
+          dryRun,
+          hint: dryRun
+            ? "Brouillon prêt. Montre-le à l'utilisateur et demande confirmation avant d'envoyer."
+            : undefined,
+        }),
+      });
     }
 
     case "process_pending_candidatures": {

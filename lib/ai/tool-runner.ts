@@ -437,14 +437,22 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         });
       }
 
-      // 2. Présentation + emails (filtrés pour ne garder que ceux du domaine du site)
+      // 2. Présentation + emails (filtrés pour ne garder que ceux du domaine / famille du site)
       const scraped = await scrapeCompanyWebsite(site);
       const siteDomain = new URL(site).hostname.replace(/^www\./, "").toLowerCase();
       const siteDomainBase = siteDomain.split(".").slice(-2).join(".");
+      const siteNameParts = siteDomain
+        .split(".")
+        .filter((p) => p.length >= 3 && !["com", "fr", "net", "org", "io", "co", "eu", "ch", "be", "lu", "de", "at", "nl"].includes(p));
       const filteredEmails = (scraped.emails ?? []).filter((email) => {
         const emailDomain = email.split("@")[1]?.toLowerCase();
         if (!emailDomain) return false;
-        return emailDomain === siteDomain || emailDomain.endsWith(`.${siteDomainBase}`) || siteDomainBase.endsWith(`.${emailDomain.split(".").slice(-2).join(".")}`);
+        if (emailDomain === siteDomain) return true;
+        if (emailDomain.endsWith(`.${siteDomainBase}`)) return true;
+        const emailNameParts = emailDomain
+          .split(".")
+          .filter((p) => p.length >= 3 && !["com", "fr", "net", "org", "io", "co", "eu", "ch", "be", "lu", "de", "at", "nl"].includes(p));
+        return siteNameParts.some((sp) => emailNameParts.some((ep) => ep === sp || ep.includes(sp) || sp.includes(ep)));
       });
       const siteConfiance = isLikelyOfficialSite(site, entreprise || siteDomain) ? "élevée" : "moyenne";
 

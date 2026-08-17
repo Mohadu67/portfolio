@@ -34,6 +34,12 @@ vi.mock("@/lib/gemini", async (importOriginal) => {
       reply: "Bonjour,\n\nMerci pour votre retour. Mohammed reviendra vers vous rapidement.\n\nÀ bientôt,",
       confidence: 0.95,
     })),
+    summarizeInboundEmail: vi.fn(async () => ({
+      category: "entretien",
+      confidence: 0.92,
+      summary: "Le recruteur propose un entretien cette semaine.",
+      suggestedReply: "Merci, Mohammed vous recontacte rapidement pour confirmer un créneau.",
+    })),
     generateLetterProposal: vi.fn(async () => "Lettre générée pour le test."),
   };
 });
@@ -179,6 +185,111 @@ describe("apply_from_email", () => {
     });
     expect(r.status).toBe(400);
     expect(r.body.error).toContain("Ni URL entreprise ni email");
+  });
+
+  it("refuse dry_run=false sans candidature_id en mode email seul", async () => {
+    const r = await executeTool("apply_from_email", {
+      email_content: "postule chez TestCorp",
+      email_override: "recruteur@testcorp.com",
+      dry_run: false,
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain("dry_run=true");
+  });
+
+  it("utilise les URLs de contexte et déduit l'entreprise depuis l'email", async () => {
+    const r = await executeTool("apply_from_email", {
+      email_content: "postule en insistant sur le chef de projet, master ici",
+      email_override: "recruteur@example.com",
+      context_urls: ["https://master-info.fr"],
+      letter_instruction: "met l'accent sur le côté chef de projet",
+    });
+    expect(r.body.error).toBeUndefined();
+    const data = parse(r.body.summary);
+    expect(data.dryRun).toBe(true);
+    expect(data.email).toBe("recruteur@example.com");
+    expect(data.contextSources).toContain("https://master-info.fr");
+    expect(data.contextSources).toContain("https://example.com");
+  });
+});
+
+describe("read_email_response", () => {
+  it("résume les emails reçus d'une candidature", async () => {
+    const doc = await Candidature.create({
+      entreprise: "TestCorp",
+      poste: "Dev",
+      plateforme: "Web",
+      localisation: "",
+      url: "https://testcorp.fr",
+      description: "",
+      email: "rh@testcorp.fr",
+      statut: "postulée",
+      type: "alternance",
+      lettre: null,
+      source: "manual",
+      date: "2026-08-17",
+      emailsReceived: [
+        {
+          date: new Date(),
+          from: "rh@testcorp.fr",
+          fromName: "RH TestCorp",
+          subject: "Suite candidature",
+          snippet: "Proposition d'entretien",
+          bodyText: "Bonjour, seriez-vous disponible cette semaine pour un entretien ?",
+          messageId: "inbound-123",
+          references: "",
+          archived: false,
+        },
+      ],
+    });
+
+    const r = await executeTool("read_email_response", { candidature_id: String(doc._id) });
+    expect(r.body.error).toBeUndefined();
+    const data = parse(r.body.summary);
+    expect(data.count).toBe(1);
+    const emails = data.emails as Array<{ summary: string }>;
+    expect(emails[0].summary).toContain("entretien");
+
+    const updated = await Candidature.findById(doc._id).lean<{ emailsReceived: Array<{ archived: boolean }> }>();
+    expect(updated!.emailsReceived[0].archived).toBe(true);
+  });
+
+  it("retourne une liste vide si aucun email reçu", async () => {
+    const doc = await Candidature.create({
+      entreprise: "TestCorp",
+      poste: "Dev",
+      plateforme: "Web",
+      localisation: "",
+      url: "https://testcorp.fr",
+      description: "",
+      email: "rh@testcorp.fr",
+      statut: "postulée",
+      type: "alternance",
+      lettre: null,
+      source: "manual",
+      date: "2026-08-17",
+    });
+    const r = await executeTool("read_email_response", { candidature_id: String(doc._id) });
+    expect(r.body.error).toBeUndefined();
+    const data = parse(r.body.summary);
+    expect(data.count).toBe(0);
+  });
+});
+
+describe("dismiss_pending_proposals", () => {
+  it("ignore les propositions de prospection en attente", async () => {
+    const { TelegramState } = await import("@/models/TelegramState");
+    await TelegramState.create({
+      chatId: "424242",
+      pendingActions: [
+        { token: "abc123", tool: "process_pending_candidatures", input: {}, label: "Prop 1", status: "pending", origin: "prospection", createdAt: new Date() },
+        { token: "def456", tool: "process_pending_candidatures", input: {}, label: "Prop 2", status: "pending", origin: "prospection", createdAt: new Date() },
+      ],
+    });
+
+    const r = await executeTool("dismiss_pending_proposals", { origin: "prospection", blacklist_domains: false });
+    expect(r.body.error).toBeUndefined();
+    expect(r.body.summary).toContain("2 proposition(s) ignorée(s)");
   });
 });
 

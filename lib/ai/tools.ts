@@ -383,6 +383,26 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "read_email_response",
+    description:
+      "Lit et résume les emails reçus d'un recruteur pour une candidature donnée. À utiliser quand l'utilisateur demande 'Ils disent quoi ?', 'Cela dit quoi ?', 'quelle est la réponse de X ?'. Retourne le contenu résumé, la catégorie (refus, entretien, demande d'infos...) et une proposition de réponse si pertinent.",
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      properties: {
+        candidature_id: {
+          type: "string",
+          description: "ID MongoDB de la candidature concernée",
+        },
+        mark_read: {
+          type: "boolean",
+          description: "Si true, marque les emails résumés comme lus/archivés (défaut: true)",
+        },
+      },
+      required: ["candidature_id"],
+    },
+  },
+  {
     name: "process_pending_candidatures",
     description:
       "Lance le pipeline F3 (process pending) sur les candidatures statut 'identifiée' : pour chacune, scrape best-effort + résolution SerpAPI si besoin, génère lettre, envoie. Utiliser quand l'utilisateur demande de relancer/traiter les candidatures en attente ou veut vider le backlog. Respecte le rate-limit Gmail global.",
@@ -605,6 +625,30 @@ export const TOOLS: ToolDefinition[] = [
         candidature_id: { type: "string", description: "ID MongoDB de la candidature à supprimer" },
       },
       required: ["candidature_id"],
+    },
+  },
+  {
+    name: "dismiss_pending_proposals",
+    description:
+      "Ignore d'un coup plusieurs propositions d'action en attente de validation Telegram. Utile quand l'utilisateur veut vider son backlog (ex: 'tout ignorer', 'ignore les propositions de prospection'). Par défaut n'ignore que les propositions d'origine prospection et blackliste leurs domaines pour ne pas les reproposer.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        origin: {
+          type: "string",
+          enum: ["prospection", "agent", "all"],
+          description: "Quelles propositions ignorer (défaut: prospection)",
+        },
+        blacklist_domains: {
+          type: "boolean",
+          description: "Si true, blackliste les domaines des propositions prospection ignorées (défaut: true)",
+        },
+        max_count: {
+          type: "number",
+          description: "Nombre max à ignorer (défaut: 100, pour éviter les accidents)",
+        },
+      },
     },
   },
 ];

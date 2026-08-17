@@ -18,12 +18,13 @@ import {
   generateLetterProposal,
   parseEmailWithAI,
   draftReplyWithInstruction,
+  summarizeInboundEmail,
 } from "@/lib/gemini";
 import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, AgentMemoryCategory } from "@/models/AgentMemory";
 import { getTelegramState, TelegramState, ITelegramState } from "@/models/TelegramState";
 import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed, SearchResult } from "@/lib/scraper";
 import { normalizeUrl } from "@/lib/url-normalize";
-import { ProspectedDomain, IProspectedDomain } from "@/models/ProspectedDomain";
+import { ProspectedDomain, IProspectedDomain, recordProspectSkip } from "@/models/ProspectedDomain";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -46,6 +47,37 @@ function normalizeUrlInput(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
   return trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
+}
+
+// Déduit une URL entreprise plausible depuis une adresse email (rh@example.com → https://example.com).
+// Retourne null si le domaine est un provider générique (gmail, hotmail, outlook...) ou invalide.
+function deriveCompanyUrlFromEmail(email: string): string | null {
+  const genericProviders = new Set([
+    "gmail.com", "hotmail.com", "outlook.com", "live.com", "yahoo.com", "yahoo.fr",
+    "icloud.com", "me.com", "mac.com", "aol.com", "protonmail.com", "proton.me",
+    "orange.fr", "sfr.fr", "free.fr", "bouygues.fr", "wanadoo.fr", "laposte.net",
+  ]);
+  try {
+    const domain = email.split("@")[1]?.toLowerCase().trim();
+    if (!domain || genericProviders.has(domain)) return null;
+    return `https://${domain}`;
+  } catch {
+    return null;
+  }
+}
+
+// Nom d'entreprise lisible depuis le domaine de l'email (rh@example.com → Example).
+function deriveCompanyNameFromEmail(email: string): string | null {
+  const url = deriveCompanyUrlFromEmail(email);
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    const main = host.split(".")[0];
+    if (!main) return null;
+    return main.charAt(0).toUpperCase() + main.slice(1);
+  } catch {
+    return null;
+  }
 }
 
 // Scrape plusieurs URLs de contexte et concatène les textes pertinents (limité à ~1500 chars).
@@ -851,11 +883,15 @@ export async function executeTool(toolName: string, input: Record<string, unknow
           c = await Candidature.findById(existingId);
         }
         if (!c) {
-          // En l'absence de company_url, on force systématiquement l'aperçu avant envoi.
-          // Un appel direct dry_run=false sans candidature_id existante est reconverti en preview.
-          const forcePreview = !dryRun;
+          // Sécurité : sans candidature_id, on ne peut pas envoyer — on génère un aperçu.
+          if (!dryRun) {
+            return fail(
+              400,
+              "Sans URL entreprise, un premier appel dry_run=true est obligatoire pour voir et valider la lettre. Rappelle apply_from_email avec dry_run=true, puis avec dry_run=false + candidature_id."
+            );
+          }
 
-          const entreprise = parsed.entreprise || "Entreprise non identifiée";
+          const entreprise = parsed.entreprise || deriveCompanyNameFromEmail(emailOverride) || "Entreprise non identifiée";
           const poste = parsed.poste || "Candidature spontanée";
           const manualUrl = `manual://${entreprise.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}-${Date.now()}`;
           c = await Candidature.create({
@@ -876,10 +912,30 @@ export async function executeTool(toolName: string, input: Record<string, unknow
             letters: [],
           });
 
-          // Scrape contexte pour enrichir la lettre si disponible
+          // Scrape contexte : URLs fournies + site déduit de l'email
+          const contextSources: string[] = [];
           let aboutText = "";
           if (contextUrls.length > 0) {
             aboutText = await scrapeContextUrls(contextUrls);
+            contextSources.push(...contextUrls);
+          }
+          const inferredCompanyUrl = deriveCompanyUrlFromEmail(emailOverride);
+          if (inferredCompanyUrl) {
+            try {
+              const scraped = await scrapeCompanyWebsite(inferredCompanyUrl);
+              const inferredText = [scraped.companyName, scraped.aboutText, scraped.description]
+                .filter(Boolean)
+                .join("\n")
+                .slice(0, 800);
+              if (inferredText.trim()) {
+                aboutText = aboutText
+                  ? `${aboutText}\n\n--- Site déduit de l'email (${inferredCompanyUrl}) ---\n${inferredText}`
+                  : inferredText;
+                contextSources.push(inferredCompanyUrl);
+              }
+            } catch {
+              /* best effort */
+            }
           }
 
           const lettre = await generateLetterProposal(
@@ -905,10 +961,9 @@ export async function executeTool(toolName: string, input: Record<string, unknow
               email: c.email,
               candidatureId: String(c._id),
               lettre,
+              contextSources,
               dryRun: true,
-              note: forcePreview
-                ? "Je t'ai forcé en aperçu par sécurité : sans URL entreprise, j'ai besoin que tu valides la lettre avant l'envoi."
-                : undefined,
+              note: "Aperçu de la lettre générée. Lis-la, demande des modifications si besoin, puis valide l'envoi.",
               hint: "Lettre générée en aperçu. Pour envoyer, rappelle apply_from_email avec dry_run=false et candidature_id.",
             }),
           });
@@ -1022,6 +1077,50 @@ export async function executeTool(toolName: string, input: Record<string, unknow
             ? "Brouillon prêt. Montre-le à l'utilisateur et demande confirmation avant d'envoyer."
             : undefined,
         }),
+      });
+    }
+
+    case "read_email_response": {
+      const candidatureId = String(input.candidature_id ?? "").trim();
+      if (!candidatureId) return fail(400, "candidature_id requis");
+      const c = await Candidature.findById(candidatureId);
+      if (!c) return fail(404, "Candidature introuvable");
+      const emails = (c.emailsReceived ?? []).filter((e: { archived?: boolean }) => !e.archived);
+      if (emails.length === 0) {
+        return ok({
+          ok: true,
+          summary: JSON.stringify({ count: 0, emails: [], note: "Aucun email reçu non archivé pour cette candidature." }),
+        });
+      }
+
+      const markRead = input.mark_read === undefined ? true : isTruthyFlag(input.mark_read);
+      const results = [];
+      for (const e of emails) {
+        const summary = await summarizeInboundEmail({
+          entreprise: c.entreprise,
+          poste: c.poste,
+          fromName: e.fromName ?? e.from,
+          subject: e.subject,
+          bodyText: e.bodyText ?? e.snippet ?? "",
+        });
+        results.push({
+          from: e.from,
+          fromName: e.fromName ?? null,
+          subject: e.subject,
+          date: e.date instanceof Date ? e.date.toISOString() : String(e.date),
+          summary: summary.summary,
+          category: summary.category,
+          confidence: summary.confidence,
+          suggestedReply: summary.suggestedReply,
+        });
+      }
+      if (markRead) {
+        for (const e of emails) e.archived = true;
+        await c.save();
+      }
+      return ok({
+        ok: true,
+        summary: JSON.stringify({ count: results.length, emails: results }),
       });
     }
 
@@ -1455,6 +1554,73 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         summary: `Lettre envoyée sur ${to} — ${entreprise} (${poste}), PDF joint${cvAttached ? " + CV" : ""}.${
           generated ? " La lettre a été générée et archivée sur la candidature (statut « lettre générée »)." : ""
         } Rien n'est parti vers l'entreprise.`,
+      });
+    }
+
+    case "dismiss_pending_proposals": {
+      const chatId = process.env.TELEGRAM_CHAT_ID;
+      if (!chatId) return fail(500, "TELEGRAM_CHAT_ID non configuré");
+      const origin = String(input.origin ?? "prospection");
+      const blacklistDomains = input.blacklist_domains === undefined ? true : isTruthyFlag(input.blacklist_domains);
+      const maxCount = Math.min(Math.max(Number(input.max_count) || 100, 1), 500);
+
+      const state = await TelegramState.findOne({ chatId }).lean<ITelegramState | null>();
+      const pending = (state?.pendingActions ?? [])
+        .filter((a) => a.status === "pending" && (origin === "all" || a.origin === origin))
+        .slice(0, maxCount);
+      if (pending.length === 0) {
+        return ok({ ok: true, summary: "Aucune proposition en attente à ignorer." });
+      }
+
+      const tokensToCancel = pending.map((a) => a.token);
+      await TelegramState.updateOne(
+        { chatId },
+        {
+          $set: {
+            "pendingActions.$[a].status": "cancelled",
+            "pendingActions.$[a].decidedAt": new Date(),
+          },
+        },
+        { arrayFilters: [{ "a.token": { $in: tokensToCancel } }] }
+      );
+
+      let blacklisted = 0;
+      if (blacklistDomains) {
+        for (const a of pending) {
+          if (a.origin !== "prospection" || !a.candidatureId) continue;
+          const cand = await Candidature.findOneAndUpdate(
+            { _id: a.candidatureId, statut: "identifiée" },
+            { $set: { statut: "refus" } }
+          )
+            .lean<ICandidature | null>()
+            .catch(() => null);
+          if (!cand) continue;
+          const domain =
+            a.domain ||
+            (() => {
+              try {
+                return cand.url && !cand.url.startsWith("manual:")
+                  ? new URL(cand.url).hostname.replace(/^www\./, "")
+                  : null;
+              } catch {
+                return null;
+              }
+            })();
+          if (domain) {
+            await recordProspectSkip({
+              domain,
+              entreprise: cand.entreprise,
+              reason: "user_ignored",
+              detail: "Ignorée via dismiss_pending_proposals",
+            }).catch(() => {});
+            blacklisted++;
+          }
+        }
+      }
+
+      return ok({
+        ok: true,
+        summary: `${pending.length} proposition(s) ignorée(s)${blacklisted ? ` (${blacklisted} domaine(s) blacklisté(s))` : ""}.`,
       });
     }
 

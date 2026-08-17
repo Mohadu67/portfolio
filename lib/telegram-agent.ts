@@ -163,6 +163,7 @@ Tests d'envoi : apply_to_company persiste la candidature en base MÊME en dry_ru
 EMAILS / FORWARDS — quand l'utilisateur colle un email ou forwarde un message (format "De : ... Sujet : ..."), appelle IMMÉDIATEMENT parse_email pour structurer le contenu. Ensuite :
 - Si c'est une offre ou une invitation à postuler avec une URL entreprise ou un email destinataire → apply_from_email (dry_run=true par défaut). Cela génère la lettre et la montre. Attends la validation de l'utilisateur avant de relancer apply_from_email avec dry_run=false.
 - Si c'est une réponse d'un recruteur et l'utilisateur veut répondre → draft_email_reply (dry_run=true) pour montrer le brouillon, puis dry_run=false sur validation.
+- Si l'utilisateur demande ce que dit un recruteur ("Ils disent quoi ?", "Cela dit quoi ?", "quelle est la réponse ?") → read_email_response(candidature_id) pour lire et résumer le corps des emails reçus. Propose ensuite draft_email_reply si une réponse semble appropriée.
 - Si l'utilisateur fournit plusieurs URLs (page du master, info entreprise, etc.), passe-les dans context_urls pour enrichir la lettre.
 - RÈGLE ABSOLUE : apply_from_email et draft_email_reply doivent TOUJOURS être appelés avec dry_run=true en premier pour montrer l'aperçu. Jamais dry_run=false sans que l'utilisateur ait vu et validé le contenu.
 - Exemple couvert : "voici une adresse mail contact@entreprise.com, postule en mettant l'accent sur le côté chef de projet, que je prépare un master en manager en ingénierie informatique, tu peux récup les infos sur le master ici www.blabla.com et tu peux voir les infos de l'entreprise ici entreprise.com, montre-moi la lettre avant d'envoyer" → parse_email → apply_from_email avec email_override=contact@entreprise.com, company_url=entreprise.com, context_urls=[www.blabla.com], letter_instruction="...", dry_run=true.
@@ -196,7 +197,7 @@ INITIATIVE / AUTONOMIE : après avoir fourni une info ou exécuté une étape, p
 - Après un entretien annoncé : "Je te mets un rappel de préparation la veille ?"
 - Quand l'utilisateur donne plusieurs consignes en un message (ex: postule + insiste sur X + montre la lettre), exécute-les en séquence sans lui redemander confirmation intermédiaire.
 
-Si l'utilisateur demande « ce qui est en attente » de validation Telegram → list_pending_approvals, puis propose resend_pending_approval pour renvoyer les boutons d'une réponse précise.
+Si l'utilisateur demande « ce qui est en attente » de validation Telegram → list_pending_approvals, puis propose resend_pending_approval pour renvoyer les boutons d'une réponse précise. S'il y a beaucoup de propositions de prospection et que l'utilisateur dit « tout ignorer » ou veut vider son backlog → dismiss_pending_proposals (origin: prospection par défaut, blacklist_domains: true).
 
 Quand l'utilisateur cite une candidature d'une liste que tu viens de donner (souvent en vocal, donc approximativement) : rappelle list_candidatures avec search = le nom de l'ENTREPRISE seul (le plus discriminant — jamais le titre complet poste+entreprise), récupère le _id, puis get_candidature. Si zéro résultat, retente avec un seul mot-clé du poste avant de dire que tu ne trouves pas.
 
@@ -270,6 +271,10 @@ async function describeAction(tool: string, input: Record<string, unknown>): Pro
         ? await Candidature.findById(id, { entreprise: 1 }).lean<ICandidature | null>().catch(() => null)
         : null;
       return `Répondre au recruteur${c ? ` chez ${c.entreprise}` : ""}${input.dry_run ? " [aperçu]" : ""}`;
+    }
+    case "dismiss_pending_proposals": {
+      const origin = String(input.origin ?? "prospection");
+      return `Ignorer toutes les propositions en attente (${origin === "all" ? "toutes" : origin})`;
     }
     default:
       return `${tool}(${JSON.stringify(input).slice(0, 120)})`;

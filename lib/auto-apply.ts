@@ -13,6 +13,7 @@ import { isProspectSkipFresh, recordProspectSkip, ProspectSkipReason } from "@/m
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage, fetchJobDescription, ScrapedJobOffer } from "./web-scraper";
 import { scoreCompanyFit, matchJobOffer, generateLetterProposal, generateEmailBody } from "./gemini";
 import { pickBestContactEmail, pickBestContactEmailLoose, EmailScore } from "./auto-apply-filters";
+import { serpLanguage, type SupportedCountry } from "./scraper";
 import { sendCandidature } from "./email";
 import { generateLettrePDF } from "./pdf-generator";
 import { resolveCVForSend } from "./cvFile";
@@ -63,12 +64,15 @@ function domainOf(url: string): string {
   }
 }
 
-async function searchTechCompanies(keywords: string, location: string): Promise<SerpCompanyResult[]> {
+async function searchTechCompanies(keywords: string, location: string, country: string = "fr"): Promise<SerpCompanyResult[]> {
   const apiKey = process.env.SERPAPI_KEY;
   if (!apiKey) throw new Error("SERPAPI_KEY non configurée");
 
+  const c = country.trim().toLowerCase() as SupportedCountry;
+  const gl = c === "lu" ? "lu" : c;
+  const hl = serpLanguage(c);
   const query = location ? `${keywords} ${location}` : keywords;
-  const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(query)}&gl=fr&hl=fr&num=20&api_key=${apiKey}`;
+  const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(query)}&gl=${gl}&hl=${hl}&num=20&api_key=${apiKey}`;
   const res = await fetch(url);
   if (!res.ok) {
     const txt = await res.text();
@@ -436,6 +440,7 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
   const auto = settingsDoc.automation;
   const rawKeywords = opts.keywords ?? auto.weeklyProspectKeywords ?? "entreprise tech Strasbourg";
   const location = opts.location ?? auto.weeklyProspectLocation ?? "";
+  const country = auto.weeklyProspectCountry || "fr";
   const minScore = typeof auto.autoApplyMinCompanyScore === "number" ? auto.autoApplyMinCompanyScore : 0.6;
   const maxPerDay = typeof auto.autoApplyMaxPerDay === "number" ? auto.autoApplyMaxPerDay : 5;
   // Fix : 10 entreprises × (scrape + 5 appels Gemini + envoi SMTP) peut dépasser maxDuration=300s sur Vercel/cron.
@@ -472,7 +477,7 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
   // 1. SerpAPI search
   let companies: SerpCompanyResult[] = [];
   try {
-    companies = await searchTechCompanies(keywords, location);
+    companies = await searchTechCompanies(keywords, location, country);
   } catch (err) {
     result.errors.push(`SerpAPI: ${err instanceof Error ? err.message : err}`);
     return result;
@@ -635,7 +640,7 @@ export async function runWeeklyProspection(opts: RunOptions = {}): Promise<AutoA
         type: candidatureType,
         lettre: null,
         letterInstruction: defaultLetterInstruction,
-        notes: `Auto-apply ${new Date().toISOString().slice(0, 10)} — fit ${fit.score.toFixed(2)}${chosenOffer ? `, offer ${offerScore?.score.toFixed(2)}` : " (spontanée)"}`,
+        notes: `Auto-apply ${new Date().toISOString().slice(0, 10)} — fit ${fit.score.toFixed(2)}${chosenOffer ? `, offer ${offerScore?.score.toFixed(2)}` : " (spontanée)"} — pays: ${country}`,
         source: "auto-apply",
         date: new Date().toISOString().slice(0, 10),
         letters: [],
@@ -814,6 +819,9 @@ export interface ProcessSingleOptions {
   // projet », « ne mentionne pas le fast-food »). Persistée sur la candidature (letterInstruction)
   // pour que les régénérations futures la conservent.
   letterInstruction?: string;
+  // Pays cible (fr, de, ch, be, lu, at, nl). Sert à orienter la recherche/résolution du site
+  // officiel et la langue des outils IA quand c'est pertinent.
+  country?: string;
 }
 
 export async function processSingleCompany(
@@ -822,6 +830,7 @@ export async function processSingleCompany(
 ): Promise<CandidateDecision> {
   await connectDB();
   const candidatureType: CandidatureType = opts.candidatureType ?? "alternance";
+  const country = opts.country ? opts.country.trim().toLowerCase() : "fr";
 
   const decision: CandidateDecision = {
     url: inputUrl,
@@ -958,7 +967,7 @@ export async function processSingleCompany(
         type: candidatureType,
         lettre: null,
         letterInstruction,
-        notes: `Chat manual ${new Date().toISOString().slice(0, 10)}${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""}`,
+        notes: `Chat manual ${new Date().toISOString().slice(0, 10)}${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""} — pays: ${country}`,
         source: "auto-apply",
         date: new Date().toISOString().slice(0, 10),
         letters: [],

@@ -60,11 +60,22 @@ interface SavedQuery {
   _id: string;
   keywords: string;
   location: string;
+  country: string;
   frequency: QueryFrequency;
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastRunNewCount: number;
 }
+
+const COUNTRY_LABEL: Record<string, string> = {
+  fr: "🇫🇷 France",
+  de: "🇩🇪 Allemagne",
+  ch: "🇨🇭 Suisse",
+  be: "🇧🇪 Belgique",
+  lu: "🇱🇺 Luxembourg",
+  at: "🇦🇹 Autriche",
+  nl: "🇳🇱 Pays-Bas",
+};
 
 const FREQUENCY_LABEL: Record<QueryFrequency, string> = {
   manual: "Manuelle",
@@ -108,6 +119,7 @@ export default function RecherchePage() {
   // ── Offres state ──
   const [keywords, setKeywords] = useState("");
   const [location, setLocation] = useState("");
+  const [country, setCountry] = useState("fr");
   const [offresLoading, setOffresLoading] = useState(false);
   const [offresError, setOffresError] = useState("");
   const [offresResults, setOffresResults] = useState<OffreResult[]>([]);
@@ -161,6 +173,7 @@ export default function RecherchePage() {
         if (aborted || !s?.search) return;
         if (!keywords && s.search.defaultKeywords) setKeywords(s.search.defaultKeywords);
         if (!location && s.search.defaultLocation) setLocation(s.search.defaultLocation);
+        if (s.search.defaultCountry && country === "fr") setCountry(s.search.defaultCountry);
       })
       .catch(() => {});
     return () => {
@@ -190,10 +203,11 @@ export default function RecherchePage() {
 
   // ── Offres actions ──
 
-  async function searchOffres(e?: React.FormEvent, kwArg?: string, locArg?: string) {
+  async function searchOffres(e?: React.FormEvent, kwArg?: string, locArg?: string, countryArg?: string) {
     e?.preventDefault();
     const kw = (kwArg ?? keywords).trim();
     const loc = (locArg ?? location).trim();
+    const c = (countryArg ?? country).trim().toLowerCase();
     if (!kw || !loc) {
       setOffresError("Mots-clés et localisation requis.");
       return;
@@ -206,7 +220,7 @@ export default function RecherchePage() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ keywords: kw, location: loc, nb_results: 10, preview: true }),
+        body: JSON.stringify({ keywords: kw, location: loc, country: c, nb_results: 10, preview: true }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -299,12 +313,13 @@ export default function RecherchePage() {
     if (!apiKey) return;
     const kw = keywords.trim();
     const loc = location.trim();
+    const c = country.trim().toLowerCase();
     if (!kw || !loc) return;
     try {
       const res = await fetch("/api/saved-queries", {
         method: "POST",
         headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ keywords: kw, location: loc, frequency }),
+        body: JSON.stringify({ keywords: kw, location: loc, country: c, frequency }),
       });
       if (!res.ok) throw new Error("Erreur");
       await fetchSavedQueries();
@@ -354,7 +369,8 @@ export default function RecherchePage() {
   function rerunQuery(q: SavedQuery) {
     setKeywords(q.keywords);
     setLocation(q.location);
-    searchOffres(undefined, q.keywords, q.location);
+    setCountry(q.country || "fr");
+    searchOffres(undefined, q.keywords, q.location, q.country || "fr");
   }
 
   // ── Entreprises actions ──
@@ -600,6 +616,18 @@ export default function RecherchePage() {
                   className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-orange)]"
                 />
               </div>
+              <div className="relative sm:w-44">
+                <select
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-orange)] appearance-none cursor-pointer"
+                  title="Pays de recherche"
+                >
+                  {Object.entries(COUNTRY_LABEL).map(([code, label]) => (
+                    <option key={code} value={code}>{label}</option>
+                  ))}
+                </select>
+              </div>
               <button
                 type="submit"
                 disabled={offresLoading}
@@ -637,7 +665,7 @@ export default function RecherchePage() {
                         : "Recherche manuelle"
                     }
                   >
-                    <span>{q.keywords} · {q.location}</span>
+                    <span>{q.keywords} · {q.location} · {COUNTRY_LABEL[q.country] ?? q.country ?? "—"}</span>
                     <select
                       value={q.frequency}
                       onChange={(e) => setQueryFrequency(q._id, e.target.value as QueryFrequency)}

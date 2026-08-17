@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import { Settings, getSettings } from "@/models/Settings";
 import { verifyAuth } from "@/lib/auth";
 import { DEFAULT_LETTER_TEMPLATES, TEMPLATE_PLACEHOLDER } from "@/lib/letter-template";
+import { normalizeCountry } from "@/lib/scraper";
 
 export async function GET(request: NextRequest) {
   if (!verifyAuth(request)) {
@@ -72,6 +73,9 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.automation.weeklyProspectLocation === "string") {
         s.automation.weeklyProspectLocation = body.automation.weeklyProspectLocation.trim();
       }
+      if (typeof body.automation.weeklyProspectCountry === "string") {
+        s.automation.weeklyProspectCountry = normalizeCountry(body.automation.weeklyProspectCountry);
+      }
       if (typeof body.automation.defaultLetterInstruction === "string") {
         s.automation.defaultLetterInstruction = body.automation.defaultLetterInstruction.replace(/^\s+|\s+$/g, "");
       }
@@ -99,11 +103,15 @@ export async function PATCH(request: NextRequest) {
       }
     }
     if (body.search && typeof body.search === "object") {
+      if (!s.search) s.search = {};
       if (typeof body.search.defaultLocation === "string") {
         s.search.defaultLocation = body.search.defaultLocation.trim();
       }
       if (typeof body.search.defaultKeywords === "string") {
         s.search.defaultKeywords = body.search.defaultKeywords.trim();
+      }
+      if (typeof body.search.defaultCountry === "string") {
+        s.search.defaultCountry = normalizeCountry(body.search.defaultCountry);
       }
     }
     if (body.letterTemplate && typeof body.letterTemplate === "object") {

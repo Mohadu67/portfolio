@@ -251,6 +251,11 @@ export const TOOLS: ToolDefinition[] = [
           type: "string",
           description: "URL complète du site de l'entreprise cible (https://...). Pas l'URL d'une offre, le site corporate.",
         },
+        country: {
+          type: "string",
+          enum: ["fr", "de", "ch", "be", "lu", "at", "nl"],
+          description: "Pays de l'entreprise (défaut: fr). Peut orienter le scoring et la langue de la lettre quand c'est pertinent.",
+        },
         type: {
           type: "string",
           enum: ["stage", "alternance", "cdi"],
@@ -316,6 +321,11 @@ export const TOOLS: ToolDefinition[] = [
         email_content: {
           type: "string",
           description: "Contenu brut du message/email de l'utilisateur.",
+        },
+        country: {
+          type: "string",
+          enum: ["fr", "de", "ch", "be", "lu", "at", "nl"],
+          description: "Pays où se situe l'entreprise ou l'offre (défaut: fr).",
         },
         letter_instruction: {
           type: "string",
@@ -443,13 +453,14 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "search_offers",
     description:
-      "Recherche d'offres d'emploi EN DIRECT sur les job boards (JSearch, Adzuna, France Travail, Indeed) par mots-clés + localisation. Dédoublonne les résultats et indique si l'offre est déjà dans le pipeline. Lecture seule — ne crée rien en base. À utiliser quand l'utilisateur demande « cherche des offres », « il y a quoi comme alternances dev en ce moment ? ». Pour suivre une offre trouvée : create_candidature.",
+      "Recherche d'offres d'emploi EN DIRECT sur les job boards (JSearch, Adzuna, France Travail, Indeed) par mots-clés + localisation + pays. Dédoublonne les résultats et indique si l'offre est déjà dans le pipeline. Lecture seule — ne crée rien en base. À utiliser quand l'utilisateur demande « cherche des offres », « il y a quoi comme alternances dev en Suisse ? ». Pour suivre une offre trouvée : create_candidature.",
     requiresConfirmation: false,
     input_schema: {
       type: "object",
       properties: {
         keywords: { type: "string", description: "Mots-clés de recherche (ex: 'développeur fullstack alternance')" },
         location: { type: "string", description: "Ville/région (défaut : Strasbourg)" },
+        country: { type: "string", enum: ["fr", "de", "ch", "be", "lu", "at", "nl"], description: "Pays de recherche (défaut : fr)" },
         limit: { type: "number", description: "Nombre max de résultats après dédoublonnage (défaut 10, max 20)" },
       },
       required: ["keywords"],
@@ -533,6 +544,7 @@ export const TOOLS: ToolDefinition[] = [
         entreprise: { type: "string", description: "Nom de l'entreprise" },
         poste: { type: "string", description: "Intitulé du poste (défaut : 'Candidature spontanée')" },
         type: { type: "string", enum: ["stage", "alternance", "cdi"], description: "Type visé (défaut : alternance)" },
+        country: { type: "string", enum: ["fr", "de", "ch", "be", "lu", "at", "nl"], description: "Pays de l'entreprise (défaut : fr)" },
         url: { type: "string", description: "URL de l'offre ou du site entreprise (optionnel — un placeholder unique est généré sinon)" },
         email: { type: "string", description: "Email de contact si connu (optionnel)" },
         localisation: { type: "string", description: "Ville (optionnel)" },

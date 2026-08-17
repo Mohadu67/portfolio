@@ -24,7 +24,7 @@ import {
 } from "@/lib/gemini";
 import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, AgentMemoryCategory } from "@/models/AgentMemory";
 import { getTelegramState, TelegramState, ITelegramState } from "@/models/TelegramState";
-import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed, SearchResult } from "@/lib/scraper";
+import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed, SearchResult, normalizeCountry } from "@/lib/scraper";
 import { normalizeUrl } from "@/lib/url-normalize";
 import { ProspectedDomain, IProspectedDomain, recordProspectSkip } from "@/models/ProspectedDomain";
 
@@ -43,6 +43,10 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isValidEmail(s: string): boolean {
   return EMAIL_REGEX.test(s.trim());
+}
+
+function normalizeCountryInput(raw: unknown): string {
+  return normalizeCountry(typeof raw === "string" ? raw : undefined);
 }
 
 function normalizeUrlInput(raw: string): string {
@@ -404,13 +408,14 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       const rawUrl = typeof input.url === "string" ? input.url.trim() : "";
       const inputUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`) : null;
       const localisation = String(input.localisation ?? "").trim() || "Strasbourg";
+      const country = normalizeCountryInput(input.country);
       if (!entreprise && !inputUrl) return fail(400, "entreprise ou url requis");
 
       // 1. Site officiel (SerpAPI si pas d'URL fournie)
       let site = inputUrl;
       if (!site) {
         try {
-          site = await resolveCompanyWebsite(entreprise, localisation);
+          site = await resolveCompanyWebsite(entreprise, localisation, country);
         } catch (err) {
           // Quota SerpAPI épuisé ou API down : on dégrade au lieu d'échouer — l'agent
           // demande l'URL du site et rappelle le tool avec.
@@ -704,6 +709,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
     case "apply_to_company": {
       const url = String(input.url ?? "").trim();
       if (!url) return fail(400, "url required");
+      const country = normalizeCountryInput(input.country);
       // Défaut alternance : c'est la recherche active — et describeAction/le label de
       // confirmation affichent déjà « alternance » quand type est absent.
       const type = (input.type === "stage" || input.type === "cdi") ? input.type : "alternance";
@@ -721,6 +727,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         emailOverride,
         candidatureType: type,
         letterInstruction,
+        country: normalizeCountryInput(input.country),
       });
       const allowGenericEmailUsed = isTruthyFlag(input.allow_generic_email);
       const emailFailure = decision.skipReason?.includes("aucun email RH") ?? false;
@@ -756,6 +763,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         skip_quality_score: isTruthyFlag(input.skip_quality_score),
         allow_duplicate: isTruthyFlag(input.allow_duplicate),
         ...(letterInstruction ? { letter_instruction: letterInstruction } : {}),
+        ...(country && country !== "fr" ? { country } : {}),
       };
       let actions: ToolAction[] | undefined;
       if (emailFailure && !allowGenericEmailUsed) {
@@ -811,6 +819,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
 
       const type = input.type === "stage" || input.type === "cdi" ? input.type : "alternance";
       const dryRun = input.dry_run === undefined ? true : isTruthyFlag(input.dry_run);
+      const country = normalizeCountryInput(input.country);
 
       // 1. Parse le mail pour extraire métadonnées + instructions + URLs de contexte
       const parsed = await parseEmailWithAI(
@@ -855,6 +864,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
           skipQualityScore: isTruthyFlag(input.skip_quality_score),
           allowGenericEmail: isTruthyFlag(input.allow_generic_email),
           allowDuplicate: isTruthyFlag(input.allow_duplicate),
+          country,
         });
         const summary = JSON.stringify({
           decision: decision.decision,
@@ -1164,14 +1174,15 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       const keywords = String(input.keywords ?? "").trim();
       if (!keywords) return fail(400, "keywords requis");
       const location = String(input.location ?? "").trim() || "Strasbourg";
+      const country = normalizeCountryInput(input.country);
       const limit = Math.min(Math.max(Number(input.limit) || 10, 1), 20);
 
       // Promise.allSettled : une API en panne/quota ne doit pas faire tomber toute la recherche.
       const settled = await Promise.allSettled([
-        searchJSearch(keywords, location, limit),
-        searchAdzuna(keywords, location, limit),
-        searchFranceTravail(keywords, location, limit),
-        searchIndeed(keywords, location, limit),
+        searchJSearch(keywords, location, country, limit),
+        searchAdzuna(keywords, location, country, limit),
+        searchFranceTravail(keywords, location, country, limit),
+        searchIndeed(keywords, location, country, limit),
       ]);
       const raw: SearchResult[] = settled.flatMap((s) => (s.status === "fulfilled" ? s.value : []));
 
@@ -1373,6 +1384,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       if (!entreprise) return fail(400, "entreprise requise");
       const poste = String(input.poste ?? "").trim() || "Candidature spontanée";
       const type = input.type === "stage" || input.type === "cdi" ? input.type : "alternance";
+      const country = normalizeCountryInput(input.country);
       // Même convention que POST /api/candidatures : url unique requise par le schéma →
       // placeholder "manual://" horodaté quand on n'a pas d'annonce.
       const cleanUrl = typeof input.url === "string" && input.url.trim() ? input.url.trim() : null;
@@ -1406,7 +1418,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       });
       return ok({
         ok: true,
-        summary: `Candidature créée : ${entreprise} — ${poste} (${type}, statut « identifiée », _id ${String(c._id)}).${
+        summary: `Candidature créée : ${entreprise} — ${poste} (${type}, pays ${country}, statut « identifiée », _id ${String(c._id)}).${
           rawEmail && !email ? ` L'email fourni (« ${rawEmail.slice(0, 40)} ») n'est pas une adresse valide — ignoré.` : ""
         } Rien n'a été envoyé.`,
       });

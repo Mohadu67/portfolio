@@ -84,6 +84,7 @@ export async function runProcessPending(opts: RunProcessPendingOptions = {}): Pr
   const auto = settingsDoc.automation;
   const maxPerDay = typeof auto.autoApplyMaxPerDay === "number" ? auto.autoApplyMaxPerDay : 15;
   const defaultLocation = auto.weeklyProspectLocation ?? "";
+  const defaultCountry = auto.weeklyProspectCountry ?? "fr";
   const defaultLetterInstruction = typeof auto.defaultLetterInstruction === "string" ? auto.defaultLetterInstruction : "";
   const allowGenericEmail = !!auto.allowGenericEmails;
   const strictQualityScore = !!auto.strictQualityScore;
@@ -240,7 +241,7 @@ export async function runProcessPending(opts: RunProcessPendingOptions = {}): Pr
           scrapeTarget = url;
         } else {
           try {
-            scrapeTarget = await resolveCompanyWebsite(locked.entreprise, locked.localisation || defaultLocation);
+            scrapeTarget = await resolveCompanyWebsite(locked.entreprise, locked.localisation || defaultLocation, defaultCountry);
           } catch (resolveErr) {
             console.error("[pending] resolve failed:", resolveErr instanceof Error ? resolveErr.message : resolveErr);
             scrapeTarget = null;
@@ -307,7 +308,7 @@ export async function runProcessPending(opts: RunProcessPendingOptions = {}): Pr
         // Cas B : email vide. Résolution SerpAPI + scrape + pickEmail (via applyToExistingCandidature).
         let resolvedSite: string | null = null;
         try {
-          resolvedSite = await resolveCompanyWebsite(locked.entreprise, locked.localisation || defaultLocation);
+          resolvedSite = await resolveCompanyWebsite(locked.entreprise, locked.localisation || defaultLocation, defaultCountry);
         } catch (resolveErr) {
           const msg = resolveErr instanceof Error ? resolveErr.message : String(resolveErr);
           await rollback(`resolveCompanyWebsite failed: ${msg}`);

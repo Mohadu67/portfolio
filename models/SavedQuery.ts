@@ -6,6 +6,7 @@ export interface ISavedQuery {
   _id?: string;
   keywords: string;
   location: string;
+  country: string;
   frequency: QueryFrequency;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
@@ -18,6 +19,7 @@ const savedQuerySchema = new Schema<ISavedQuery>(
   {
     keywords: { type: String, required: true, trim: true },
     location: { type: String, required: true, trim: true },
+    country: { type: String, default: "fr", trim: true },
     frequency: {
       type: String,
       enum: ["manual", "daily", "weekly", "biweekly"],
@@ -31,8 +33,8 @@ const savedQuerySchema = new Schema<ISavedQuery>(
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } }
 );
 
-// Unicité sur (keywords, location) pour éviter les doublons
-savedQuerySchema.index({ keywords: 1, location: 1 }, { unique: true });
+// Unicité sur (keywords, location, country) pour permettre la même query dans plusieurs pays
+savedQuerySchema.index({ keywords: 1, location: 1, country: 1 }, { unique: true });
 
 export const SavedQuery =
   models.SavedQuery || model<ISavedQuery>("SavedQuery", savedQuerySchema);

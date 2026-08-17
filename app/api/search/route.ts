@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { keywords, location, nb_results = 10, preview = false } = body;
+    const { keywords, location, country = "fr", nb_results = 10, preview = false } = body;
 
     if (!keywords || !location) {
       return NextResponse.json(
@@ -46,10 +46,10 @@ export async function POST(request: NextRequest) {
     // Search all 4 sources in parallel: JSearch, Adzuna, France Travail, Indeed
     const [jsearchResults, adzunaResults, franceTravailResults, indeedResults] =
       await Promise.all([
-        searchJSearch(keywords, location, nb_results),
-        searchAdzuna(keywords, location, nb_results),
-        searchFranceTravail(keywords, location, nb_results),
-        searchIndeed(keywords, location, nb_results),
+        searchJSearch(keywords, location, country, nb_results),
+        searchAdzuna(keywords, location, country, nb_results),
+        searchFranceTravail(keywords, location, country, nb_results),
+        searchIndeed(keywords, location, country, nb_results),
       ]);
 
     const rawResults = [

@@ -3,6 +3,7 @@ import { GoogleGenerativeAI, type Content, type Part } from "@google/generative-
 import { verifyAuth } from "@/lib/auth";
 import { buildContextLite } from "@/lib/ai/context";
 import { toolsForGemini, getTool } from "@/lib/ai/tools";
+import { getSettings } from "@/models/Settings";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -60,6 +61,8 @@ export async function POST(request: NextRequest) {
   }
 
   const lite = await buildContextLite();
+  const settings = await getSettings();
+  const defaultCountry = settings.search?.defaultCountry ?? "fr";
   const profileName = lite.profileName ?? process.env.PROFIL_NOM ?? "Mohammed Hamiani";
 
   const systemPrompt = `Tu es l'assistant personnel de ${profileName}, développeur fullstack en recherche de stage/alternance/CDI. Tu communiques en français, direct, factuel, opinionated. Phrases courtes, listes à puces, pas de blabla.
@@ -93,12 +96,12 @@ Tools disponibles (n'utilise un tool QUE si l'utilisateur mentionne explicitemen
 - set_email_body(id, texte) → enregistre un corps de mail d'accompagnement sur mesure (sans salutation/signature), utilisé à l'envoi à la place du modèle. reset=true pour revenir au modèle
 - send_letter_to_me(candidature_id | lettre+entreprise) → envoie la lettre (PDF + CV) sur la boîte perso de l'utilisateur pour une candidature manuelle sur plateforme. N'envoie rien à l'entreprise
 - get_stats() → si l'utilisateur demande un bilan/où il en est (répartition par statut, envois 7/30j, réponses)
-- search_offers(keywords, location?) → si l'utilisateur demande de chercher des offres sur les job boards. Pour suivre une offre → create_candidature
+- search_offers(keywords, location?, country?) → si l'utilisateur demande de chercher des offres sur les job boards. country = fr/de/ch/be/lu/at/nl ; défaut ${defaultCountry}. Pour suivre une offre → create_candidature
 - list_reminders() / cancel_reminder(due_at) → rappels Telegram programmés
 - list_blacklist(search?) / unblacklist_domain(domain) → domaines écartés par la prospection auto
 - list_cv_sections() / get_cv_section(key) → UNIQUEMENT si l'utilisateur parle de son CV
 - Tools d'action : schedule_relance, cancel_relance, update_candidature_status, update_candidature_notes, send_relance_now, create_candidature (ajout manuel au pipeline, sans envoi), delete_candidature (suppression définitive — tests, doublons)
-- apply_to_company(url) → UNIQUEMENT si l'utilisateur demande explicitement « envoie une candidature à <URL> » ou « candidate chez <URL> ». Génère lettre + envoie mail à l'email RH extrait.
+- apply_to_company(url, country?) → UNIQUEMENT si l'utilisateur demande explicitement « envoie une candidature à <URL> » ou « candidate chez <URL> ». country = fr/de/ch/be/lu/at/nl ; défaut ${defaultCountry}. Génère lettre + envoie mail à l'email RH extrait.
   • Si le tool retourne \`skipReason\` mentionnant "aucun email RH" → l'UI affiche automatiquement des boutons d'action (chips) à l'utilisateur. NE redonne JAMAIS verbalement les options qu'il voit déjà. Limite-toi à UNE phrase qui annonce le motif. Exemples :
     - allowGenericEmailUsed=false → tu écris uniquement : "Aucun email RH trouvé." (les chips proposent retry + abandon)
     - allowGenericEmailUsed=true avec scrapedEmails → tu écris uniquement : "Pas d'email RH valable. Candidat : <email> (domaine différent)." (les chips proposent l'envoi à cet email + abandon)

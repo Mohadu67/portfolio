@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { SavedQuery, computeNextRunAt, type QueryFrequency } from "@/models/SavedQuery";
 import { verifyAuth } from "@/lib/auth";
+import { normalizeCountry } from "@/lib/scraper";
 
 const VALID_FREQUENCIES: QueryFrequency[] = ["manual", "daily", "weekly", "biweekly"];
 
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const keywords = typeof body.keywords === "string" ? body.keywords.trim() : "";
     const location = typeof body.location === "string" ? body.location.trim() : "";
+    const country = normalizeCountry(body.country);
     const frequency: QueryFrequency = VALID_FREQUENCIES.includes(body.frequency)
       ? body.frequency
       : "manual";
@@ -44,10 +46,13 @@ export async function POST(request: NextRequest) {
     }
 
     await connectDB();
+    // Migration one-shot : les anciennes queries sans country ont country=null,
+    // ce qui fausse l'upsert. On les passe à "fr" avant le match.
+    await SavedQuery.updateMany({ country: { $exists: false } }, { $set: { country: "fr" } });
     const nextRunAt = computeNextRunAt(frequency);
     const query = await SavedQuery.findOneAndUpdate(
-      { keywords, location },
-      { keywords, location, frequency, nextRunAt },
+      { keywords, location, country },
+      { keywords, location, country, frequency, nextRunAt },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 

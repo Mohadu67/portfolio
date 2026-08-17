@@ -93,11 +93,12 @@ export async function runOfferSearch(opts: RunOfferSearchOptions = {}): Promise<
     summary.queriesProcessed++;
     const perQ = { keywords: query.keywords, location: query.location, inserted: 0, applied: 0, proposed: 0, skipped: 0, errors: 0 };
     try {
+      const queryCountry = (query.country || "fr").trim().toLowerCase();
       const [j, a, f, i] = await Promise.all([
-        searchJSearch(query.keywords, query.location, 10),
-        searchAdzuna(query.keywords, query.location, 10),
-        searchFranceTravail(query.keywords, query.location, 10),
-        searchIndeed(query.keywords, query.location, 10),
+        searchJSearch(query.keywords, query.location, queryCountry, 10),
+        searchAdzuna(query.keywords, query.location, queryCountry, 10),
+        searchFranceTravail(query.keywords, query.location, queryCountry, 10),
+        searchIndeed(query.keywords, query.location, queryCountry, 10),
       ]);
       const raw = [...j, ...a, ...f, ...i].filter((r) => r.url && r.url.trim() !== "");
 
@@ -201,7 +202,8 @@ export async function runOfferSearch(opts: RunOfferSearchOptions = {}): Promise<
         try {
           const resolvedSite = await resolveCompanyWebsite(
             doc.entreprise,
-            doc.localisation || defaultLocationFallback
+            doc.localisation || defaultLocationFallback,
+            queryCountry
           );
           if (!resolvedSite) {
             doc.notes = `${doc.notes ?? ""}\n[${new Date().toISOString().slice(0, 10)}] skip auto-apply: site officiel non résolu via SerpAPI`.trim();

@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Radar,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useApiKey } from "@/lib/contexts/AuthContext";
@@ -54,6 +55,7 @@ interface AppSettings {
     autoApplyMinCompanyScore: number;
     weeklyProspectKeywords: string;
     weeklyProspectLocation: string;
+    weeklyProspectCountry: string;
     lastProspectRunAt?: string | null;
     lastProspectSummary?: string | null;
     defaultLetterInstruction: string;
@@ -75,6 +77,11 @@ interface AppSettings {
   };
   profile: {
     availability: string;
+  };
+  search: {
+    defaultKeywords: string;
+    defaultLocation: string;
+    defaultCountry: string;
   };
   _defaults?: {
     letterTemplate: { stage: string; alternance: string; cdi: string };
@@ -128,6 +135,16 @@ interface SyncResult {
   }>;
 }
 
+const COUNTRY_LABEL: Record<string, string> = {
+  fr: "🇫🇷 France",
+  de: "🇩🇪 Allemagne",
+  ch: "🇨🇭 Suisse",
+  be: "🇧🇪 Belgique",
+  lu: "🇱🇺 Luxembourg",
+  at: "🇦🇹 Autriche",
+  nl: "🇳🇱 Pays-Bas",
+};
+
 export default function SettingsPage() {
   const apiKey = useApiKey();
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -158,6 +175,15 @@ export default function SettingsPage() {
       if (!sRes.ok) throw new Error("Échec settings");
       const [tData, sData] = await Promise.all([tRes.json(), sRes.json()]);
       setTemplates(tData.templates ?? []);
+      // Normalise les nouveaux champs country si absents du document existant.
+      if (sData.automation && !sData.automation.weeklyProspectCountry) {
+        sData.automation.weeklyProspectCountry = "fr";
+      }
+      sData.search = {
+        defaultKeywords: sData.search?.defaultKeywords ?? "",
+        defaultLocation: sData.search?.defaultLocation ?? "",
+        defaultCountry: sData.search?.defaultCountry ?? "fr",
+      };
       setSettings(sData);
       const defaults = sData?._defaults?.letterTemplate;
       const tpl = sData?.letterTemplate ?? {};
@@ -250,6 +276,11 @@ export default function SettingsPage() {
   const updateProfileField = <K extends keyof AppSettings["profile"]>(key: K, value: AppSettings["profile"][K]) => {
     if (!settings) return;
     updateSettings({ profile: { ...settings.profile, [key]: value } });
+  };
+
+  const updateSearchField = <K extends keyof AppSettings["search"]>(key: K, value: AppSettings["search"][K]) => {
+    if (!settings) return;
+    updateSettings({ search: { ...settings.search, [key]: value } });
   };
 
   const handleProspectNow = async (dryRun = true) => {
@@ -589,6 +620,18 @@ export default function SettingsPage() {
               />
             </div>
             <div>
+              <label className="text-xs text-[var(--text-tertiary)] block mb-1">Pays de prospection</label>
+              <select
+                value={settings.automation.weeklyProspectCountry}
+                onChange={(e) => updateAutoApplyField("weeklyProspectCountry", e.target.value)}
+                className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+              >
+                {Object.entries(COUNTRY_LABEL).map(([code, label]) => (
+                  <option key={code} value={code}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="text-xs text-[var(--text-tertiary)] block mb-1">Max envois / jour</label>
               <input
                 type="number"
@@ -818,6 +861,51 @@ export default function SettingsPage() {
           >
             Gérer les SavedQueries (F2)
           </Link>
+        </div>
+      </section>
+
+      {/* Paramètres de recherche par défaut */}
+      <section className="space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Search size={16} className="text-[var(--accent-orange)]" />
+          Recherche par défaut
+        </h2>
+        <p className="text-xs text-[var(--text-tertiary)]">
+          Valeurs pré-remplies sur la page Recherche et utilisées par l&apos;agent Telegram quand l&apos;utilisateur ne précise pas de pays.
+        </p>
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="text-xs text-[var(--text-tertiary)] block mb-1">Mots-clés par défaut</label>
+            <input
+              type="text"
+              value={settings.search.defaultKeywords}
+              onChange={(e) => updateSearchField("defaultKeywords", e.target.value)}
+              className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+              placeholder="développeur fullstack alternance"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-[var(--text-tertiary)] block mb-1">Localisation par défaut</label>
+            <input
+              type="text"
+              value={settings.search.defaultLocation}
+              onChange={(e) => updateSearchField("defaultLocation", e.target.value)}
+              className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+              placeholder="Strasbourg"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-[var(--text-tertiary)] block mb-1">Pays par défaut</label>
+            <select
+              value={settings.search.defaultCountry}
+              onChange={(e) => updateSearchField("defaultCountry", e.target.value)}
+              className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-soft)] text-sm"
+            >
+              {Object.entries(COUNTRY_LABEL).map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </section>
 

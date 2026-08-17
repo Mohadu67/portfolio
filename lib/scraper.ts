@@ -42,6 +42,45 @@ interface IndeedJob {
   link?: string;
 }
 
+// Mapping pays → codes attendus par chaque API.
+// Fallback sur "fr" si le pays n'est pas supporté.
+export const SUPPORTED_COUNTRIES = ["fr", "de", "ch", "be", "lu", "at", "nl"] as const;
+export type SupportedCountry = (typeof SUPPORTED_COUNTRIES)[number];
+
+const ADZUNA_COUNTRIES = new Set<SupportedCountry>(["fr", "de", "at", "be", "nl", "ch"]);
+
+const INDEED_DOMAIN: Record<SupportedCountry, string> = {
+  fr: "fr.indeed.com",
+  de: "de.indeed.com",
+  ch: "ch.indeed.com",
+  be: "be.indeed.com",
+  lu: "lu.indeed.com",
+  at: "at.indeed.com",
+  nl: "nl.indeed.com",
+};
+
+export function normalizeCountry(country?: string): SupportedCountry {
+  const c = (country ?? "fr").toLowerCase().trim();
+  return SUPPORTED_COUNTRIES.includes(c as SupportedCountry) ? (c as SupportedCountry) : "fr";
+}
+
+// Langue Google (hl) pour SerpAPI : oriente les snippets/résultats.
+export function serpLanguage(country: SupportedCountry): string {
+  switch (country) {
+    case "de":
+    case "at":
+    case "ch":
+      return "de";
+    case "nl":
+      return "nl";
+    case "be":
+    case "lu":
+    case "fr":
+    default:
+      return "fr";
+  }
+}
+
 // Wrapper fetch : timeout + retry exponentiel sur 429 / 5xx / abort
 async function fetchWithRetry(
   url: string,
@@ -128,6 +167,7 @@ function isLocationMatch(jobLocation: string, searchLocation: string): boolean {
 export async function searchJSearch(
   keywords: string,
   location: string,
+  country: string = "fr",
   nbResults: number = 10
 ): Promise<SearchResult[]> {
   const rapidApiKey = process.env.RAPIDAPI_KEY || "";
@@ -137,11 +177,13 @@ export async function searchJSearch(
     return [];
   }
 
+  const c = normalizeCountry(country);
+
   try {
     const response = await fetchWithRetry(
       `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(
         `${keywords} ${location}`
-      )}&country=fr&num_pages=1&date_posted=month`,
+      )}&country=${c}&num_pages=1&date_posted=month`,
       {
         headers: {
           "x-rapidapi-key": rapidApiKey,
@@ -181,6 +223,7 @@ export async function searchJSearch(
 export async function searchAdzuna(
   keywords: string,
   location: string,
+  country: string = "fr",
   nbResults: number = 10
 ): Promise<SearchResult[]> {
   const appId = process.env.ADZUNA_APP_ID || "";
@@ -191,9 +234,12 @@ export async function searchAdzuna(
     return [];
   }
 
+  const c = normalizeCountry(country);
+  const adzunaCountry = ADZUNA_COUNTRIES.has(c) ? c : "fr";
+
   try {
     const response = await fetchWithRetry(
-      `https://api.adzuna.com/v1/api/jobs/fr/search/1?app_id=${appId}&app_key=${appKey}&what=${encodeURIComponent(
+      `https://api.adzuna.com/v1/api/jobs/${adzunaCountry}/search/1?app_id=${appId}&app_key=${appKey}&what=${encodeURIComponent(
         keywords
       )}&where=${encodeURIComponent(location)}&results_per_page=${nbResults}`,
       {},
@@ -232,8 +278,15 @@ export async function searchAdzuna(
 export async function searchFranceTravail(
   keywords: string,
   location: string,
+  country: string = "fr",
   nbResults: number = 10
 ): Promise<SearchResult[]> {
+  const c = normalizeCountry(country);
+  if (c !== "fr") {
+    // France Travail ne couvre que la France métropolitaine.
+    return [];
+  }
+
   const clientId = process.env.FRANCE_TRAVAIL_CLIENT_ID || "";
   const clientSecret = process.env.FRANCE_TRAVAIL_CLIENT_SECRET || "";
 
@@ -332,6 +385,7 @@ export async function searchFranceTravail(
 export async function searchIndeed(
   keywords: string,
   location: string,
+  country: string = "fr",
   nbResults: number = 10
 ): Promise<SearchResult[]> {
   const rapidApiKey = process.env.RAPIDAPI_KEY || "";
@@ -341,11 +395,13 @@ export async function searchIndeed(
     return [];
   }
 
+  const c = normalizeCountry(country);
+
   try {
     const response = await fetchWithRetry(
       `https://indeed12.p.rapidapi.com/jobs/search?query=${encodeURIComponent(
         keywords
-      )}&location=${encodeURIComponent(location)}&locality=fr&start=1`,
+      )}&location=${encodeURIComponent(location)}&locality=${c}&start=1`,
       {
         headers: {
           "x-rapidapi-key": rapidApiKey,
@@ -369,7 +425,7 @@ export async function searchIndeed(
         poste: job.title || "",
         localisation: job.location || location,
         description: "",
-        url: `https://fr.indeed.com${job.link}`,
+        url: `https://${INDEED_DOMAIN[c]}${job.link}`,
         plateforme: "Indeed" as const,
       }));
   } catch (error) {

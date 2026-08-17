@@ -42,11 +42,12 @@ export async function POST(request: NextRequest) {
     for (const query of due) {
       processed++;
       try {
+        const queryCountry = (query.country || "fr").trim().toLowerCase();
         const [j, a, f, i] = await Promise.all([
-          searchJSearch(query.keywords, query.location, 10),
-          searchAdzuna(query.keywords, query.location, 10),
-          searchFranceTravail(query.keywords, query.location, 10),
-          searchIndeed(query.keywords, query.location, 10),
+          searchJSearch(query.keywords, query.location, queryCountry, 10),
+          searchAdzuna(query.keywords, query.location, queryCountry, 10),
+          searchFranceTravail(query.keywords, query.location, queryCountry, 10),
+          searchIndeed(query.keywords, query.location, queryCountry, 10),
         ]);
         const raw = [...j, ...a, ...f, ...i].filter((r) => r.url && r.url.trim() !== "");
 

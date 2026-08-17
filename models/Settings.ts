@@ -28,6 +28,7 @@ export interface ISettings {
     // Multi-query : une query par ligne. Le pipeline rotate avec weeklyProspectQueryIndex.
     weeklyProspectKeywords: string;
     weeklyProspectLocation: string;
+    weeklyProspectCountry: string;
     weeklyProspectQueryIndex: number;
     lastProspectRunAt?: Date | null;
     lastProspectSummary?: string | null;
@@ -56,6 +57,7 @@ export interface ISettings {
   search: {
     defaultLocation: string;
     defaultKeywords: string;
+    defaultCountry: string;
   };
   letterTemplate: {
     stage: string;
@@ -114,6 +116,7 @@ const settingsSchema = new Schema<ISettings>(
         ].join("\n"),
       },
       weeklyProspectLocation: { type: String, default: "Strasbourg" },
+      weeklyProspectCountry: { type: String, default: "fr" },
       weeklyProspectQueryIndex: { type: Number, default: 0 },
       lastProspectRunAt: { type: Date, default: null },
       lastProspectSummary: { type: String, default: null },
@@ -136,6 +139,7 @@ const settingsSchema = new Schema<ISettings>(
     search: {
       defaultLocation: { type: String, default: "" },
       defaultKeywords: { type: String, default: "" },
+      defaultCountry: { type: String, default: "fr" },
     },
     letterTemplate: {
       stage: { type: String, default: "" },

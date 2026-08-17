@@ -3,6 +3,8 @@
 // (societe.com, linkedin.com, etc.) qui pollueraient le scrape downstream.
 // SerpAPI cache déjà côté Google (15 min) → pas de cache local.
 
+import { serpLanguage, type SupportedCountry } from "./scraper";
+
 const BLOCKED_HOSTS: ReadonlySet<string> = new Set([
   "societe.com",
   "pappers.fr",
@@ -61,7 +63,8 @@ let quotaExhaustedUntil = 0;
 
 export async function resolveCompanyWebsite(
   entreprise: string,
-  location: string = ""
+  location: string = "",
+  country: string = "fr"
 ): Promise<string | null> {
   const apiKey = process.env.SERPAPI_KEY;
   if (!apiKey) throw new Error("SERPAPI_KEY non configurée");
@@ -74,10 +77,13 @@ export async function resolveCompanyWebsite(
     );
   }
 
+  const c = country.trim().toLowerCase() as SupportedCountry;
+  const gl = c;
+  const hl = serpLanguage(c);
   const q = location.trim()
     ? `"${name}" site officiel ${location.trim()}`
     : `"${name}" site officiel`;
-  const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(q)}&gl=fr&hl=fr&num=10&api_key=${apiKey}`;
+  const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(q)}&gl=${gl}&hl=${hl}&num=10&api_key=${apiKey}`;
   const res = await fetch(url);
   if (!res.ok) {
     const txt = await res.text();

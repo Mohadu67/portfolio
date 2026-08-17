@@ -116,13 +116,15 @@ interface SyncResult {
   archived: number;
   autoReplied: number;
   autoReplySkipped: number;
+  autoReplyPending: number;
+  autoReplyUnrelated: number;
   errors: string[];
   matchedDetails: Array<{
     candidatureId: string;
     entreprise: string;
     from: string;
     subject: string;
-    autoReply?: { category: string; confidence: number; sent: boolean; error?: string };
+    autoReply?: { category: string; confidence: number; sent: boolean; pendingApproval?: boolean; error?: string };
   }>;
 }
 
@@ -488,11 +490,13 @@ export default function SettingsPage() {
 
         {lastSync && (
           <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)] p-4 text-sm space-y-2">
-            <div className="flex items-center gap-2 font-semibold">
+            <div className="flex items-center gap-2 font-semibold flex-wrap">
               <CheckCircle2 size={14} className="text-emerald-400" />
               {lastSync.scanned} non lus scannés · {lastSync.matched} matché{lastSync.matched > 1 ? "s" : ""} · {lastSync.archived} archivé{lastSync.archived > 1 ? "s" : ""}
               {lastSync.autoReplied > 0 && <> · {lastSync.autoReplied} auto-réponse{lastSync.autoReplied > 1 ? "s" : ""}</>}
+              {lastSync.autoReplyPending > 0 && <> · {lastSync.autoReplyPending} en attente Telegram</>}
               {lastSync.autoReplySkipped > 0 && <> · {lastSync.autoReplySkipped} skip (confiance trop faible)</>}
+              {lastSync.autoReplyUnrelated > 0 && <> · {lastSync.autoReplyUnrelated} hors-sujet</>}
             </div>
             {lastSync.matchedDetails.length > 0 && (
               <ul className="text-xs space-y-1 pl-4 list-disc text-[var(--text-secondary)]">
@@ -502,7 +506,17 @@ export default function SettingsPage() {
                     {m.autoReply && (
                       <span className="ml-2 text-[var(--text-tertiary)]">
                         [IA: {m.autoReply.category} · conf. {m.autoReply.confidence.toFixed(2)} ·{" "}
-                        {m.autoReply.sent ? <span className="text-emerald-400">envoyée</span> : m.autoReply.error ? <span className="text-[var(--accent-danger)]">échec</span> : <span>skip</span>}]
+                        {m.autoReply.sent ? (
+                          <span className="text-emerald-400">envoyée</span>
+                        ) : m.autoReply.pendingApproval ? (
+                          <span className="text-[var(--accent-warning)]">en attente d&apos;approbation</span>
+                        ) : m.autoReply.error ? (
+                          <span className="text-[var(--accent-danger)]">échec</span>
+                        ) : m.autoReply.category === "unrelated" ? (
+                          <span>hors-sujet</span>
+                        ) : (
+                          <span>skip</span>
+                        )}]
                       </span>
                     )}
                   </li>

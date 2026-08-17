@@ -6,7 +6,7 @@ import { Candidature, CandidatureStatut, ICandidature, IEmailReceived, IAutoRepl
 import { getSettingsDoc } from "@/models/Settings";
 import { CVSection } from "@/models/CVSection";
 import { sendNotification } from "./notifications";
-import { classifyAndReply } from "./gemini";
+import { classifyAndReply, type ClassifyAndReplyResult } from "./gemini";
 import { replyInThread } from "./email";
 import { isTelegramConfigured, sendAutoReplyApprovalRequest } from "./telegram";
 import {
@@ -90,6 +90,7 @@ interface SyncResult {
   autoReplied: number;
   autoReplySkipped: number;
   autoReplyPending: number;
+  autoReplyUnrelated: number;
   errors: string[];
   matchedDetails: Array<{
     candidatureId: string;
@@ -115,6 +116,7 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
     autoReplied: 0,
     autoReplySkipped: 0,
     autoReplyPending: 0,
+    autoReplyUnrelated: 0,
     errors: [],
     matchedDetails: [],
   };
@@ -267,6 +269,8 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
           };
 
           let candDoc;
+          let cls: ClassifyAndReplyResult | undefined;
+          let isUnrelated = false;
           if (opts.dryRun) {
             // En dry-run on lit le doc sans muter
             candDoc = await Candidature.findById(candidature._id);
@@ -308,7 +312,37 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
               // Un autre process a déjà traité ce messageId (race condition évitée), skip silencieusement
               continue;
             }
-            // À tout mail entrant : annuler les relances en attente + bumper postulée → réponse reçue.
+          }
+
+          // Pré-classification pour détecter les mails hors-sujet AVANT de muter statut/relances.
+          // En cas d'échec de classification, isUnrelated reste false et le mail est traité normalement.
+          if (autoReplyEnabled && matched.bodyText.trim().length > 0 && matched.messageId) {
+            try {
+              // Idempotence pré-classify : si une autoReply existe déjà pour ce inboundMessageId, skip
+              const already = !opts.dryRun && (candDoc.autoReplies ?? []).some(
+                (a: IAutoReply) => a.inboundMessageId === matched.messageId
+              );
+              if (!already) {
+                cls = await classifyAndReply({
+                  entreprise: candDoc.entreprise,
+                  poste: candDoc.poste,
+                  candidatureType: candDoc.type,
+                  fromName: matched.fromName,
+                  subject: matched.subject,
+                  bodyText: matched.bodyText,
+                  availability: profileAvailability,
+                  calendlyUrl: profileCalendlyUrl,
+                });
+                isUnrelated = cls.category === "unrelated";
+              }
+            } catch (classifyErr) {
+              const msg = classifyErr instanceof Error ? classifyErr.message : String(classifyErr);
+              result.errors.push(`Auto-reply classify failed for ${candDoc.entreprise}: ${msg}`);
+            }
+          }
+
+          if (!opts.dryRun && !isUnrelated) {
+            // À tout mail entrant pertinent : annuler les relances en attente + bumper postulée → réponse reçue.
             // updateOne atomique (au lieu de candDoc.save()) pour ne pas écraser un autoReplies poussé
             // par un sync gmail concurrent entre le findOneAndUpdate ci-dessus et maintenant.
             const bumpStatut = candDoc.statut === "postulée";
@@ -346,34 +380,24 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
           };
           result.matchedDetails.push(detail);
 
+          // Trace les mails hors-sujet détectés avant la section d'envoi.
+          if (isUnrelated && cls) {
+            result.autoReplyUnrelated++;
+            detail.autoReply = {
+              category: cls.category,
+              confidence: cls.confidence,
+              sent: false,
+              pendingApproval: false,
+            };
+          }
+
           // ---------- Auto-reply ----------
           // Garde dure : sans messageId on ne peut pas garantir l'idempotence atomique (race condition
           // entre 2 syncs concurrents → double envoi possible) ni tracer proprement dans autoReplies.
           // On préfère ne pas répondre du tout plutôt qu'envoyer 2x à un RH.
-          if (autoReplyEnabled && matched.bodyText.trim().length > 0 && matched.messageId) {
+          if (autoReplyEnabled && matched.bodyText.trim().length > 0 && matched.messageId && !isUnrelated && cls) {
             try {
-              // Idempotence pré-classify : si une autoReply existe déjà pour ce inboundMessageId, skip
-              // (couvre le cas où l'idempotence emailsReceived a foiré mais autoReplies est en place)
-              if (!opts.dryRun) {
-                const already = (candDoc.autoReplies ?? []).some(
-                  (a: IAutoReply) => a.inboundMessageId === matched.messageId
-                );
-                if (already) {
-                  // Skip auto-reply silencieusement : déjà traité par un run concurrent
-                  continue;
-                }
-              }
-
-              const cls = await classifyAndReply({
-                entreprise: candDoc.entreprise,
-                poste: candDoc.poste,
-                candidatureType: candDoc.type,
-                fromName: matched.fromName,
-                subject: matched.subject,
-                bodyText: matched.bodyText,
-                availability: profileAvailability,
-                calendlyUrl: profileCalendlyUrl,
-              });
+              // cls a déjà été calculé avant la mutation statut/relances (détection hors-sujet).
 
               // Si l'IA détecte un refus ou un entretien avec confiance suffisante, on fait remonter
               // le statut au-delà de "réponse reçue". On ne dégrade pas un statut terminal déjà posé
@@ -625,7 +649,7 @@ export async function syncGmailInbox(opts: { dryRun?: boolean } = {}): Promise<S
   // Update settings with last sync info
   if (!opts.dryRun) {
     settingsDoc.gmail.lastSyncAt = new Date();
-    settingsDoc.gmail.lastSyncSummary = `${result.matched} match${result.matched > 1 ? "s" : ""} sur ${result.scanned} non lus${result.archived > 0 ? `, ${result.archived} archivé(s)` : ""}${result.autoReplied > 0 ? `, ${result.autoReplied} auto-réponse(s)` : ""}${result.autoReplyPending > 0 ? `, ${result.autoReplyPending} en attente Telegram` : ""}${result.autoReplySkipped > 0 ? `, ${result.autoReplySkipped} skip (confiance)` : ""}${result.errors.length ? `, ${result.errors.length} erreur(s)` : ""}`;
+    settingsDoc.gmail.lastSyncSummary = `${result.matched} match${result.matched > 1 ? "s" : ""} sur ${result.scanned} non lus${result.archived > 0 ? `, ${result.archived} archivé(s)` : ""}${result.autoReplied > 0 ? `, ${result.autoReplied} auto-réponse(s)` : ""}${result.autoReplyPending > 0 ? `, ${result.autoReplyPending} en attente Telegram` : ""}${result.autoReplySkipped > 0 ? `, ${result.autoReplySkipped} skip (confiance)` : ""}${result.autoReplyUnrelated > 0 ? `, ${result.autoReplyUnrelated} hors-sujet` : ""}${result.errors.length ? `, ${result.errors.length} erreur(s)` : ""}`;
     await settingsDoc.save();
   }
 

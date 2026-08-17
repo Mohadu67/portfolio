@@ -77,32 +77,22 @@ function portfolioDisplay(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-// Bloc signature + disclaimer compact (juste sous le corps du mail).
+// Bloc signature personnelle + portfolio (juste sous le corps du mail).
 // Volontairement SANS séparateur "—\n" ni ligne horizontale "─────" : Gmail trim
 // agressivement tout ce qui suit ces patterns reconnus comme signature, surtout sur les
-// replies en milieu de thread mobile. Format compact = ratio body/footer + faible et
-// pas de trigger heuristique → le RH voit toujours la mention IA + le portfolio.
+// replies en milieu de thread mobile. Format compact pour que le portfolio reste visible.
 function agentSignatureText(): string {
-  return `\nAgent Cockpit · pour Mohammed Hamiani · ${PORTFOLIO_URL}`;
+  return `\nMohammed Hamiani\n${PORTFOLIO_URL}`;
 }
 
 function agentSignatureHtml(): string {
   return `
 <div style="margin-top:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:13px;color:#1f2937;line-height:1.5;">
-  <span style="font-weight:600;">Agent Cockpit</span>
-  <span style="color:#6b7280;"> · pour Mohammed Hamiani · </span>
+  <span style="font-weight:600;">Mohammed Hamiani</span>
+  <span style="color:#6b7280;"> · </span>
   <a href="${PORTFOLIO_URL}" style="color:#ff6b35;text-decoration:none;font-weight:500;">${portfolioDisplay(PORTFOLIO_URL)}</a>
 </div>`;
 }
-
-// Disclaimer IA — 1 ligne, pas de cadre type signature. Garde l'essentiel : "c'est un agent
-// IA + Mohammed corrige derrière si besoin".
-const AGENT_FOOTER_TEXT = `🤖 Réponse rédigée par l'agent IA de Mohammed (corrigée humain-à-humain en cas de bourde).`;
-
-const AGENT_FOOTER_HTML = `
-<div style="margin-top:6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:12px;color:#6b7280;font-style:italic;line-height:1.5;">
-  🤖 Réponse rédigée par l'agent IA de Mohammed (corrigée humain-à-humain en cas de bourde).
-</div>`;
 
 // Send a reply that keeps Gmail threading by setting In-Reply-To + References headers.
 export async function replyInThread(input: ReplyInThreadInput): Promise<ReplyInThreadResult> {
@@ -130,9 +120,9 @@ export async function replyInThread(input: ReplyInThreadInput): Promise<ReplyInT
     .map((line) => (line.trim() ? `<p style="margin:0 0 12px 0">${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>` : ""))
     .join("");
 
-  // Ordre final : corps IA → signature Agent Cockpit + portfolio → footer mea culpa
-  const textWithFooter = `${input.bodyText}\n${agentSignatureText()}\n\n${AGENT_FOOTER_TEXT}`;
-  const htmlWithFooter = `<div style="font-family: Arial, sans-serif; max-width: 800px;">${htmlBody}${agentSignatureHtml()}${AGENT_FOOTER_HTML}</div>`;
+  // Ordre final : corps → signature personnelle + portfolio
+  const textWithFooter = `${input.bodyText}${agentSignatureText()}`;
+  const htmlWithFooter = `<div style="font-family: Arial, sans-serif; max-width: 800px;">${htmlBody}${agentSignatureHtml()}</div>`;
 
   const info = await withRetry(
     () =>

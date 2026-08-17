@@ -75,6 +75,7 @@ export type AutoReplyCategory =
   | "demande_infos"
   | "smalltalk"
   | "autre"
+  | "unrelated"
   | "uncategorized";
 
 // Validation humaine via Telegram : "auto" = envoi direct sans validation (mode historique),
@@ -195,7 +196,7 @@ const autoReplySchema = new Schema<IAutoReply>(
     inboundMessageId: { type: String },
     category: {
       type: String,
-      enum: ["refus", "entretien", "demande_infos", "smalltalk", "autre", "uncategorized"],
+      enum: ["refus", "entretien", "demande_infos", "smalltalk", "autre", "unrelated", "uncategorized"],
       default: "uncategorized",
     },
     confidence: { type: Number, default: 0 },

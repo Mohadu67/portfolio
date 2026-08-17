@@ -322,6 +322,22 @@ export async function ensureLetterInstruction(
   return { ...args, letter_instruction: extracted };
 }
 
+// Après un apply_to_company/apply_from_email en dry_run, le modèle devrait appeler get_lettre
+// pour montrer la lettre. Comme il ne le fait pas toujours, on force l'aperçu côté serveur.
+async function fetchLetterPreview(toolSummary: string | undefined): Promise<string | undefined> {
+  if (!toolSummary) return undefined;
+  const parsed = safeParseSummary(toolSummary);
+  const candidatureId = parsed.candidatureId ?? parsed.candidature_id;
+  if (!candidatureId) return undefined;
+  try {
+    const r = await executeTool("get_lettre", { candidature_id: String(candidatureId) });
+    if (r.body.error || !r.body.summary) return undefined;
+    return r.body.summary;
+  } catch {
+    return undefined;
+  }
+}
+
 // Libellé humain d'une action proposée (affiché sur le message à boutons).
 async function describeAction(tool: string, input: Record<string, unknown>): Promise<string> {
   const entrepriseOf = async (): Promise<string> => {
@@ -578,6 +594,14 @@ export async function handleIncomingTelegramText(
             // entières dans la mémoire de conversation, sinon les follow-ups « ajoute la 2e »
             // retombent sur un JSON tronqué et le modèle invente.
             toolDigests.push(`[résultat ${fc.name}] ${r.body.summary.slice(0, 2500)}`);
+            // Forçage de l'aperçu de la lettre après un dry_run : le modèle oublie parfois
+            // d'appeler get_lettre, alors on le fait pour lui et on injecte le résultat.
+            if (isDryRunSimulation && (fc.name === "apply_to_company" || fc.name === "apply_from_email")) {
+              const preview = await fetchLetterPreview(r.body.summary);
+              if (preview) {
+                toolDigests.push(`[résultat get_lettre] ${preview.slice(0, 2500)}`);
+              }
+            }
           }
         } catch (err) {
           responseParts.push({

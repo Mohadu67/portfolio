@@ -242,7 +242,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "apply_to_company",
     description:
-      "Lance le pipeline de candidature spontanée pour une entreprise : scrape la home + page about, score qualité via IA, extrait l'email RH (filtre whitelist), génère la lettre de motivation, crée la candidature en DB et envoie le mail avec CV + LM. Requiert l'URL du site de l'entreprise. À utiliser UNIQUEMENT quand l'utilisateur demande explicitement d'envoyer une candidature à une URL précise.",
+      "Lance le pipeline de candidature spontanée pour une entreprise : scrape la home + page about, score qualité via IA, extrait l'email RH (filtre whitelist), génère la lettre de motivation, crée la candidature en DB et envoie le mail avec CV + LM. Requiert l'URL du site de l'entreprise. À utiliser quand l'utilisateur demande explicitement d'envoyer/préparer une candidature à une URL précise.",
     requiresConfirmation: true,
     input_schema: {
       type: "object",
@@ -259,15 +259,15 @@ export const TOOLS: ToolDefinition[] = [
         letter_instruction: {
           type: "string",
           description:
-            "Consigne libre pour orienter la lettre de motivation (ex: « insiste sur mon profil chef de projet », « mentionne mon expérience React », « ton plus sobre »). Persistée sur la candidature : les régénérations futures la conservent. À remplir dès que l'utilisateur exprime un angle ou une envie particulière.",
+            "OBLIGATOIRE dès que l'utilisateur exprime un angle, une envie ou des éléments à inclure. Contient INTEGRALEMENT sa consigne (ex: 'insiste sur mon profil chef de projet, mentionne mon master manager en ingénierie informatique, dis que j'ai obtenu mon Bachelor, parle de leur site que je trouve super, dis que j'aimerais rejoindre leur aventure'). Ne résume pas — reprends ses mots-clés.",
         },
         dry_run: {
           type: "boolean",
-          description: "Si true : génère tout (scrape, lettre, choix email) mais N'ENVOIE PAS le mail. Utile pour vérifier avant de valider.",
+          description: "OBLIGATOIREMENT true en premier pour montrer l'aperçu. Seul l'envoi réel (validation utilisateur) se fait avec dry_run=false.",
         },
         skip_quality_score: {
           type: "boolean",
-          description: "Bypass le scoring qualité Gemini (sinon refuse les boîtes notées < 0.3). À utiliser si l'utilisateur insiste explicitement.",
+          description: "Bypass le scoring qualité Gemini. En mode dry_run, mettre true dès que l'utilisateur a explicitement demandé de postuler à cette URL — cela évite de lui demander une confirmation inutile. Pour l'envoi réel, respecter son choix.",
         },
         allow_duplicate: {
           type: "boolean",
@@ -275,11 +275,11 @@ export const TOOLS: ToolDefinition[] = [
         },
         allow_generic_email: {
           type: "boolean",
-          description: "Si true, autorise l'envoi à un email générique (contact@, info@, hello@, bonjour@) quand aucun email RH nominatif n'est trouvé, à condition que le domaine de l'email match celui de l'entreprise. Ne bypass JAMAIS les emails blacklist (noreply@, abuse@, support@…). À utiliser uniquement après un premier échec, sur insistance explicite de l'utilisateur.",
+          description: "Autorise l'envoi à un email générique (contact@, info@...) du domaine. En mode dry_run, mettre true dès que l'utilisateur demande de postuler et qu'aucun email nominatif n'est trouvé — cela évite un blocage inutile. Ne bypass jamais les emails blacklist (noreply@, abuse@, support@...).",
         },
         email_override: {
           type: "string",
-          description: "Email destinataire saisi explicitement par l'utilisateur — bypass total du picker auto (whitelist + loose). À utiliser quand un email valable a été trouvé mais que le filtre auto le rejette (ex: domaine 'frère' comme strasbourg@etudeplus.org pour le site etudeplusstrasbourg.fr). Ignoré si vide. Validation basique sur le format. Toujours demander confirmation explicite de l'utilisateur avant d'utiliser ce flag.",
+          description: "Email destinataire saisi explicitement par l'utilisateur — bypass total du picker auto. À utiliser quand un email valable a été trouvé mais que le filtre auto le rejette.",
         },
       },
       required: ["url"],
@@ -319,7 +319,7 @@ export const TOOLS: ToolDefinition[] = [
         },
         letter_instruction: {
           type: "string",
-          description: "Consigne libre pour orienter la lettre (ex: 'insiste sur le côté chef de projet', 'mentionne mon master en manager en ingénierie informatique').",
+          description: "OBLIGATOIRE dès que l'utilisateur exprime un angle. Contient INTEGRALEMENT sa consigne (ne pas résumer).",
         },
         type: {
           type: "string",
@@ -341,11 +341,11 @@ export const TOOLS: ToolDefinition[] = [
         },
         dry_run: {
           type: "boolean",
-          description: "Si true (défaut) : génère la lettre et montre un récap SANS envoyer. L'utilisateur valide ensuite l'envoi réel.",
+          description: "OBLIGATOIREMENT true en premier pour montrer l'aperçu. Seul l'envoi réel se fait avec dry_run=false.",
         },
         skip_quality_score: {
           type: "boolean",
-          description: "Bypass le scoring qualité Gemini (rare).",
+          description: "Bypass le scoring qualité Gemini. Mettre true en dry_run dès que l'utilisateur a explicitement demandé de postuler.",
         },
         allow_duplicate: {
           type: "boolean",
@@ -353,7 +353,7 @@ export const TOOLS: ToolDefinition[] = [
         },
         allow_generic_email: {
           type: "boolean",
-          description: "Autorise l'envoi à un email générique (contact@, info@...) quand aucun email RH nominatif n'est trouvé. À n'utiliser que sur demande explicite de l'utilisateur.",
+          description: "Autorise l'envoi à un email générique du domaine. Mettre true en dry_run si aucun email nominatif n'est trouvé.",
         },
       },
       required: ["email_content"],

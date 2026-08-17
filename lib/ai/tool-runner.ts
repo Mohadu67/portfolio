@@ -722,6 +722,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       });
       const allowGenericEmailUsed = isTruthyFlag(input.allow_generic_email);
       const emailFailure = decision.skipReason?.includes("aucun email RH") ?? false;
+      const dryRun = isTruthyFlag(input.dry_run);
       const summary = JSON.stringify({
         decision: decision.decision,
         entreprise: decision.entreprise || decision.domain,
@@ -732,6 +733,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         companyReason: decision.companyReason ?? null,
         skipReason: decision.skipReason ?? null,
         error: decision.error ?? null,
+        dryRun,
         allowGenericEmailUsed,
         scrapedEmails: decision.scrapedEmails ?? null,
         hint: emailFailure

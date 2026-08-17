@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 let mongod: MongoMemoryServer;
 let executeTool: typeof import("@/lib/ai/tool-runner").executeTool;
 let Candidature: typeof import("@/models/Candidature").Candidature;
+let generateLetterProposal: typeof import("@/lib/gemini").generateLetterProposal;
 
 // Mocks définis avant les imports dynamiques
 vi.mock("@/lib/gemini", async (importOriginal) => {
@@ -40,7 +41,9 @@ vi.mock("@/lib/gemini", async (importOriginal) => {
       summary: "Le recruteur propose un entretien cette semaine.",
       suggestedReply: "Merci, Mohammed vous recontacte rapidement pour confirmer un créneau.",
     })),
-    generateLetterProposal: vi.fn(async () => "Lettre générée pour le test."),
+    generateLetterProposal: vi.fn(async (_entreprise: string, _aboutText: string, _poste: string | undefined, _type: string, userInstruction?: string) => {
+      return `Lettre générée${userInstruction ? ` — consigne reçue : ${userInstruction.slice(0, 200)}` : " — sans consigne"}.`;
+    }),
   };
 });
 
@@ -86,6 +89,7 @@ beforeAll(async () => {
   process.env.TELEGRAM_CHAT_ID = "424242";
   ({ executeTool } = await import("@/lib/ai/tool-runner"));
   ({ Candidature } = await import("@/models/Candidature"));
+  ({ generateLetterProposal } = await import("@/lib/gemini"));
   await (await import("@/lib/mongodb")).connectDB();
 }, 120_000);
 
@@ -131,7 +135,8 @@ describe("apply_from_email", () => {
     const data = parse(r.body.summary);
     expect(data.dryRun).toBe(true);
     expect(data.email).toBe("recruteur@testcorp.com");
-    expect(data.lettre).toBe("Lettre générée pour le test.");
+    expect(data.lettre).toContain("consigne reçue");
+    expect(data.lettre).toContain("insiste sur React");
 
     const docs = await Candidature.find({}).lean();
     expect(docs).toHaveLength(1);
@@ -290,6 +295,36 @@ describe("dismiss_pending_proposals", () => {
     const r = await executeTool("dismiss_pending_proposals", { origin: "prospection", blacklist_domains: false });
     expect(r.body.error).toBeUndefined();
     expect(r.body.summary).toContain("2 proposition(s) ignorée(s)");
+  });
+});
+
+describe("apply_to_company", () => {
+  it("passe letter_instruction et bypass les garde-fous en dry_run sur demande explicite", async () => {
+    const instruction = "mentionne mon Bachelor, mon master manager en ingénierie informatique, mes stacks, dis que leur site est super et que je veux rejoindre leur aventure";
+    const r = await executeTool("apply_to_company", {
+      url: "https://atelierdunuage.fr",
+      letter_instruction: instruction,
+      dry_run: true,
+      email_override: "contact@atelierdunuage.fr",
+      allow_generic_email: true,
+      skip_quality_score: true,
+    });
+    expect(r.body.error).toBeUndefined();
+    const data = parse(r.body.summary);
+    expect(data.dryRun).toBe(true);
+    expect(data.candidatureId).toBeTruthy();
+
+    const doc = await Candidature.findById(data.candidatureId as string).lean<{ letterInstruction: string; lettre: string }>();
+    expect(doc!.letterInstruction).toContain("master manager");
+    expect(doc!.lettre).toContain("consigne reçue");
+    expect(doc!.lettre).toContain("master manager");
+    expect(vi.mocked(generateLetterProposal)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      "alternance",
+      expect.stringContaining("master manager")
+    );
   });
 });
 

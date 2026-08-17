@@ -4,7 +4,7 @@ export type LetterType = "stage" | "alternance" | "cdi";
 
 export const TEMPLATE_PLACEHOLDER = "{{paragraphe_genere}}";
 
-const COMMON_BODY = `Actuellement en fin de bachelor concepteur développeur d'applications, je conçois et développe des applications web complètes, de la modélisation à la mise en production. J'ai l'habitude de travailler avec des méthodes structurées et de livrer des solutions fonctionnelles, maintenables et sécurisées.
+const COMMON_BODY = `Je conçois et développe des applications web complètes, de la modélisation à la mise en production. J'ai l'habitude de travailler avec des méthodes structurées et de livrer des solutions fonctionnelles, maintenables et sécurisées.
 
 Je maîtrise des environnements full-stack (Node.js, React, PHP) et le déploiement en conditions réelles avec des pratiques de CI/CD.
 
@@ -15,13 +15,13 @@ Je cherche aujourd'hui un environnement exigeant où je pourrai être rapidement
 Je reste disponible pour un échange.`;
 
 export const DEFAULT_LETTER_TEMPLATES: Record<LetterType, string> = {
-  stage: `Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans et également admis en Master Manager en Ingénierie Informatique, je recherche une alternance dès la rentrée 2026 (2 jours en entreprise / 1 jour en cours).
+  stage: `Titulaire d'un Bachelor Concepteur Développeur d'Applications et admis en Master Manager en Ingénierie Informatique, je recherche une alternance dès la rentrée 2026 (2 jours en entreprise / 1 jour de cours).
 
 ${COMMON_BODY}`,
-  alternance: `Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans et également admis en Master Manager en Ingénierie Informatique, je recherche une alternance dès la rentrée 2026 (2 jours en entreprise / 1 jour en cours).
+  alternance: `Titulaire d'un Bachelor Concepteur Développeur d'Applications et admis en Master Manager en Ingénierie Informatique, je recherche une alternance dès la rentrée 2026 (2 jours en entreprise / 1 jour de cours).
 
 ${COMMON_BODY}`,
-  cdi: `Admissible au CNAM pour un titre d'ingénieur informatique sur 3 ans et également admis en Master Manager en Ingénierie Informatique, je recherche un CDI développeur web pour intégrer une équipe technique dès maintenant.
+  cdi: `Titulaire d'un Bachelor Concepteur Développeur d'Applications et admis en Master Manager en Ingénierie Informatique, je recherche un CDI développeur web pour intégrer une équipe technique dès maintenant.
 
 ${COMMON_BODY}`,
 };

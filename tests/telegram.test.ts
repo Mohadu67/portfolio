@@ -6,7 +6,12 @@ import {
   escapeTelegramHtml,
   type ApprovalRequestInput,
 } from "@/lib/telegram";
-import { formatToolResult, pcmToWav, safeParseSummary } from "@/lib/telegram-agent";
+import {
+  formatToolResult,
+  pcmToWav,
+  safeParseSummary,
+  shouldExtractLetterInstruction,
+} from "@/lib/telegram-agent";
 import { buildCandidatureSearchFilter } from "@/lib/ai/tool-runner";
 
 const baseInput: ApprovalRequestInput = {
@@ -244,5 +249,28 @@ describe("pcmToWav", () => {
     expect(wav.readUInt16LE(34)).toBe(16); // bits/sample
     expect(wav.toString("ascii", 36, 40)).toBe("data");
     expect(wav.readUInt32LE(40)).toBe(4800);
+  });
+});
+
+describe("shouldExtractLetterInstruction", () => {
+  it("détecte une consigne de candidature riche", () => {
+    const text =
+      "Prépare une candidature pour Atelierdunuage.fr, dis que je suis admissible en master manager en ingénierie informatique, explique que j'ai mon Bachelor et parle des stacks que je maîtrise.";
+    expect(shouldExtractLetterInstruction(text)).toBe(true);
+  });
+
+  it("rejette les confirmations courtes comme Oui / Vas-y", () => {
+    expect(shouldExtractLetterInstruction("Oui")).toBe(false);
+    expect(shouldExtractLetterInstruction("Vas-y")).toBe(false);
+    expect(shouldExtractLetterInstruction("c'est bon envoie")).toBe(false);
+  });
+
+  it("rejette une question hors contexte candidature malgré des mots-clés de lettre", () => {
+    expect(shouldExtractLetterInstruction("Quel master tu vises déjà ?")).toBe(false);
+    expect(shouldExtractLetterInstruction("Tu as parlé de stacks ?")).toBe(false);
+  });
+
+  it("rejette un message qui interdit hors contexte candidature", () => {
+    expect(shouldExtractLetterInstruction("Ne mentionne pas mon bachelor ici.")).toBe(false);
   });
 });

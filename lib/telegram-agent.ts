@@ -169,6 +169,7 @@ EMAILS / FORWARDS — quand l'utilisateur colle un email ou forwarde un message 
 - Exemple couvert : "voici une adresse mail contact@entreprise.com, postule en mettant l'accent sur le côté chef de projet, que je prépare un master en manager en ingénierie informatique, tu peux récup les infos sur le master ici www.blabla.com et tu peux voir les infos de l'entreprise ici entreprise.com, montre-moi la lettre avant d'envoyer" → parse_email → apply_from_email avec email_override=contact@entreprise.com, company_url=entreprise.com, context_urls=[www.blabla.com], letter_instruction="...", dry_run=true.
 
 PERSONNALISATION DES LETTRES — c'est ton point fort, sers-t'en :
+- Quand l'utilisateur demande de postuler/préparer une candidature à une URL avec des consignes détaillées, appelle apply_to_company en UN SEUL appel avec : dry_run=true, url, letter_instruction=LA CONSIGNE COMPLÈTE DE L'UTILISATEUR (ne la résume pas, reprends ses mots-clés : master, Bachelor, stack, ce qu'il aime du site, son ambition...). NE JAMAIS oublier letter_instruction : si tu l'omets, la lettre sera générique et l'utilisateur sera déçu. allow_generic_email=true (pour éviter le blocage sur contact@), skip_quality_score=true (pour éviter le blocage sur le score qualité). Montre l'aperçu. N'envoie que sur validation explicite.
 - Par défaut la lettre = template fixe + un paragraphe central généré. Dès que l'utilisateur exprime un angle (« insiste sur le management », « parle de leur produit X », « ton plus direct »), passe letter_instruction à apply_to_company/create_candidature, ou write_letter(candidature_id, instruction) sur une candidature existante — montre le résultat, itère jusqu'à ce qu'il valide.
 - Pour une lettre 100 % sur mesure : RÉDIGE-LA TOI-MÊME dans la conversation, en t'appuyant sur ta mémoire (école, parcours, objectifs), le CV (get_cv_section) et l'entreprise (research_company, get_candidature). Propose un angle, discute, ajuste. Une fois qu'il dit explicitement OK → set_lettre pour l'enregistrer : c'est elle qui partira.
 - Workflow candidature soignée : apply_to_company en dry_run (s'exécute direct, montre la lettre avec get_lettre) → itérations (write_letter ou set_lettre) → apply_to_company SANS dry_run pour l'envoi réel (boutons ✅ ; une lettre sur mesure set_lettre est toujours conservée, une lettre template est conservée si tu ne repasses pas de letter_instruction et que le type ne change pas).
@@ -179,6 +180,8 @@ PERSONNALISATION DES LETTRES — c'est ton point fort, sers-t'en :
 Rappels : schedule_telegram_reminder pour tout ce qui est « rappelle-moi de… » (préparer un entretien, une échéance) — c'est un message Telegram différé, PAS un email. Quand l'utilisateur annonce un entretien : mets à jour le statut (update_candidature_status) ET propose un rappel de préparation la veille.
 
 Quand l'utilisateur mentionne une entreprise (« c'est quoi X ? », « ils recrutent ? », « tu penses quoi de X ? ») → research_company. Présente le récap (activité, score d'adéquation, offres de leur page carrières, déjà contactée ou non) puis, si c'est pertinent et pas déjà contacté, propose de candidater — apply_to_company déclenchera les boutons de confirmation.
+
+GARDE-FOU ANTI-FRICTION : en dry_run (aperçu), tu es LIBRE de bypasser les garde-fous (allow_generic_email, skip_quality_score) pour montrer le résultat. L'utilisateur verra et décidera. Ce n'est qu'à l'envoi réel que ces flags doivent refléter un choix explicite.
 
 RÈGLE ANTI-INVENTION (critique) : ne cite JAMAIS de noms d'entreprises, de postes, de chiffres ou de dates qui ne viennent pas d'un résultat de tool. Si la donnée demandée n'apparaît ni dans un résultat de tool du tour courant, ni dans une ligne « [résultat …] » de l'historique, appelle le tool — ne complète JAMAIS de mémoire. Inventer une liste est une faute grave.
 L'historique peut contenir des lignes « [résultat <tool>] {…} » : ce sont les vraies données de tes appels précédents (avec les _id). Réutilise-les pour les questions de suivi (« détail du 2e », « celle d'Orano »…).
@@ -218,6 +221,105 @@ export function safeParseSummary(summary: string | undefined): Record<string, un
   } catch {
     return { result: summary };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Extraction de consigne de lettre depuis le message utilisateur
+// ---------------------------------------------------------------------------
+// Le modèle principal (Gemini) omet parfois letter_instruction malgré le prompt
+// système. Ce fallback analyse le message brut et, s'il sent une consigne,
+// appelle un mini-modèle pour l'extraire proprement et l'injecter dans les args
+// d'apply_to_company / apply_from_email / create_candidature.
+
+const LETTER_INSTRUCTION_KEYWORDS = [
+  "dis que",
+  "explique que",
+  "parle de",
+  "parle des",
+  "mentionne",
+  "insiste sur",
+  "mets l'accent sur",
+  "met l'accent sur",
+  "ne parle pas",
+  "ne mentionne pas",
+  "trouve super",
+  "aimerais",
+  "rejoindre",
+  "aventure",
+  "chef de projet",
+  "master",
+  "bachelor",
+  "bachelors",
+  "stack",
+  "stacks",
+  "mettre en avant",
+];
+
+const CANDIDATURE_INTENT_KEYWORDS = [
+  "postule",
+  "prépare",
+  "candidature",
+  "envoie",
+  "adresse",
+  "postuler",
+  "lettre",
+  "motivation",
+  "entreprise",
+  "site",
+  "url",
+  "https://",
+];
+
+const MIN_MESSAGE_LENGTH_FOR_EXTRACTION = 20;
+const FALLBACK_MODEL = process.env.FALLBACK_EXTRACTION_MODEL ?? "gemini-2.5-flash";
+
+export function shouldExtractLetterInstruction(text: string): boolean {
+  const lower = text.toLowerCase();
+  const hasInstruction = LETTER_INSTRUCTION_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
+  const hasCandidatureIntent = CANDIDATURE_INTENT_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
+  return hasInstruction && hasCandidatureIntent && text.trim().length >= MIN_MESSAGE_LENGTH_FOR_EXTRACTION;
+}
+
+async function extractLetterInstruction(userText: string): Promise<string | undefined> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || !shouldExtractLetterInstruction(userText)) return undefined;
+  try {
+    const model = getGenAI(apiKey).getGenerativeModel({
+      model: FALLBACK_MODEL,
+      systemInstruction:
+        "Tu extrais la consigne de rédaction d'une lettre de motivation depuis un message Telegram. " +
+        "Réponds UNIQUEMENT avec la consigne, telle quelle, sans introduction. " +
+        "Si le message ne contient pas de consigne spécifique pour la lettre, réponds exactement : AUCUNE.",
+      generationConfig: { temperature: 0.2, maxOutputTokens: 512 },
+    });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: userText }] }],
+    });
+    const raw = result.response.text().trim();
+    if (raw.toUpperCase().startsWith("AUCUNE")) return undefined;
+    return raw;
+  } catch (err) {
+    console.error("[extractLetterInstruction]", err instanceof Error ? err.message : err);
+    return undefined;
+  }
+}
+
+const TOOLS_THAT_NEED_LETTER_INSTRUCTION = new Set([
+  "apply_to_company",
+  "apply_from_email",
+  "create_candidature",
+]);
+
+export async function ensureLetterInstruction(
+  tool: string,
+  args: Record<string, unknown>,
+  userText: string
+): Promise<Record<string, unknown>> {
+  if (!TOOLS_THAT_NEED_LETTER_INSTRUCTION.has(tool)) return args;
+  if (typeof args.letter_instruction === "string" && args.letter_instruction.trim().length > 0) return args;
+  const extracted = await extractLetterInstruction(userText);
+  if (!extracted) return args;
+  return { ...args, letter_instruction: extracted };
 }
 
 // Libellé humain d'une action proposée (affiché sur le message à boutons).
@@ -427,7 +529,13 @@ export async function handleIncomingTelegramText(
     const responseParts: Part[] = [];
     for (const fc of fcs) {
       const def = getTool(fc.name);
-      const args = (fc.args ?? {}) as Record<string, unknown>;
+      // Fallback critique : si le modèle principal oublie de passer letter_instruction,
+      // on l'extrait du message utilisateur et on l'injecte avant exécution.
+      const args = await ensureLetterInstruction(
+        fc.name,
+        (fc.args ?? {}) as Record<string, unknown>,
+        text
+      );
       if (!def) {
         responseParts.push({ functionResponse: { name: fc.name, response: { error: `Tool inconnu : ${fc.name}` } } });
         continue;

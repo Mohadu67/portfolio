@@ -11,7 +11,7 @@ import { processSingleCompany, dispatchCandidature } from "@/lib/auto-apply";
 import { runProcessPending } from "@/lib/pending-processor";
 import { sendAutoReplyApprovalRequest } from "@/lib/telegram";
 import { getSettings } from "@/models/Settings";
-import { resolveCompanyWebsite } from "@/lib/serpapi-resolve";
+import { resolveCompanyWebsite, isLikelyOfficialSite } from "@/lib/serpapi-resolve";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage } from "@/lib/web-scraper";
 import {
   scoreCompanyFit,
@@ -437,8 +437,16 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         });
       }
 
-      // 2. Présentation + emails
+      // 2. Présentation + emails (filtrés pour ne garder que ceux du domaine du site)
       const scraped = await scrapeCompanyWebsite(site);
+      const siteDomain = new URL(site).hostname.replace(/^www\./, "").toLowerCase();
+      const siteDomainBase = siteDomain.split(".").slice(-2).join(".");
+      const filteredEmails = (scraped.emails ?? []).filter((email) => {
+        const emailDomain = email.split("@")[1]?.toLowerCase();
+        if (!emailDomain) return false;
+        return emailDomain === siteDomain || emailDomain.endsWith(`.${siteDomainBase}`) || siteDomainBase.endsWith(`.${emailDomain.split(".").slice(-2).join(".")}`);
+      });
+      const siteConfiance = isLikelyOfficialSite(site, entreprise || siteDomain) ? "élevée" : "moyenne";
 
       // 3. Page carrières → offres publiées par la boîte elle-même
       let careersUrl: string | null = null;
@@ -494,8 +502,13 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         summary: JSON.stringify({
           entreprise: entreprise || domain,
           site,
+          siteConfiance,
+          noteConfiance: siteConfiance === "élevée"
+            ? "Le site semble être le site officiel de l'entreprise."
+            : "Le site trouvé ne correspond pas très bien au nom de l'entreprise (peut être un article, un annuaire ou un site satellite). Demande une URL officielle à l'utilisateur si tu doutes.",
           resume: (scraped.aboutText || scraped.description || "").slice(0, 800) || null,
-          emails: (scraped.emails ?? []).slice(0, 5),
+          emails: filteredEmails.slice(0, 5),
+          emailsExternes: (scraped.emails ?? []).length - filteredEmails.length,
           fitScore: fit?.score ?? null,
           fitReason: fit?.reason ?? null,
           careersUrl,
@@ -503,7 +516,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
           dejaContactee: existing
             ? { candidature_id: String(existing._id), poste: existing.poste, statut: existing.statut }
             : null,
-          hint: "Fais un mini-récap : activité, adéquation, offres carrières trouvées, déjà contactée ou non. Si pertinent et pas déjà contactée, propose de candidater (apply_to_company avec ce site).",
+          hint: "Fais un mini-récap : activité, confiance du site, adéquation, offres carrières trouvées, déjà contactée ou non. Si le site est douteux, demande confirmation avant de postuler. Si pertinent et pas déjà contactée, propose de candidater (apply_to_company avec ce site).",
         }),
       });
     }

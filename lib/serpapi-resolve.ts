@@ -93,7 +93,7 @@ function domainTokens(host: string): string[] {
 }
 
 export function isLikelyOfficialSite(site: string, companyName: string): boolean {
-  return scoreCompanyLink(site, companyName) >= 80;
+  return scoreCompanyLink(site, companyName) >= 30;
 }
 
 function scoreCompanyLink(link: string, companyName: string): number {
@@ -209,5 +209,12 @@ export async function resolveCompanyWebsite(
   }
 
   // Seuil minimal : un score ≤ 0 signifie qu'aucun résultat ne ressemble vraiment au nom.
-  return bestScore > 0 ? bestLink : null;
+  // On retourne l'origine (racine du site) pour éviter de scraper une page d'article spécifique.
+  if (!bestLink || bestScore <= 0) return null;
+  try {
+    const u = new URL(bestLink);
+    return `${u.protocol}//${u.hostname}/`;
+  } catch {
+    return bestLink;
+  }
 }

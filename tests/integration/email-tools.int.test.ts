@@ -402,6 +402,30 @@ describe("write_letter", () => {
       expect.stringContaining("3 jours en entreprise / 2 jours de cours")
     );
   });
+
+  it("injecte le rythme mémorisé même sans nouvelle instruction", async () => {
+    await executeTool("remember_fact", {
+      category: "ecole",
+      fact: "Rythme : 2 semaines en entreprise / 1 semaine à l'école.",
+    });
+    await executeTool("create_candidature", { entreprise: "Boite Vide" });
+    const doc = await Candidature.findOne({ entreprise: "Boite Vide" });
+    vi.mocked(generateLetterProposal).mockClear();
+
+    const r = await executeTool("write_letter", {
+      candidature_id: String(doc!._id),
+      instruction: "",
+    });
+    expect(r.body.error).toBeUndefined();
+
+    expect(vi.mocked(generateLetterProposal)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      "alternance",
+      expect.stringContaining("2 semaines en entreprise / 1 semaine à l'école")
+    );
+  });
 });
 
 describe("draft_email_reply", () => {

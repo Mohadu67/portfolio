@@ -128,8 +128,7 @@ export function stripLetterBoilerplate(raw: string): string {
 async function resolveLetterInstructionWithMemoryRythme(
   instruction: string | undefined,
 ): Promise<string | undefined> {
-  if (!instruction) return undefined;
-  if (hasRythmeInstruction(instruction)) return instruction;
+  if (instruction && hasRythmeInstruction(instruction)) return instruction;
   try {
     const facts = await AgentMemory.find({
       category: { $in: ["parcours", "ecole"] },
@@ -139,7 +138,8 @@ async function resolveLetterInstructionWithMemoryRythme(
     for (const f of facts) {
       const rythme = extractRythmeFromInstruction(f.fact);
       if (rythme !== DEFAULT_RYTHME) {
-        return `${instruction}\n\nRythme d'alternance à utiliser : ${rythme}.`.trim();
+        const rythmeClause = `Rythme d'alternance à utiliser : ${rythme}.`;
+        return instruction ? `${instruction}\n\n${rythmeClause}`.trim() : rythmeClause;
       }
     }
   } catch {

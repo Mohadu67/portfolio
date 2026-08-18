@@ -329,6 +329,26 @@ describe("apply_to_company", () => {
     );
   });
 
+  it("rejette un email artefact et préfère contact@ valide", async () => {
+    const { scrapeCompanyWebsite } = await import("@/lib/web-scraper");
+    vi.mocked(scrapeCompanyWebsite).mockResolvedValueOnce({
+      companyName: "Wolf Lingerie",
+      aboutText: "Marque de lingerie en expansion.",
+      description: "Lingerie qualité.",
+      emails: ["00contact@wolflingerie.frsuivez", "contact@wolflingerie.fr"],
+    } as unknown as Awaited<ReturnType<typeof scrapeCompanyWebsite>>);
+
+    const r = await executeTool("apply_to_company", {
+      url: "https://www.wolflingerie.com/",
+      dry_run: true,
+      allow_generic_email: true,
+      skip_quality_score: true,
+    });
+    expect(r.body.error).toBeUndefined();
+    const data = parse(r.body.summary);
+    expect(data.email).toMatchObject({ address: "contact@wolflingerie.fr", reasons: expect.arrayContaining(["generic_prefix"]) });
+  });
+
   it("injecte le rythme mémorisé quand letter_instruction n'en a pas", async () => {
     await executeTool("remember_fact", {
       category: "parcours",

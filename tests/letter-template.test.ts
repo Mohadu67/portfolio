@@ -1,13 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   DEFAULT_LETTER_TEMPLATES,
   RYTHME_PLACEHOLDER,
+  TEMPLATE_PLACEHOLDER,
   DEFAULT_RYTHME,
   extractRythmeFromInstruction,
   applyTemplateVariables,
   splitTemplate,
   fillTemplate,
+  getLetterTemplate,
 } from "@/lib/letter-template";
+
+vi.mock("@/models/Settings", () => ({
+  getSettings: vi.fn(),
+}));
 
 describe("extractRythmeFromInstruction", () => {
   it("retourne le rythme par défaut sans instruction", () => {
@@ -89,5 +95,22 @@ describe("splitTemplate / fillTemplate", () => {
     expect(filled).toContain("Paragraphe généré.");
     expect(filled).toContain(intro);
     expect(filled).toContain(outro);
+  });
+});
+
+describe("getLetterTemplate", () => {
+  it("normalise un template custom qui contient le rythme par défaut en dur", async () => {
+    const { getSettings } = await import("@/models/Settings");
+    vi.mocked(getSettings).mockResolvedValue({
+      letterTemplate: {
+        alternance: `Intro (${DEFAULT_RYTHME}).\n\n${TEMPLATE_PLACEHOLDER}\n\nOutro.`,
+        stage: "",
+        cdi: "",
+      },
+    } as unknown as Awaited<ReturnType<typeof getSettings>>);
+
+    const template = await getLetterTemplate("alternance");
+    expect(template).toContain(RYTHME_PLACEHOLDER);
+    expect(template).not.toContain(DEFAULT_RYTHME);
   });
 });

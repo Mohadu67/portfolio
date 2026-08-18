@@ -104,13 +104,17 @@ export function applyTemplateVariables(template: string, variables: Record<strin
  *
  * Le rythme n'est PAS substitué ici : on retourne le template brut avec {rythme}
  * pour que l'appelant puisse le substituer avec le rythme souhaité.
+ *
+ * Garde-fou : les premiers templates stockés en base contenaient le rythme par défaut
+ * en dur (ex. "2 jours en entreprise / 1 jour de cours"). On les normalise pour utiliser
+ * le placeholder {rythme}, sinon extractRythmeFromInstruction() ne peut pas agir.
  */
 export async function getLetterTemplate(type: LetterType): Promise<string> {
   try {
     const settings = await getSettings();
     const custom = settings.letterTemplate?.[type];
     if (custom && custom.trim() && custom.includes(TEMPLATE_PLACEHOLDER)) {
-      return custom;
+      return custom.replace(DEFAULT_RYTHME, RYTHME_PLACEHOLDER);
     }
   } catch (err) {
     console.warn("[letter-template] could not load settings, falling back to default:", err);

@@ -168,6 +168,129 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "update_cv_profile",
+    description: "Met à jour la section profil du CV (nom, titre, tagline, localisation, disponibilité, téléphone, email, photo).",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nom complet" },
+        title: { type: "string", description: "Titre / métier" },
+        tagline: { type: "string", description: "Phrase d'accroche" },
+        location: { type: "string", description: "Localisation" },
+        availability: { type: "string", description: "Disponibilité" },
+        phone: { type: "string", description: "Téléphone" },
+        email: { type: "string", description: "Email" },
+        photo: { type: "string", description: "URL de la photo" },
+      },
+    },
+  },
+  {
+    name: "add_cv_experience",
+    description: "Ajoute une expérience professionnelle au CV.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        company: { type: "string", description: "Nom de l'entreprise" },
+        position: { type: "string", description: "Intitulé du poste" },
+        description: { type: "string", description: "Description courte" },
+        startDate: { type: "string", description: "Date de début (ex: 2024-01)" },
+        endDate: { type: "string", description: "Date de fin (ex: 2024-06, ou 'Présent')" },
+        details: { type: "string", description: "Détails / réalisations" },
+      },
+      required: ["company", "position", "startDate"],
+    },
+  },
+  {
+    name: "update_cv_experience",
+    description: "Modifie une expérience professionnelle existante du CV. L'item est identifié par company + position.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        company: { type: "string", description: "Nom actuel de l'entreprise" },
+        position: { type: "string", description: "Intitulé actuel du poste" },
+        new_company: { type: "string", description: "Nouveau nom d'entreprise" },
+        new_position: { type: "string", description: "Nouvel intitulé de poste" },
+        description: { type: "string" },
+        startDate: { type: "string" },
+        endDate: { type: "string" },
+        details: { type: "string" },
+      },
+      required: ["company", "position"],
+    },
+  },
+  {
+    name: "delete_cv_experience",
+    description: "Supprime une expérience professionnelle du CV. L'item est identifié par company + position.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        company: { type: "string" },
+        position: { type: "string" },
+      },
+      required: ["company", "position"],
+    },
+  },
+  {
+    name: "add_cv_skill",
+    description: "Ajoute une compétence technique au CV.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nom de la compétence" },
+        level: { type: "string", enum: ["Expert", "Avancé", "Intermédiaire", "Débutant"], description: "Niveau" },
+        years: { type: "string", description: "Années d'expérience (ex: 3+)" },
+        category: { type: "string", description: "Catégorie (ex: Frontend, Backend, DevOps)" },
+      },
+      required: ["name", "level", "category"],
+    },
+  },
+  {
+    name: "update_cv_skill",
+    description: "Modifie une compétence existante du CV. Identifiée par name.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nom actuel de la compétence" },
+        new_name: { type: "string", description: "Nouveau nom" },
+        level: { type: "string", enum: ["Expert", "Avancé", "Intermédiaire", "Débutant"] },
+        years: { type: "string" },
+        category: { type: "string" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "delete_cv_skill",
+    description: "Supprime une compétence du CV. Identifiée par name.",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "set_cv_section_visibility",
+    description: "Affiche ou masque une section du CV (profile, skills, experience, education, projects, contact, socials, story, quiz, custom).",
+    requiresConfirmation: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Key de la section" },
+        isVisible: { type: "boolean", description: "true pour afficher, false pour masquer" },
+      },
+      required: ["key", "isVisible"],
+    },
+  },
+  {
     name: "schedule_relance",
     description:
       "Programme une relance pour une candidature à une date donnée. À utiliser quand l'utilisateur demande de programmer/planifier/relancer.",

@@ -51,6 +51,9 @@ export const TELEGRAM_HELP_TEXT = [
   "• « rappelle-moi de préparer l'entretien dimanche 18h » / « annule ce rappel »",
   "• « passe Divalto en entretien »",
   "• « pourquoi tu ne proposes plus tel domaine ? » (blacklist)",
+  "• « montre mon CV » / « liste mes compétences » / « ajoute une expérience chez X »",
+  "• « modifie mon profil : titre Développeur Fullstack »",
+  "• « masque la section quiz » / « affiche les projets »",
   "",
   "Les actions sensibles (envois, création/suppression, modifications) te demandent toujours confirmation par boutons ✅/❌.",
   "/aide — ce message",
@@ -188,6 +191,8 @@ PERSONNALISATION DES LETTRES — c'est ton point fort, sers-t'en :
 RYTHME D'ALTERNANCE — Par défaut le template de lettre indique « 2 jours en entreprise / 1 jour de cours ». Si l'utilisateur précise un autre rythme (« c'est 2 semaines en entreprise et 1 semaine à l'école », « 3 jours / 2 jours »…), c'est une consigne CRITIQUE : inclue-la INTEGRALEMENT dans letter_instruction / instruction, appelle write_letter ou apply_to_company pour régénérer, et VÉRIFIE visuellement dans get_lettre que l'introduction ET le paragraphe reflètent le bon rythme avant de proposer l'envoi. Ne dis pas « c'est mis à jour » sans avoir relu la lettre. Si l'utilisateur corrige le rythme DANS le corps du mail (set_email_body), la lettre est régénérée automatiquement — relis-la avec get_lettre avant d'envoyer.
 
 CORRECTIONS EN COURS DE ROUTE — Si l'utilisateur corrige l'email de destination (« envoie à l'autre adresse », « c'est pas le bon mail », « envoie à contact@… ») : ne propose JAMAIS delete_candidature, ne supprime JAMAIS la candidature. Utilise apply_to_company / apply_from_email avec email_override : la candidature existante sera réutilisée et l'email mis à jour. Si la lettre ou le corps de mail doivent aussi changer (rythme, ton, contenu), ajuste la consigne et régénère avant d'envoyer.
+
+ÉDITION DU CV ET DU PROFIL — L'utilisateur peut modifier son CV directement depuis Telegram. Tu disposes des tools dédiés : list_cv_sections / get_cv_section pour consulter, update_cv_profile pour le profil, add_cv_experience / update_cv_experience / delete_cv_experience pour les expériences, add_cv_skill / update_cv_skill / delete_cv_skill pour les compétences, set_cv_section_visibility pour masquer/afficher une section. Quand il demande « ajoute une expérience », « supprime la compétence X », « modifie mon profil », « masque la section quiz » ou similaire, appelle le tool correspondant avec les champs fournis. Si l'identification est ambiguë (plusieurs expériences avec le même couple entreprise/poste), demande clarification. Après une modification, propose de consulter le résultat avec get_cv_section.
 
 ABRÉVIATIONS COURANTES — « cbn » = candidature, « lm » = lettre de motivation, « mail » = corps d'email d'accompagnement, « cv » = curriculum vitae. Quand l'utilisateur dit « et la cbn ? », il demande le statut / la suite de la candidature en cours : réponds avec les données réelles (get_candidature / get_lettre) plutôt que de relancer une nouvelle lettre.
 
@@ -391,6 +396,25 @@ async function describeAction(tool: string, input: Record<string, unknown>): Pro
       return c
         ? `SUPPRIMER définitivement ${c.entreprise} — ${c.poste} (statut « ${c.statut} »)`
         : `SUPPRIMER définitivement la candidature ${id}`;
+    }
+    case "update_cv_profile": {
+      return `Modifier le profil (${Object.keys(input).join(", ")})`;
+    }
+    case "add_cv_experience":
+      return `Ajouter l'expérience ${input.company} — ${input.position}`;
+    case "update_cv_experience":
+      return `Modifier l'expérience ${input.company} — ${input.position}`;
+    case "delete_cv_experience":
+      return `Supprimer l'expérience ${input.company} — ${input.position}`;
+    case "add_cv_skill":
+      return `Ajouter la compétence ${input.name} (${input.level}, ${input.category})`;
+    case "update_cv_skill":
+      return `Modifier la compétence ${input.name}`;
+    case "delete_cv_skill":
+      return `Supprimer la compétence ${input.name}`;
+    case "set_cv_section_visibility": {
+      const visible = isTruthyFlag(input.isVisible);
+      return `${visible ? "Afficher" : "Masquer"} la section ${input.key}`;
     }
     case "apply_from_email": {
       const type = input.type === "stage" || input.type === "cdi" ? input.type : "alternance";

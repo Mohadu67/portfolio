@@ -2,8 +2,19 @@
 // et le bot Telegram (lib/telegram-agent.ts). Déplacé tel quel depuis la route tool-exec.
 
 import { connectDB } from "@/lib/mongodb";
+import mongoose, { type HydratedDocument } from "mongoose";
 import { Candidature, CandidatureStatut, ICandidature } from "@/models/Candidature";
-import { CVSection, ICVSection } from "@/models/CVSection";
+import {
+  CVSection,
+  ICVSection,
+  CVProfileContent,
+  CVSkillItem,
+  CVExperienceItem,
+  CVContactContent,
+} from "@/models/CVSection";
+import portfolioData from "@/data/portfolio.json";
+import { DEFAULT_STORY } from "@/data/story";
+import { randomBytes } from "crypto";
 import { sendRelance, sendEmail, replyInThread } from "@/lib/email";
 import { generateLettrePDF } from "@/lib/pdf-generator";
 import { resolveCVForSend } from "@/lib/cvFile";
@@ -85,6 +96,66 @@ function deriveCompanyNameFromEmail(email: string): string | null {
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers édition CV (depuis Telegram / chat dashboard)
+// ---------------------------------------------------------------------------
+
+function normalizeMatchKey(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function generateShortId(): string {
+  return randomBytes(6).toString("hex");
+}
+
+async function getOrCreateCVSection(
+  key: string,
+  type: ICVSection["type"],
+  title: string
+): Promise<HydratedDocument<ICVSection>> {
+  let s = await CVSection.findOne({ key });
+  if (!s) {
+    const last = await CVSection.findOne().sort({ order: -1 });
+    const order = (last?.order ?? -1) + 1;
+    let content: ICVSection["content"];
+    switch (type) {
+      case "profile":
+        content = { ...(portfolioData.profile as CVProfileContent) };
+        break;
+      case "contact":
+        content = { ...(portfolioData.contact as CVContactContent) };
+        break;
+      case "story":
+        content = { ...DEFAULT_STORY };
+        break;
+      case "quiz":
+        content = { intro: "Mini-jeu : devine la bonne réponse.", items: [] };
+        break;
+      case "custom":
+        content = { body: "" };
+        break;
+      default:
+        content = { items: [] };
+    }
+    s = await CVSection.create({ key, type, title, order, isVisible: true, content });
+  }
+  return s as HydratedDocument<ICVSection>;
+}
+
+function getItemsArray<T>(s: ICVSection): T[] {
+  const c = s.content as { items?: T[] };
+  return Array.isArray(c.items) ? c.items : [];
+}
+
+function setItemsArray<T>(s: ICVSection, items: T[]): void {
+  (s.content as { items?: T[] }).items = items;
 }
 
 // Scrape plusieurs URLs de contexte et concatène les textes pertinents (limité à ~1500 chars).
@@ -639,6 +710,207 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         ok: true,
         summary: JSON.stringify({ key: s.key, type: s.type, title: s.title, content: s.content }),
       });
+    }
+
+    case "update_cv_profile": {
+      const s = await getOrCreateCVSection("profile", "profile", "Profil");
+      const profile = s.content as CVProfileContent;
+      const fields: (keyof CVProfileContent)[] = [
+        "name",
+        "title",
+        "tagline",
+        "location",
+        "availability",
+        "phone",
+        "email",
+        "photo",
+      ];
+      for (const k of fields) {
+        if (typeof input[k] === "string") {
+          (profile as unknown as Record<string, string>)[k] = String(input[k]).trim();
+        }
+      }
+      s.markModified("content");
+      await s.save();
+      return ok({ ok: true, summary: `Profil mis à jour : ${profile.name} — ${profile.title}` });
+    }
+
+    case "add_cv_experience": {
+      const company = String(input.company ?? "").trim();
+      const position = String(input.position ?? "").trim();
+      if (!company || !position) return fail(400, "company et position requis");
+      const s = await getOrCreateCVSection("experience", "experience", "Expérience Professionnelle");
+      const items = getItemsArray<CVExperienceItem>(s);
+      if (
+        items.some(
+          (i) =>
+            normalizeMatchKey(i.company) === normalizeMatchKey(company) &&
+            normalizeMatchKey(i.position) === normalizeMatchKey(position)
+        )
+      ) {
+        return fail(409, "Cette expérience existe déjà");
+      }
+      const newItem: CVExperienceItem = {
+        id: generateShortId(),
+        company,
+        position,
+        description: typeof input.description === "string" ? String(input.description).trim() : "",
+        startDate: typeof input.startDate === "string" ? String(input.startDate).trim() : "",
+        endDate: typeof input.endDate === "string" ? String(input.endDate).trim() : "",
+        details: typeof input.details === "string" ? String(input.details).trim() : "",
+      };
+      items.unshift(newItem);
+      setItemsArray(s, items);
+      s.markModified("content");
+      await s.save();
+      return ok({ ok: true, summary: `Expérience ajoutée : ${company} — ${position}` });
+    }
+
+    case "update_cv_experience": {
+      const company = String(input.company ?? "").trim();
+      const position = String(input.position ?? "").trim();
+      if (!company || !position) return fail(400, "company et position actuelles requis");
+      const s = await getOrCreateCVSection("experience", "experience", "Expérience Professionnelle");
+      const items = getItemsArray<CVExperienceItem>(s);
+      const idx = items.findIndex(
+        (i) =>
+          normalizeMatchKey(i.company) === normalizeMatchKey(company) &&
+          normalizeMatchKey(i.position) === normalizeMatchKey(position)
+      );
+      if (idx === -1) return fail(404, `Expérience introuvable : ${company} — ${position}`);
+      const item = items[idx];
+      const newCompany = typeof input.new_company === "string" ? String(input.new_company).trim() : item.company;
+      const newPosition = typeof input.new_position === "string" ? String(input.new_position).trim() : item.position;
+      if (
+        (newCompany !== item.company || newPosition !== item.position) &&
+        items.some(
+          (i, i2) =>
+            i2 !== idx &&
+            normalizeMatchKey(i.company) === normalizeMatchKey(newCompany) &&
+            normalizeMatchKey(i.position) === normalizeMatchKey(newPosition)
+        )
+      ) {
+        return fail(409, "Une expérience avec ce nouveau couple entreprise/poste existe déjà");
+      }
+      item.company = newCompany;
+      item.position = newPosition;
+      if (typeof input.description === "string") item.description = String(input.description).trim();
+      if (typeof input.startDate === "string") item.startDate = String(input.startDate).trim();
+      if (typeof input.endDate === "string") item.endDate = String(input.endDate).trim();
+      if (typeof input.details === "string") item.details = String(input.details).trim();
+      setItemsArray(s, items);
+      s.markModified("content");
+      await s.save();
+      return ok({ ok: true, summary: `Expérience mise à jour : ${item.company} — ${item.position}` });
+    }
+
+    case "delete_cv_experience": {
+      const company = String(input.company ?? "").trim();
+      const position = String(input.position ?? "").trim();
+      if (!company || !position) return fail(400, "company et position requis");
+      const s = await getOrCreateCVSection("experience", "experience", "Expérience Professionnelle");
+      const items = getItemsArray<CVExperienceItem>(s);
+      const before = items.length;
+      const filtered = items.filter(
+        (i) =>
+          !(
+            normalizeMatchKey(i.company) === normalizeMatchKey(company) &&
+            normalizeMatchKey(i.position) === normalizeMatchKey(position)
+          )
+      );
+      if (filtered.length === before) return fail(404, `Expérience introuvable : ${company} — ${position}`);
+      setItemsArray(s, filtered);
+      s.markModified("content");
+      await s.save();
+      return ok({ ok: true, summary: `Expérience supprimée : ${company} — ${position}` });
+    }
+
+    case "add_cv_skill": {
+      const name = String(input.name ?? "").trim();
+      const level = String(input.level ?? "").trim() as CVSkillItem["level"];
+      const category = String(input.category ?? "").trim();
+      if (!name || !level || !category) return fail(400, "name, level et category requis");
+      if (!["Expert", "Avancé", "Intermédiaire", "Débutant"].includes(level)) {
+        return fail(400, "Niveau invalide");
+      }
+      const s = await getOrCreateCVSection("skills", "skills", "Compétences Techniques");
+      const items = getItemsArray<CVSkillItem>(s);
+      if (items.some((i) => normalizeMatchKey(i.name) === normalizeMatchKey(name))) {
+        return fail(409, "Cette compétence existe déjà");
+      }
+      const newItem: CVSkillItem = {
+        id: generateShortId(),
+        name,
+        level,
+        years: typeof input.years === "string" ? String(input.years).trim() : "",
+        category,
+        bugStory: typeof input.bugStory === "string" ? String(input.bugStory).trim() : undefined,
+      };
+      items.push(newItem);
+      setItemsArray(s, items);
+      s.markModified("content");
+      await s.save();
+      return ok({ ok: true, summary: `Compétence ajoutée : ${name} (${level}, ${category})` });
+    }
+
+    case "update_cv_skill": {
+      const name = String(input.name ?? "").trim();
+      if (!name) return fail(400, "name requis");
+      const s = await getOrCreateCVSection("skills", "skills", "Compétences Techniques");
+      const items = getItemsArray<CVSkillItem>(s);
+      const idx = items.findIndex((i) => normalizeMatchKey(i.name) === normalizeMatchKey(name));
+      if (idx === -1) return fail(404, `Compétence introuvable : ${name}`);
+      const item = items[idx];
+      const newName = typeof input.new_name === "string" ? String(input.new_name).trim() : item.name;
+      if (
+        newName !== item.name &&
+        items.some((i, i2) => i2 !== idx && normalizeMatchKey(i.name) === normalizeMatchKey(newName))
+      ) {
+        return fail(409, "Une compétence avec ce nom existe déjà");
+      }
+      item.name = newName;
+      if (typeof input.level === "string") {
+        const lvl = String(input.level).trim() as CVSkillItem["level"];
+        if (!["Expert", "Avancé", "Intermédiaire", "Débutant"].includes(lvl)) {
+          return fail(400, "Niveau invalide");
+        }
+        item.level = lvl;
+      }
+      if (typeof input.years === "string") item.years = String(input.years).trim();
+      if (typeof input.category === "string") item.category = String(input.category).trim();
+      if (typeof input.bugStory === "string") item.bugStory = String(input.bugStory).trim();
+      setItemsArray(s, items);
+      s.markModified("content");
+      await s.save();
+      return ok({ ok: true, summary: `Compétence mise à jour : ${item.name} (${item.level}, ${item.category})` });
+    }
+
+    case "delete_cv_skill": {
+      const name = String(input.name ?? "").trim();
+      if (!name) return fail(400, "name requis");
+      const s = await getOrCreateCVSection("skills", "skills", "Compétences Techniques");
+      const items = getItemsArray<CVSkillItem>(s);
+      const before = items.length;
+      const filtered = items.filter((i) => normalizeMatchKey(i.name) !== normalizeMatchKey(name));
+      if (filtered.length === before) return fail(404, `Compétence introuvable : ${name}`);
+      setItemsArray(s, filtered);
+      s.markModified("content");
+      await s.save();
+      return ok({ ok: true, summary: `Compétence supprimée : ${name}` });
+    }
+
+    case "set_cv_section_visibility": {
+      const key = String(input.key ?? "").trim();
+      if (!key) return fail(400, "key requise");
+      if (input.isVisible === undefined || input.isVisible === null) {
+        return fail(400, "isVisible requis");
+      }
+      const isVisible = isTruthyFlag(input.isVisible);
+      const s = await CVSection.findOne({ key });
+      if (!s) return fail(404, `Section ${key} introuvable`);
+      s.isVisible = isVisible;
+      await s.save();
+      return ok({ ok: true, summary: `Section ${key} ${isVisible ? "affichée" : "masquée"}` });
     }
 
     case "schedule_relance": {

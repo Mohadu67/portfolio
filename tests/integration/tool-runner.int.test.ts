@@ -13,6 +13,7 @@ let executeTool: typeof import("@/lib/ai/tool-runner").executeTool;
 let Candidature: typeof import("@/models/Candidature").Candidature;
 let TelegramState: typeof import("@/models/TelegramState").TelegramState;
 let recordProspectSkip: typeof import("@/models/ProspectedDomain").recordProspectSkip;
+let CVSection: typeof import("@/models/CVSection").CVSection;
 
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
@@ -22,6 +23,7 @@ beforeAll(async () => {
   ({ Candidature } = await import("@/models/Candidature"));
   ({ TelegramState } = await import("@/models/TelegramState"));
   ({ recordProspectSkip } = await import("@/models/ProspectedDomain"));
+  ({ CVSection } = await import("@/models/CVSection"));
   // Connexion explicite : certains tests seedent via les modèles avant tout executeTool.
   await (await import("@/lib/mongodb")).connectDB();
 }, 120_000);
@@ -307,5 +309,88 @@ describe("mémoire agent", () => {
     const id = (list.facts as Array<{ _id: string }>)[0]._id;
     const r3 = await executeTool("forget_fact", { fact_id: id });
     expect(r3.body.summary).toContain("Oublié");
+  });
+});
+
+describe("CV tools", () => {
+  it("met à jour le profil en préservant les champs non fournis", async () => {
+    const r = await executeTool("update_cv_profile", { title: "Développeur Fullstack", tagline: "Fullstack & DevOps" });
+    expect(r.body.error).toBeUndefined();
+    const s = await CVSection.findOne({ key: "profile" }).lean<{ content: { name: string; title: string; tagline: string } }>();
+    expect(s).not.toBeNull();
+    expect(s!.content.name).toBe("Mohammed Hamiani");
+    expect(s!.content.title).toBe("Développeur Fullstack");
+    expect(s!.content.tagline).toBe("Fullstack & DevOps");
+  });
+
+  it("ajoute, modifie et supprime une expérience", async () => {
+    const add = await executeTool("add_cv_experience", {
+      company: "Wolf Lingerie",
+      position: "Alternant Concepteur Développeur",
+      startDate: "2026-09",
+      description: "Développement fullstack et urbanisation SI.",
+    });
+    expect(add.body.error).toBeUndefined();
+    let s: any = await CVSection.findOne({ key: "experience" }).lean();
+    expect(s.content.items[0].company).toBe("Wolf Lingerie");
+
+    const update = await executeTool("update_cv_experience", {
+      company: "Wolf Lingerie",
+      position: "Alternant Concepteur Développeur",
+      endDate: "2027-08",
+    });
+    expect(update.body.error).toBeUndefined();
+    s = await CVSection.findOne({ key: "experience" }).lean();
+    expect(s.content.items[0].endDate).toBe("2027-08");
+
+    const del = await executeTool("delete_cv_experience", {
+      company: "Wolf Lingerie",
+      position: "Alternant Concepteur Développeur",
+    });
+    expect(del.body.error).toBeUndefined();
+    s = await CVSection.findOne({ key: "experience" }).lean();
+    expect(s.content.items).toHaveLength(0);
+  });
+
+  it("refuse un doublon d'expérience", async () => {
+    await executeTool("add_cv_experience", { company: "Acme", position: "Dev", startDate: "2024-01" });
+    const r = await executeTool("add_cv_experience", { company: "acme", position: "dev", startDate: "2024-06" });
+    expect(r.status).toBe(409);
+  });
+
+  it("ajoute, modifie et supprime une compétence", async () => {
+    const add = await executeTool("add_cv_skill", { name: "Rust", level: "Débutant", category: "Backend", years: "0+" });
+    expect(add.body.error).toBeUndefined();
+    let s: any = await CVSection.findOne({ key: "skills" }).lean();
+    expect(s.content.items.some((i: any) => i.name === "Rust")).toBe(true);
+
+    const update = await executeTool("update_cv_skill", { name: "Rust", level: "Intermédiaire" });
+    expect(update.body.error).toBeUndefined();
+    s = await CVSection.findOne({ key: "skills" }).lean();
+    expect(s.content.items.find((i: any) => i.name === "Rust").level).toBe("Intermédiaire");
+
+    const del = await executeTool("delete_cv_skill", { name: "Rust" });
+    expect(del.body.error).toBeUndefined();
+    s = await CVSection.findOne({ key: "skills" }).lean();
+    expect(s.content.items.some((i: any) => i.name === "Rust")).toBe(false);
+  });
+
+  it("refuse un doublon de compétence", async () => {
+    await executeTool("add_cv_skill", { name: "Go", level: "Débutant", category: "Backend" });
+    const r = await executeTool("add_cv_skill", { name: "go", level: "Avancé", category: "Backend" });
+    expect(r.status).toBe(409);
+  });
+
+  it("masque et affiche une section", async () => {
+    await CVSection.create({ key: "quiz", type: "quiz", title: "Quiz", order: 99, isVisible: true, content: { intro: "", items: [] } });
+    const hide = await executeTool("set_cv_section_visibility", { key: "quiz", isVisible: false });
+    expect(hide.body.error).toBeUndefined();
+    let s = await CVSection.findOne({ key: "quiz" }).lean<{ isVisible: boolean }>();
+    expect(s!.isVisible).toBe(false);
+
+    const show = await executeTool("set_cv_section_visibility", { key: "quiz", isVisible: true });
+    expect(show.body.error).toBeUndefined();
+    s = await CVSection.findOne({ key: "quiz" }).lean<{ isVisible: boolean }>();
+    expect(s!.isVisible).toBe(true);
   });
 });

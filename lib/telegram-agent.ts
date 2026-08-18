@@ -20,6 +20,7 @@ import {
   sendTelegramAudio,
   getTelegramFileAsBase64,
 } from "./telegram";
+import { logTelegramEvent } from "./telegram-log";
 
 const MODEL = process.env.CHAT_MODEL ?? "gemini-2.5-flash";
 const MAX_TOOL_ROUNDS = 6;
@@ -437,6 +438,23 @@ export function formatToolResult(tool: string, result: ToolRunResult): string {
   return `✅ ${summary || "Fait."}`;
 }
 
+// Retire les artefacts que Gemini ajoute parfois à la transcription.
+const TRANSCRIPTION_ARTIFACTS = [
+  /^Okay,\s*I\s+have\s+the\s+transcription\s+now\.?\s*/i,
+  /I\s+will\s+output\s+it\s+as\s+requested\.?\s*/i,
+  /^Voici\s+la\s+transcription\s*:?\s*/i,
+  /^Transcription\s*:?\s*/i,
+  /^"|"$/g,
+];
+
+function cleanTranscription(raw: string): string {
+  let text = raw;
+  for (const pattern of TRANSCRIPTION_ARTIFACTS) {
+    text = text.replace(pattern, "");
+  }
+  return text.trim();
+}
+
 // Message vocal : transcription Gemini (audio natif) puis même boucle agent que le texte.
 export async function handleIncomingTelegramVoice(
   chatId: string,
@@ -467,10 +485,17 @@ export async function handleIncomingTelegramVoice(
       },
     },
     {
-      text: "Transcris fidèlement ce message vocal (français par défaut). Réponds UNIQUEMENT avec la transcription, sans commentaire ni guillemets. Si l'audio est vide ou inintelligible, réponds exactement : [inaudible]",
+      text:
+        "Tu transcris des messages vocaux en français. " +
+        "Réponds UNIQUEMENT par la transcription brute du message. " +
+        "Pas d'introduction, pas de conclusion, pas de guillemets, pas de traduction. " +
+        "Ne mentionne jamais que tu fais une transcription. " +
+        "Si l'audio est vide ou inintelligible, réponds exactement : [inaudible]",
     },
   ]);
-  const transcription = result.response.text().trim();
+  let transcription = result.response.text().trim();
+  logTelegramEvent("agent_tool_executed", { tool: "transcribe_voice", rawLength: transcription.length }, chatId);
+  transcription = cleanTranscription(transcription);
 
   if (!transcription || transcription === "[inaudible]") {
     await sendTelegramMessage("🎤 Je n'ai pas réussi à comprendre ce vocal — réessaie ou écris-moi.");
@@ -496,6 +521,16 @@ export async function handleIncomingTelegramText(
     return;
   }
 
+  logTelegramEvent(
+    "agent_turn_start",
+    {
+      internal: !!opts.internal,
+      voiceReply: !!opts.voiceReply,
+      textLength: text.length,
+    },
+    chatId
+  );
+
   await connectDB();
   const state = await getTelegramState(chatId);
   await sendTelegramChatAction("typing").catch(() => {});
@@ -509,7 +544,9 @@ export async function handleIncomingTelegramText(
     model: MODEL,
     systemInstruction: await buildSystemPrompt(),
     tools: toolsForGemini(),
-    generationConfig: { temperature: 0.6, maxOutputTokens: 2048 },
+    // Les tours internes (continuation post-✅) embarquent l'historique + le résultat d'action :
+    // on leur donne plus de marge pour éviter un silence dû à MAX_TOKENS.
+    generationConfig: { temperature: 0.6, maxOutputTokens: opts.internal ? 4096 : 2048 },
   });
 
   let finalText = "";
@@ -576,6 +613,7 @@ export async function handleIncomingTelegramText(
       if (def.requiresConfirmation && !isDryRunSimulation) {
         const token = randomBytes(12).toString("hex");
         const label = await describeAction(fc.name, args);
+        logTelegramEvent("agent_action_proposed", { tool: fc.name, label }, chatId);
         proposals.push({ token, tool: fc.name, input: args, label, origin: "agent" as const });
         responseParts.push({
           functionResponse: {
@@ -589,6 +627,11 @@ export async function handleIncomingTelegramText(
       } else {
         try {
           const r = await executeTool(fc.name, args);
+          logTelegramEvent(
+            "agent_tool_executed",
+            { tool: fc.name, ok: !r.body.error, hasSummary: !!r.body.summary },
+            chatId
+          );
           responseParts.push({
             functionResponse: {
               name: fc.name,
@@ -681,10 +724,16 @@ export async function handleIncomingTelegramText(
   await TelegramState.updateOne({ chatId }, { $push: push });
 
   if (turnError) {
-    // Tour interne (continuation post-✅) : l'action de l'utilisateur a déjà réussi et il en
-    // a été informé — un message d'erreur anxiogène pour un tour qu'il n'a pas initié serait
-    // pire que le silence. L'erreur reste loggée + tracée en mémoire de conversation.
-    if (!opts.internal) {
+    logTelegramEvent("agent_turn_error", { phase: "send", error: turnError, internal: !!opts.internal }, chatId);
+    if (opts.internal) {
+      // Tour interne : l'action a déjà réussi, on informe succinctement que la suite n'a pas pu être faite.
+      await sendTelegramMessage(
+        `⚠️ J'ai bien exécuté l'action, mais je n'ai pas pu aller plus loin : ${turnError.slice(
+          0,
+          200
+        )}. Reformule si tu veux la suite.`
+      ).catch(() => {});
+    } else {
       const suffix =
         proposals.length > 0
           ? "L'action proposée ci-dessous reste valable — tu peux la confirmer."
@@ -693,6 +742,7 @@ export async function handleIncomingTelegramText(
     }
   } else if (finalText.trim()) {
     const reply = finalText.trim();
+    logTelegramEvent("agent_reply_sent", { length: reply.length, voice: !!opts.voiceReply }, chatId);
     let spoken = false;
     if (opts.voiceReply && reply.length <= MAX_TTS_CHARS) {
       await sendTelegramChatAction("record_voice").catch(() => {});
@@ -707,11 +757,17 @@ export async function handleIncomingTelegramText(
       }
     }
     if (!spoken) await sendTelegramMessage(reply);
-  } else if (proposals.length === 0 && !opts.internal) {
-    await sendTelegramMessage("Je n'ai pas de réponse — reformule ou tape /aide.");
+  } else if (proposals.length === 0) {
+    if (opts.internal) {
+      logTelegramEvent("agent_silent_turn", { reason: "internal_no_reply" }, chatId);
+      await sendTelegramMessage("✅ C'est fait. Dis-moi si tu veux autre chose.").catch(() => {});
+    } else {
+      await sendTelegramMessage("Je n'ai pas de réponse — reformule ou tape /aide.");
+    }
   }
 
   for (const p of proposals) {
+    logTelegramEvent("agent_action_proposed", { phase: "buttons_sent", tool: p.tool, label: p.label }, chatId);
     await sendTelegramMessageWithButtons(`⚡ Action proposée :\n${p.label}\n\nJe l'exécute ?`, [
       [
         { text: "✅ Exécuter", callback_data: `act:ok:${p.token}` },
@@ -750,6 +806,7 @@ export async function confirmTelegramAction(token: string, approve: boolean): Pr
   if (!action) return { outcome: "already_done" };
 
   if (!approve) {
+    logTelegramEvent("agent_action_cancelled", { tool: action.tool, label: action.label, origin: action.origin }, state.chatId);
     if (action.origin === "prospection" && action.candidatureId) {
       // Offre issue d'un job board (source "scraper") : on la GARDE en la passant « refus » —
       // la supprimer ferait re-insérer puis re-proposer la même offre au prochain run de
@@ -821,6 +878,11 @@ export async function confirmTelegramAction(token: string, approve: boolean): Pr
   try {
     const result = await executeTool(action.tool, action.input ?? {});
     const resultText = formatToolResult(action.tool, result);
+    logTelegramEvent(
+      "agent_action_confirmed",
+      { tool: action.tool, label: action.label, ok: !result.body.error },
+      state.chatId
+    );
     // Erreur retournée (pas levée) par le tool → outcome failed : sinon la carte afficherait
     // « ✅ Exécutée » avec un texte d'échec, et la continuation post-✅ partirait sur un échec.
     if (result.body.error) {

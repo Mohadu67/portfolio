@@ -11,6 +11,7 @@ import {
   parseActionCallback,
   sendTelegramMessage,
 } from "@/lib/telegram";
+import { logTelegramEvent } from "@/lib/telegram-log";
 import {
   handleIncomingTelegramText,
   handleIncomingTelegramVoice,
@@ -88,6 +89,16 @@ export async function POST(request: NextRequest) {
       await connectDB();
       const chatId = String(msg.chat.id);
       await getTelegramState(chatId);
+      logTelegramEvent(
+        "webhook_message",
+        {
+          type: msg.voice ? "voice" : "text",
+          textLength: msg.text ? msg.text.length : 0,
+          voiceDuration: msg.voice?.duration,
+          updateId: update.update_id,
+        },
+        chatId
+      );
       // Dédup : Telegram re-livre les updates non-ACKés (ou en cas de doute réseau).
       if (typeof update.update_id === "number") {
         const claim = await TelegramState.updateOne(
@@ -124,7 +135,13 @@ export async function POST(request: NextRequest) {
         await sendTelegramMessage(`⚠️ Erreur de l'agent : ${m.slice(0, 300)}`).catch(() => {});
       });
     } catch (error) {
-      console.error("[telegram webhook message]", error instanceof Error ? error.message : error);
+      const m = error instanceof Error ? error.message : String(error);
+      console.error("[telegram webhook message]", m);
+      logTelegramEvent(
+        "webhook_error",
+        { phase: "message", error: m },
+        msg.chat ? String(msg.chat.id) : undefined
+      );
     }
     return NextResponse.json({ ok: true });
   }
@@ -147,6 +164,11 @@ export async function POST(request: NextRequest) {
   // ---------- 2. Confirmation d'action de l'agent (act:) ----------
   const act = parseActionCallback(cb.data);
   if (act) {
+    logTelegramEvent(
+      "webhook_callback",
+      { type: "action", approve: act.approve, token: act.token },
+      cbChatId !== undefined ? String(cbChatId) : undefined
+    );
     try {
       const res = await confirmTelegramAction(act.token, act.approve);
       if (res.outcome === "already_done") {
@@ -183,6 +205,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       const m = error instanceof Error ? error.message : String(error);
       console.error("[telegram webhook act]", m);
+      logTelegramEvent("webhook_error", { phase: "action_callback", error: m }, String(cbChatId));
       await answerCallbackQuery(cb.id, `Erreur : ${m.slice(0, 150)}`, true).catch(() => {});
     }
     return NextResponse.json({ ok: true });
@@ -191,9 +214,19 @@ export async function POST(request: NextRequest) {
   // ---------- 3. Approbation d'auto-réponse (ar:) ----------
   const parsed = parseApprovalCallback(cb.data);
   if (!parsed) {
+    logTelegramEvent(
+      "webhook_callback",
+      { type: "unknown", data: cb.data },
+      cbChatId !== undefined ? String(cbChatId) : undefined
+    );
     await answerCallbackQuery(cb.id).catch(() => {});
     return NextResponse.json({ ok: true });
   }
+  logTelegramEvent(
+    "webhook_callback",
+    { type: "approval", action: parsed.action, token: parsed.token },
+    cbChatId !== undefined ? String(cbChatId) : undefined
+  );
 
   try {
     await connectDB();
@@ -288,6 +321,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const m = error instanceof Error ? error.message : String(error);
     console.error("[telegram webhook]", m);
+    logTelegramEvent("webhook_error", { phase: "approval_callback", error: m }, String(cbChatId));
+    await answerCallbackQuery(cb.id, `Erreur interne : ${m.slice(0, 150)}`, true).catch(() => {});
     // 200 quand même : Telegram re-livrerait l'update en boucle sur un 5xx, et le claim
     // atomique a peut-être déjà consommé le pending (le retry ferait "déjà traité").
     return NextResponse.json({ ok: true, error: m });

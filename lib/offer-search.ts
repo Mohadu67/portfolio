@@ -35,7 +35,9 @@ interface RunOfferSearchOptions {
 }
 
 // Cap de propositions Telegram par run (voir commentaire dans la boucle).
-const MAX_PROPOSALS_PER_RUN = 10;
+// 3 suffisent pour ne pas noyer l'utilisateur ; le reste reste en base et sera proposé
+// par le cron process-pending ou une prochaine recherche.
+const MAX_PROPOSALS_PER_RUN = 3;
 
 export async function runOfferSearch(opts: RunOfferSearchOptions = {}): Promise<OfferSearchSummary> {
   await connectDB();

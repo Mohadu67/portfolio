@@ -48,3 +48,6 @@ db.json
 # Generated LM PDFs (but keep the static CV)
 candidatureModel/LM_*.pdf
 
+# Runtime logs
+/logs/
+

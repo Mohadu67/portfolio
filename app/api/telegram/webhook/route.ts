@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
         {
           type: msg.voice ? "voice" : "text",
           textLength: msg.text ? msg.text.length : 0,
+          textPreview: msg.text ? msg.text.slice(0, 200) : undefined,
           voiceDuration: msg.voice?.duration,
           updateId: update.update_id,
         },

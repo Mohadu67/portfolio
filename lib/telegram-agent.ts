@@ -780,7 +780,7 @@ export async function handleIncomingTelegramText(
     }
   } else if (finalText.trim()) {
     const reply = finalText.trim();
-    logTelegramEvent("agent_reply_sent", { length: reply.length, voice: !!opts.voiceReply }, chatId);
+    logTelegramEvent("agent_reply_sent", { length: reply.length, voice: !!opts.voiceReply, textPreview: reply.slice(0, 200) }, chatId);
     let spoken = false;
     if (opts.voiceReply && reply.length <= MAX_TTS_CHARS) {
       await sendTelegramChatAction("record_voice").catch(() => {});

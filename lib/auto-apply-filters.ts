@@ -117,6 +117,33 @@ export const FREE_EMAIL_DOMAINS = new Set([
   "sfr.fr",
 ]);
 
+// TLD final considérés comme plausibles pour une entreprise. Évite de sélectionner des
+// artefacts de scraping du type "00contact@boite.frsuivez" où le TLD est en réalité du
+// texte adjacent ramassé par le regex.
+const COMMON_TLDS = new Set([
+  "ac", "ad", "ae", "af", "ag", "ai", "al", "am", "ao", "ar", "as", "at", "au", "aw", "ax", "az",
+  "ba", "bb", "bd", "be", "bf", "bg", "bh", "bi", "bj", "bm", "bn", "bo", "br", "bs", "bt", "bw",
+  "by", "bz", "ca", "cc", "cd", "cf", "cg", "ch", "ci", "ck", "cl", "cm", "cn", "co", "cr", "cu",
+  "cv", "cw", "cx", "cy", "cz", "de", "dj", "dk", "dm", "do", "dz", "ec", "ee", "eg", "er", "es",
+  "et", "eu", "fi", "fj", "fk", "fm", "fo", "fr", "ga", "gd", "ge", "gf", "gg", "gh", "gi", "gl",
+  "gm", "gn", "gp", "gq", "gr", "gs", "gt", "gu", "gw", "gy", "hk", "hm", "hn", "hr", "ht", "hu",
+  "id", "ie", "il", "im", "in", "io", "iq", "ir", "is", "it", "je", "jm", "jo", "jp", "ke", "kg",
+  "kh", "ki", "km", "kn", "kp", "kr", "kw", "ky", "kz", "la", "lb", "lc", "li", "lk", "lr", "ls",
+  "lt", "lu", "lv", "ly", "ma", "mc", "md", "me", "mg", "mh", "mk", "ml", "mm", "mn", "mo", "mp",
+  "mq", "mr", "ms", "mt", "mu", "mv", "mw", "mx", "my", "mz", "na", "nc", "ne", "nf", "ng", "ni",
+  "nl", "no", "np", "nr", "nu", "nz", "om", "pa", "pe", "pf", "pg", "ph", "pk", "pl", "pm", "pn",
+  "pr", "ps", "pt", "pw", "py", "qa", "re", "ro", "rs", "ru", "rw", "sa", "sb", "sc", "sd", "se",
+  "sg", "sh", "si", "sk", "sl", "sm", "sn", "so", "sr", "ss", "st", "sv", "sx", "sy", "sz", "tc",
+  "td", "tf", "tg", "th", "tj", "tk", "tl", "tm", "tn", "to", "tr", "tt", "tv", "tw", "tz", "ua",
+  "ug", "uk", "us", "uy", "uz", "va", "vc", "ve", "vg", "vi", "vn", "vu", "wf", "ws", "ye", "yt",
+  "za", "zm", "zw",
+  "com", "org", "net", "int", "edu", "gov", "mil", "info", "biz", "name", "pro", "aero", "asia",
+  "cat", "coop", "jobs", "mobi", "museum", "travel", "xxx", "post", "tel", "arpa",
+  // TLD composés courants
+  "co.uk", "com.au", "co.nz", "co.za", "com.br", "com.mx", "com.ar", "com.tr", "co.jp", "com.sg",
+  "co.in", "com.cn", "com.hk", "co.kr", "com.tw", "co.id", "com.my", "co.th", "com.vn", "co.il",
+]);
+
 export type EmailScoreReason =
   | "high_value_prefix"
   | "nominative"
@@ -145,6 +172,26 @@ function normalizeDomain(input: string): string {
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
     .replace(/\/.*$/, "");
+}
+
+// Vérifie que le domaine termine par un TLD reconnu. On teste d'abord les TLD composés
+// (ex: co.uk), puis le label final seul.
+function hasValidTld(domain: string): boolean {
+  const lower = domain.toLowerCase();
+  const parts = lower.split(".").filter(Boolean);
+  if (parts.length < 2) return false;
+  if (parts.length >= 3) {
+    const compound = `${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
+    if (COMMON_TLDS.has(compound)) return true;
+  }
+  return COMMON_TLDS.has(parts[parts.length - 1]);
+}
+
+// Détecte les artefacts de scraping : local-part commençant par un ou plusieurs chiffres
+// avant des lettres (ex: "00contact", "123rh"). Un vrai nominatif peut commencer par une
+// initiale mais pas par une suite de chiffres.
+function hasLeadingDigitArtifact(local: string): boolean {
+  return /^\d+[a-z]/.test(local);
 }
 
 // Suffixes corporatifs/juridiques NON ambigus : une boîte héberge souvent son site sur
@@ -206,6 +253,18 @@ export function scoreContactEmail(email: string, companyUrlOrDomain?: string): E
   const reasons: EmailScoreReason[] = [];
   let score = 0.4; // baseline
   let hardCap: number | null = null; // plafond strict pour disqualifier
+
+  // Artefacts de scraping : local-part commençant par des chiffres ou TLD inventé.
+  if (hasLeadingDigitArtifact(local) || !hasValidTld(domain)) {
+    return {
+      email: trimmed,
+      score: 0,
+      accept: false,
+      reasons: ["invalid_format"],
+      local,
+      domain,
+    };
+  }
 
   // Domain checks
   if (FREE_EMAIL_DOMAINS.has(domain)) {

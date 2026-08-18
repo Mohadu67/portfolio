@@ -140,6 +140,26 @@ describe("scoreContactEmail (filtre strict)", () => {
     expect(r.accept).toBe(false);
     expect(r.reasons).toContain("invalid_format");
   });
+
+  it("refuse les artefacts de scraping : chiffres en début de local-part", () => {
+    const r = scoreContactEmail("00contact@boite.com", "https://boite.com");
+    expect(r.accept).toBe(false);
+    expect(r.reasons).toContain("invalid_format");
+  });
+
+  it("refuse les TLD inventés par le scraper", () => {
+    const r = scoreContactEmail("contact@boite.frsuivez", "https://boite.com");
+    expect(r.accept).toBe(false);
+    expect(r.reasons).toContain("invalid_format");
+  });
+
+  it("pickBestContactEmailLoose préfère contact@ propre à un artefact numérique", () => {
+    const r = pickBestContactEmailLoose(
+      ["00contact@wolflingerie.frsuivez", "contact@wolflingerie.fr"],
+      "https://www.wolflingerie.com/",
+    );
+    expect(r?.email).toBe("contact@wolflingerie.fr");
+  });
 });
 
 describe("pickBestContactEmail (strict)", () => {

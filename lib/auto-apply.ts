@@ -857,16 +857,19 @@ export async function processSingleCompany(
   }
 
   try {
+    const hasOverride = opts.emailOverride && opts.emailOverride.trim().length > 0;
+
     // 1. Dedup par domaine (sauf override). ignoreDrafts : un brouillon du même domaine ne
     // bloque pas — l'étape 5 le réutilise (flow dry-run → envoi réel).
-    if (!opts.allowDuplicate && (await alreadyContactedDomain(decision.domain, { ignoreDrafts: true }))) {
+    // Un email_override explicite bypass aussi la dédup : l'utilisateur veut cibler un
+    // nouveau destinataire sur une entreprise déjà contactée.
+    if (!opts.allowDuplicate && !hasOverride && (await alreadyContactedDomain(decision.domain, { ignoreDrafts: true }))) {
       decision.skipReason = "déjà contactée (domaine présent en DB — un email est déjà parti vers cette entreprise)";
       return decision;
     }
 
     // 2. Scrape entreprise
     const scraped = await scrapeCompanyWebsite(cleanUrl);
-    const hasOverride = opts.emailOverride && opts.emailOverride.trim().length > 0;
     const canForce = (opts.force === true || opts.force === "true") && hasOverride;
     if (!scraped.aboutText && scraped.emails.length === 0 && !canForce) {
       decision.skipReason = "scrape vide (site inaccessible, JS-only ou pas d'email exposé)";
@@ -932,10 +935,13 @@ export async function processSingleCompany(
     const letterInstruction = opts.letterInstruction?.trim() || "";
     let candDoc = await Candidature.findOne({ url: cleanUrl });
     if (candDoc) {
-      // Réutilisation réservée aux docs pas encore partis : réutiliser une candidature
-      // postulée/en entretien re-enverrait un mail (allowDuplicate bypasse l'étape 1) et
-      // dispatchCandidature écraserait son statut réel.
-      if (candDoc.statut !== "identifiée" && candDoc.statut !== "lettre générée") {
+      // Si l'utilisateur fournit explicitement un email_override sur une candidature déjà
+      // envoyée, on autorise un renvoi ciblé vers ce nouvel email. On met à jour l'email,
+      // on repasse en « lettre générée » pour que la pipeline puisse continuer, et on
+      // régénère la lettre si la consigne a changé. L'historique des envois reste intact.
+      const isResendWithOverride =
+        hasOverride && candDoc.statut !== "identifiée" && candDoc.statut !== "lettre générée";
+      if (!isResendWithOverride && candDoc.statut !== "identifiée" && candDoc.statut !== "lettre générée") {
         decision.candidatureId = String(candDoc._id);
         decision.skipReason = `une candidature existe déjà pour cette URL (${candDoc.entreprise}, statut « ${candDoc.statut} ») — supprime-la ou gère-la à la main avant de réessayer.`;
         return decision;
@@ -958,6 +964,9 @@ export async function processSingleCompany(
         // Lettre générée pour un autre type → obsolète (sauf lettre sur mesure).
         if (candDoc.type !== candidatureType && !manualLetter) candDoc.lettre = null;
         candDoc.type = candidatureType;
+        // Resend explicite vers un autre email : on repasse en « lettre générée » pour
+        // permettre à applyToExistingCandidature → dispatchCandidature d'envoyer à nouveau.
+        if (isResendWithOverride) candDoc.statut = "lettre générée";
         candDoc.notes = `${candDoc.notes ? `${candDoc.notes}\n` : ""}[${new Date().toISOString().slice(0, 10)}] repris via chat/agent${decision.companyScore !== undefined ? ` — fit ${decision.companyScore.toFixed(2)}` : ""}`;
         await candDoc.save();
       }

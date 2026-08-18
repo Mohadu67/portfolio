@@ -22,6 +22,18 @@ describe("extractRythmeFromInstruction", () => {
     expect(extractRythmeFromInstruction("rythme : 2semaines entreprise / 1 semaine école")).toBe(
       "2 semaines en entreprise / 1 semaine à l'école"
     );
+    // sans séparateur explicite (transcription vocale)
+    expect(extractRythmeFromInstruction("C'est 2semaine en entreprise une semaine à l'école")).toBe(
+      "2 semaines en entreprise / 1 semaine à l'école"
+    );
+    // variante "boîte"
+    expect(extractRythmeFromInstruction("2 semaines en boîte / 1 semaine à l'école")).toBe(
+      "2 semaines en entreprise / 1 semaine à l'école"
+    );
+    // variante "cours"
+    expect(extractRythmeFromInstruction("2 semaines en entreprise et une semaine en cours")).toBe(
+      "2 semaines en entreprise / 1 semaine à l'école"
+    );
   });
 
   it("détecte 2 jours / 1 jour de cours", () => {

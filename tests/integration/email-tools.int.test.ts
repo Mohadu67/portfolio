@@ -328,6 +328,80 @@ describe("apply_to_company", () => {
       expect.stringContaining("master manager")
     );
   });
+
+  it("injecte le rythme mémorisé quand letter_instruction n'en a pas", async () => {
+    await executeTool("remember_fact", {
+      category: "parcours",
+      fact: "Son rythme d'alternance sera de 2 semaines en entreprise / 1 semaine à l'école.",
+    });
+    vi.mocked(generateLetterProposal).mockClear();
+
+    const r = await executeTool("apply_to_company", {
+      url: "https://atelierdunuage.fr",
+      letter_instruction: "insiste sur l'automatisation",
+      dry_run: true,
+      email_override: "contact@atelierdunuage.fr",
+      allow_generic_email: true,
+      skip_quality_score: true,
+    });
+    expect(r.body.error).toBeUndefined();
+
+    expect(vi.mocked(generateLetterProposal)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      "alternance",
+      expect.stringContaining("2 semaines en entreprise / 1 semaine à l'école")
+    );
+  });
+});
+
+describe("set_email_body", () => {
+  it("met à jour le rythme et régénère la lettre quand le corps mentionne un rythme", async () => {
+    const create = await executeTool("create_candidature", { entreprise: "Wolf Lingerie" });
+    const doc = await Candidature.findOne({ entreprise: "Wolf Lingerie" });
+    vi.mocked(generateLetterProposal).mockClear();
+
+    const r = await executeTool("set_email_body", {
+      candidature_id: String(doc!._id),
+      texte:
+        "Je recherche une alternance dès septembre 2026 sur un rythme de 2 semaines en entreprise / 1 semaine à l'école. " +
+        "Mon expérience full-stack peut vous aider à automatiser vos flux.",
+    });
+    expect(r.body.error).toBeUndefined();
+    expect(r.body.summary).toContain("rythme d'alternance");
+
+    const after = await Candidature.findById(doc!._id).lean<{ letterInstruction: string; lettre: string }>();
+    expect(after!.letterInstruction).toContain("2 semaines en entreprise / 1 semaine à l'école");
+    expect(vi.mocked(generateLetterProposal)).toHaveBeenCalled();
+    expect(after!.lettre).toContain("Lettre générée");
+  });
+});
+
+describe("write_letter", () => {
+  it("utilise le rythme mémorisé quand l'instruction n'en précise pas", async () => {
+    await executeTool("remember_fact", {
+      category: "parcours",
+      fact: "Le rythme est de 3 jours en entreprise / 2 jours de cours.",
+    });
+    const create = await executeTool("create_candidature", { entreprise: "Boite Test" });
+    const doc = await Candidature.findOne({ entreprise: "Boite Test" });
+    vi.mocked(generateLetterProposal).mockClear();
+
+    const r = await executeTool("write_letter", {
+      candidature_id: String(doc!._id),
+      instruction: "insiste sur React",
+    });
+    expect(r.body.error).toBeUndefined();
+
+    expect(vi.mocked(generateLetterProposal)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      "alternance",
+      expect.stringContaining("3 jours en entreprise / 2 jours de cours")
+    );
+  });
 });
 
 describe("draft_email_reply", () => {

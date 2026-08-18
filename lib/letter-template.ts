@@ -39,14 +39,19 @@ function normalizeNumberToken(s: string): string {
 }
 
 // Patterns courants de rythme d'alternance (insensibles à la casse, espaces flexibles).
-// Le séparateur entre les deux parties peut être "/", "-", "\", "ou", "et".
-const SEP = "(?:[/\\-]|\\s+et\\s+|\\s+ou\\s+)";
+// Le séparateur entre les deux parties peut être "/", "-", "\", "ou", "et", ou un simple espace
+// (ex: vocal transcrit "2 semaines entreprise 1 semaine école").
+const SEP = "(?:[/\\-]|\\s+et\\s+|\\s+ou\\s+|\\s+)";
 const NUMBER = "(?:\\d+|une?|deux|trois|quatre|cinq)";
+// Accepte "entreprise", "boîte"/"boite", "société" (avec ou sans accent).
+const PLACE = "(?:en\\s+)?(?:entreprise|bo[îi]te|société)";
+// Accepte "école", "cours", avec ou sans préposition (à l'école, en cours, de cours…).
+const SCHOOL = "(?:[àa]\\s+|en\\s+|de\\s+)?(?:(?:l[''\\s])?[ée]cole|cours?)";
 
 const RYTHME_PATTERNS = [
   // 2 semaines / 1 semaine
   {
-    re: new RegExp(`(${NUMBER})\\s*semaines?\\s*(?:en\\s+)?entreprise\\s*${SEP}\\s*(${NUMBER})\\s*semaines?\\s*(?:[àa]\\s+)?(?:(?:l[''\\s])?[ée]cole|cours?)`, "i"),
+    re: new RegExp(`(${NUMBER})\\s*semaines?\\s*${PLACE}\\s*${SEP}\\s*(${NUMBER})\\s*semaines?\\s*${SCHOOL}`, "i"),
     fmt: (m: RegExpMatchArray) => {
       const a = normalizeNumberToken(m[1]);
       const b = normalizeNumberToken(m[2]);
@@ -55,7 +60,7 @@ const RYTHME_PATTERNS = [
   },
   // 2 jours / 1 jour
   {
-    re: new RegExp(`(${NUMBER})\\s*jours?\\s*(?:en\\s+)?entreprise\\s*${SEP}\\s*(${NUMBER})\\s*jours?\\s*(?:[àa]\\s+)?(?:(?:l[''\\s])?[ée]cole|cours?)`, "i"),
+    re: new RegExp(`(${NUMBER})\\s*jours?\\s*${PLACE}\\s*${SEP}\\s*(${NUMBER})\\s*jours?\\s*${SCHOOL}`, "i"),
     fmt: (m: RegExpMatchArray) => {
       const a = normalizeNumberToken(m[1]);
       const b = normalizeNumberToken(m[2]);
@@ -75,6 +80,13 @@ export function extractRythmeFromInstruction(instruction?: string): string {
     if (m) return fmt(m);
   }
   return DEFAULT_RYTHME;
+}
+
+/**
+ * Vrai si la consigne contient un rythme d'alternance explicite.
+ */
+export function hasRythmeInstruction(instruction?: string): boolean {
+  return extractRythmeFromInstruction(instruction) !== DEFAULT_RYTHME;
 }
 
 /**

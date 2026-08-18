@@ -26,7 +26,7 @@ import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, Agen
 import { getTelegramState, TelegramState, ITelegramState } from "@/models/TelegramState";
 import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed, SearchResult, normalizeCountry } from "@/lib/scraper";
 import { normalizeUrl } from "@/lib/url-normalize";
-import { extractRythmeFromInstruction } from "@/lib/letter-template";
+import { extractRythmeFromInstruction, hasRythmeInstruction, DEFAULT_RYTHME } from "@/lib/letter-template";
 import { ProspectedDomain, IProspectedDomain, recordProspectSkip } from "@/models/ProspectedDomain";
 
 function escapeRegex(s: string): string {
@@ -122,16 +122,43 @@ export function stripLetterBoilerplate(raw: string): string {
   return lines.join("\n").trim();
 }
 
+// Si la consigne ne mentionne pas de rythme, cherche en mémoire agent un fait de catégorie
+// "parcours" ou "ecole" qui en contient un, et l'injecte. Évite que la lettre garde le rythme
+// par défaut quand l'utilisateur l'a déjà précisé ailleurs (ex. "c'est 2 semaines entreprise").
+async function resolveLetterInstructionWithMemoryRythme(
+  instruction: string | undefined,
+): Promise<string | undefined> {
+  if (!instruction) return undefined;
+  if (hasRythmeInstruction(instruction)) return instruction;
+  try {
+    const facts = await AgentMemory.find({
+      category: { $in: ["parcours", "ecole"] },
+    })
+      .sort({ updated_at: -1 })
+      .lean<IAgentMemory[]>();
+    for (const f of facts) {
+      const rythme = extractRythmeFromInstruction(f.fact);
+      if (rythme !== DEFAULT_RYTHME) {
+        return `${instruction}\n\nRythme d'alternance à utiliser : ${rythme}.`.trim();
+      }
+    }
+  } catch {
+    /* best effort */
+  }
+  return instruction;
+}
+
 // Génère la lettre d'une candidature (consigne letterInstruction respectée), l'archive dans
 // letters[] et avance identifiée → « lettre générée ». Partagé write_letter / send_letter_to_me.
 async function generateAndArchiveLetter(c: ICandidature & { save: () => Promise<unknown> }): Promise<string> {
   const type = (c.type === "stage" || c.type === "cdi" ? c.type : "alternance") as "stage" | "alternance" | "cdi";
+  const effectiveInstruction = await resolveLetterInstructionWithMemoryRythme(c.letterInstruction || undefined);
   const lettre = await generateLetterProposal(
     c.entreprise,
     c.aboutText || c.description || "",
     c.poste,
     type,
-    c.letterInstruction || undefined
+    effectiveInstruction
   );
   c.lettre = lettre;
   if (c.statut === "identifiée") c.statut = "lettre générée";
@@ -738,9 +765,10 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       const emailOverride = typeof input.email_override === "string" && input.email_override.trim()
         ? input.email_override.trim()
         : undefined;
-      const letterInstruction = typeof input.letter_instruction === "string" && input.letter_instruction.trim()
+      const rawLetterInstruction = typeof input.letter_instruction === "string" && input.letter_instruction.trim()
         ? input.letter_instruction.trim()
         : undefined;
+      const letterInstruction = await resolveLetterInstructionWithMemoryRythme(rawLetterInstruction);
       const decision = await processSingleCompany(url, {
         dryRun: isTruthyFlag(input.dry_run),
         skipQualityScore: isTruthyFlag(input.skip_quality_score),
@@ -866,7 +894,9 @@ export async function executeTool(toolName: string, input: Record<string, unknow
         : parsed.context_urls;
 
       // 2. Enrichit la consigne avec le contexte scrapé
-      let letterInstruction = String(input.letter_instruction ?? "").trim() || parsed.instructions;
+      let letterInstruction = await resolveLetterInstructionWithMemoryRythme(
+        String(input.letter_instruction ?? "").trim() || parsed.instructions || undefined
+      );
       if (contextUrls.length > 0) {
         const contextText = await scrapeContextUrls(contextUrls);
         if (contextText.trim()) {
@@ -1455,6 +1485,9 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       if (!c) return fail(404, "Candidature not found");
       const instruction = String(input.instruction ?? "").trim();
       if (instruction) c.letterInstruction = instruction;
+      // Si la consigne en base n'a pas de rythme, on enrichit avec la mémoire agent AVANT
+      // de régénérer, pour ne pas écraser un rythme précisé plus tôt.
+      c.letterInstruction = await resolveLetterInstructionWithMemoryRythme(c.letterInstruction || undefined);
       let lettre: string;
       try {
         lettre = await generateAndArchiveLetter(c);
@@ -1525,15 +1558,33 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       const alreadySent = (c.emailsSent ?? []).some(
         (e: { type?: string; status?: string }) => e.type === "candidature" && e.status === "sent"
       );
+      const rythmeFromBody = extractRythmeFromInstruction(texte);
+      const hasRythmeUpdate = rythmeFromBody !== DEFAULT_RYTHME && !hasRythmeInstruction(c.letterInstruction || undefined);
+      if (hasRythmeUpdate) {
+        c.letterInstruction = c.letterInstruction
+          ? `${c.letterInstruction}\n\nRythme d'alternance : ${rythmeFromBody}.`
+          : `Rythme d'alternance : ${rythmeFromBody}.`;
+      }
       c.emailBody = texte;
-      await c.save();
+      // Si le corps de mail précise un rythme différent du défaut, on régénère la lettre pour
+      // que l'introduction reflète la même information. On ne le fait que si la candidature
+      // n'est pas encore partie — sinon on se contente d'enregistrer le corps pour un futur envoi.
+      if (hasRythmeUpdate && !alreadySent) {
+        try {
+          await generateAndArchiveLetter(c);
+        } catch (err) {
+          console.warn("[set_email_body] letter regeneration failed:", err instanceof Error ? err.message : err);
+        }
+      } else {
+        await c.save();
+      }
       return ok({
         ok: true,
         summary: `Corps de mail enregistré pour ${c.entreprise} (${texte.length} caractères).${
           alreadySent
             ? ` Attention : la candidature est déjà partie (statut « ${c.statut} ») — ce texte ne servira que si un nouvel envoi a lieu.`
             : " C'est lui qui accompagnera le CV et la lettre à l'envoi."
-        }`,
+        }${hasRythmeUpdate ? " Le rythme d'alternance a été mis à jour dans la lettre." : ""}`,
       });
     }
 

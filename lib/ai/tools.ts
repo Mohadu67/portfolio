@@ -162,7 +162,7 @@ export const TOOLS: ToolDefinition[] = [
     input_schema: {
       type: "object",
       properties: {
-        key: { type: "string", description: "Key de la section (ex: 'profile', 'experiences', 'skills')" },
+        key: { type: "string", description: "Key de la section (ex: 'profile', 'experience', 'skills')" },
       },
       required: ["key"],
     },

@@ -393,4 +393,59 @@ describe("CV tools", () => {
     s = await CVSection.findOne({ key: "quiz" }).lean<{ isVisible: boolean }>();
     expect(s!.isVisible).toBe(true);
   });
+
+  it("met à jour tous les champs du profil", async () => {
+    const r = await executeTool("update_cv_profile", {
+      name: "Mohammed H.",
+      title: "Lead Dev",
+      tagline: "Build. Ship. Repeat.",
+      location: "Paris",
+      availability: "Immédiat",
+      phone: "+33 7 00 00 00 00",
+      email: "mohammed@example.com",
+      photo: "/photo.png",
+    });
+    expect(r.body.error).toBeUndefined();
+    const s: any = await CVSection.findOne({ key: "profile" }).lean();
+    expect(s.content).toMatchObject({
+      name: "Mohammed H.",
+      title: "Lead Dev",
+      tagline: "Build. Ship. Repeat.",
+      location: "Paris",
+      availability: "Immédiat",
+      phone: "+33 7 00 00 00 00",
+      email: "mohammed@example.com",
+      photo: "/photo.png",
+    });
+  });
+
+  it("supprime une expérience sans respecter la casse ni les accents", async () => {
+    await executeTool("add_cv_experience", {
+      company: "Générale Électrique",
+      position: "Développeur Fullstack",
+      startDate: "2023-01",
+    });
+    const del = await executeTool("delete_cv_experience", {
+      company: "generale electrique",
+      position: "developpeur fullstack",
+    });
+    expect(del.body.error).toBeUndefined();
+    const s: any = await CVSection.findOne({ key: "experience" }).lean();
+    expect(s.content.items).toHaveLength(0);
+  });
+
+  it("renomme une expérience et détecte le conflit", async () => {
+    await executeTool("add_cv_experience", { company: "A", position: "Dev", startDate: "2020" });
+    await executeTool("add_cv_experience", { company: "B", position: "Dev", startDate: "2021" });
+    const r = await executeTool("update_cv_experience", { company: "A", position: "Dev", new_company: "B" });
+    expect(r.status).toBe(409);
+  });
+
+  it("accepte isVisible sous forme de chaîne 'true'", async () => {
+    await CVSection.create({ key: "story", type: "story", title: "Récit", order: 100, isVisible: false, content: { intro: "", items: [] } });
+    const r = await executeTool("set_cv_section_visibility", { key: "story", isVisible: "true" });
+    expect(r.body.error).toBeUndefined();
+    const s: any = await CVSection.findOne({ key: "story" }).lean();
+    expect(s.isVisible).toBe(true);
+  });
 });

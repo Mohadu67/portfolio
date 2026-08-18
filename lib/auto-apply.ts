@@ -12,6 +12,7 @@ import { getSettingsDoc } from "@/models/Settings";
 import { isProspectSkipFresh, recordProspectSkip, ProspectSkipReason } from "@/models/ProspectedDomain";
 import { scrapeCompanyWebsite, findCareersPage, scrapeCareersPage, fetchJobDescription, ScrapedJobOffer } from "./web-scraper";
 import { scoreCompanyFit, matchJobOffer, generateLetterProposal, generateEmailBody } from "./gemini";
+import { extractRythmeFromInstruction } from "./letter-template";
 import { pickBestContactEmail, pickBestContactEmailLoose, EmailScore } from "./auto-apply-filters";
 import { serpLanguage, type SupportedCountry } from "./scraper";
 import { sendCandidature } from "./email";
@@ -395,6 +396,7 @@ export async function applyToExistingCandidature(
         lettre,
         aboutText: aboutText || description,
         instruction: instruction || undefined,
+        rythme: extractRythmeFromInstruction(instruction),
       });
     } catch (emailBodyErr) {
       const msg = emailBodyErr instanceof Error ? emailBodyErr.message : String(emailBodyErr);

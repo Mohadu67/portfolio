@@ -26,6 +26,7 @@ import { AgentMemory, IAgentMemory, AGENT_MEMORY_CATEGORIES, normalizeFact, Agen
 import { getTelegramState, TelegramState, ITelegramState } from "@/models/TelegramState";
 import { searchJSearch, searchAdzuna, searchFranceTravail, searchIndeed, SearchResult, normalizeCountry } from "@/lib/scraper";
 import { normalizeUrl } from "@/lib/url-normalize";
+import { extractRythmeFromInstruction } from "@/lib/letter-template";
 import { ProspectedDomain, IProspectedDomain, recordProspectSkip } from "@/models/ProspectedDomain";
 
 function escapeRegex(s: string): string {
@@ -998,6 +999,7 @@ export async function executeTool(toolName: string, input: Record<string, unknow
               lettre,
               aboutText: aboutText || c.description || "",
               instruction: letterInstruction || undefined,
+              rythme: extractRythmeFromInstruction(letterInstruction),
             });
           } catch (emailBodyErr) {
             console.warn("[apply_from_email] generateEmailBody failed:", emailBodyErr);

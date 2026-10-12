@@ -1,5 +1,38 @@
 # Suivi des modifications
 
+## 2026-10-12 — Fix prod : clé Gemini invalide sur vpsHarmo
+
+### Problèmes constatés
+- L'agent Telegram répondait « J'ai planté en route » : logs `portfolio` → `GoogleGenerativeAI Error [400] API_KEY_INVALID` sur `gemini-2.5-flash`.
+- La `GEMINI_API_KEY` du `.env` de prod (`~/srv-docker/projects/portfolio/.env`, daté du 6 juil.) était morte côté Google (test `curl` direct → HTTP 400 `API_KEY_INVALID`).
+- Cause probable : rotation de la clé dans Google AI Studio (nouveau format `AQ.`) — l'ancienne clé `AIzaSy…` a été désactivée, seul le `.env` local avait la nouvelle.
+- Problème latent : le compose prod ne passait aucune variable de modèle → fallback code sur `gemini-2.5-flash`, indisponible pour les nouvelles clés (cf. commit `7eec0b3`).
+
+### Fichiers modifiés
+
+| Fichier | Changement |
+|---|---|
+| `.env` (VPS) | Remplacement de `GEMINI_API_KEY` (backup : `.env.bak-20261012-gemini`) + ajout `GEMINI_MODEL=gemini-3.8-flash`, `CHAT_MODEL=gemini-3.8-flash`, `TTS_MODEL=gemini-3.8-flash-tts`, `FALLBACK_EXTRACTION_MODEL=gemini-3.8-flash`. |
+| `docker-compose.yml` + `docker-compose.yml.vps-working` (VPS) | Passage des 4 variables de modèle au service `app` (backups `.bak-20261012-gemini`). Les deux copies sont modifiées car le workflow CI restaure `vps-working` à chaque déploiement. |
+| `docker-compose.yml` / `docker-compose.prod.yml` (repo) | Même ajout, pour garder repo et VPS synchronisés. |
+
+### Vérifications
+- Pré-validation de la nouvelle clé depuis le VPS : `curl` generateContent `gemini-3.8-flash` → HTTP 200 ✅
+- `docker compose config --quiet` sur le VPS ✅
+- Container `portfolio` recréé (`up -d --force-recreate --no-deps app`) → `healthy` ✅
+- Smoke test depuis l'intérieur du container avec son env réel : HTTP 200 ✅
+- Démarrage Next.js propre, plus d'`API_KEY_INVALID` dans les logs ✅
+- Test end-to-end Telegram : à confirmer par l'utilisateur (renvoi d'un message).
+
+### Comment contrôler en prod
+```bash
+# Env du container
+ssh vpsHarmo "docker exec portfolio printenv GEMINI_MODEL CHAT_MODEL"
+
+# Logs
+ssh vpsHarmo "docker logs portfolio --tail 30"
+```
+
 ## 2026-08-18 — Robustesse du bot Telegram
 
 ### Problèmes constatés

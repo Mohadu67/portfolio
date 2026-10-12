@@ -33,6 +33,10 @@ services:
       API_SECRET: ${API_SECRET:?API secret required}
       CRON_SECRET: ${CRON_SECRET:?CRON_SECRET required for scheduled jobs (weekly-prospect, run-relances, check-inbox)}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
+      CHAT_MODEL: ${CHAT_MODEL}
+      TTS_MODEL: ${TTS_MODEL:-gemini-3.8-flash-tts}
+      FALLBACK_EXTRACTION_MODEL: ${FALLBACK_EXTRACTION_MODEL:-gemini-3.8-flash}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GMAIL_USER: ${GMAIL_USER}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}

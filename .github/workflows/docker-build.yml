@@ -65,12 +65,13 @@ jobs:
 
     steps:
       - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 62326
+          fingerprint: SHA256:bzjdieT7juvCrFL91oRw6MU6jq7yqj+4afUUnXeP/OQ
           command_timeout: 15m
           script: |
             set -euo pipefail
